@@ -34,7 +34,7 @@ const noSubscribe = () => () => {};
  * `/api/setup/status` for nav chrome, seeded from the last answer.
  *
  * The route takes seconds on a cold start, and until it answers every gated
- * sidebar row is hidden — Calendar, PRs and the BI group popped in late on
+ * sidebar row is hidden — Calendar, PRs and the Infrastructure group popped in late on
  * every load. The last-known status is almost always still right; the live
  * fetch corrects it when it isn't.
  */

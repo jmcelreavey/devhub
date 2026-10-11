@@ -47,7 +47,8 @@ export interface GraphLaneCommit {
 }
 
 /**
- * Fixed hues rather than theme variables. The palette used to start
+ * Fixed fallback hues; themes can supply contrast-tested --chart-N colours.
+ * The palette used to start
  * `--accent, --success, --warning`, and in several themes accent and success
  * are both green (`#9ed84a` / `#8fbf52` in the matrix theme), so neighbouring
  * lanes were indistinguishable — the graph read as one colour even where it had
@@ -68,7 +69,7 @@ const LANE_COLORS = [
 /** Palette lookup. Takes a colour index from the layout, not a lane index. */
 export function laneColor(color: number): string {
   const index = ((color % LANE_COLORS.length) + LANE_COLORS.length) % LANE_COLORS.length;
-  return LANE_COLORS[index]!;
+  return `var(--chart-${index + 1}, ${LANE_COLORS[index]!})`;
 }
 
 /**

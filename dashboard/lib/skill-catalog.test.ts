@@ -22,8 +22,8 @@ describe("skill-catalog", () => {
     fs.mkdirSync(path.join(repo, "skills/shared/shared-name"), { recursive: true });
     fs.writeFileSync(path.join(repo, "skills/shared/shared-name/SKILL.md"), "---\ndescription: from devhub\n---\n");
 
-    fs.mkdirSync(path.join(repo, "skills/shared/bi-overridden"), { recursive: true });
-    fs.writeFileSync(path.join(repo, "skills/shared/bi-overridden/SKILL.md"), "---\ndescription: override\n---\n");
+    fs.mkdirSync(path.join(repo, "skills/shared/upstream-overridden"), { recursive: true });
+    fs.writeFileSync(path.join(repo, "skills/shared/upstream-overridden/SKILL.md"), "---\ndescription: override\n---\n");
 
     fs.mkdirSync(path.join(aiTools, "skills"), { recursive: true });
     fs.mkdirSync(path.join(aiTools, "skills/upstream-only"), { recursive: true });
@@ -45,26 +45,26 @@ describe("skill-catalog", () => {
     fs.rmSync(aiTools, { recursive: true, force: true });
   });
 
-  it("merges devhub and ai-tools with BI-prefixed upstream names", () => {
+  it("merges devhub and ai-tools with upstream-prefixed upstream names", () => {
     const catalog = buildMergedSkillCatalog(repo);
     const byName = Object.fromEntries(catalog.map((e) => [e.name, e]));
 
     expect(byName["devhub-only"]?.origin).toBe("devhub");
-    expect(byName["bi-upstream-only"]?.origin).toBe("ai-tools");
-    expect(byName["bi-upstream-only"]?.sourceName).toBe("upstream-only");
+    expect(byName["upstream-only"]?.origin).toBe("ai-tools");
+    expect(byName["upstream-only"]?.sourceName).toBe("upstream-only");
     expect(byName["shared-name"]?.origin).toBe("devhub");
-    expect(byName["bi-shared-name"]?.origin).toBe("ai-tools");
+    expect(byName["upstream-shared-name"]?.origin).toBe("ai-tools");
     expect(byName["shared-name"]?.overridesUpstream).toBe(false);
     expect(byName["shared-name"]?.dir).toContain(path.join("skills", "shared", "shared-name"));
-    expect(byName["bi-overridden"]?.origin).toBe("devhub");
-    expect(byName["bi-overridden"]?.overridesUpstream).toBe(true);
+    expect(byName["upstream-overridden"]?.origin).toBe("devhub");
+    expect(byName["upstream-overridden"]?.overridesUpstream).toBe(true);
   });
 
   it("lists api items with readOnly for ai-tools-only", () => {
     const items = listSkillsForApi(repo);
-    const upstream = items.find((i) => i.name === "bi-upstream-only");
+    const upstream = items.find((i) => i.name === "upstream-only");
     const shared = items.find((i) => i.name === "shared-name");
-    const override = items.find((i) => i.name === "bi-overridden");
+    const override = items.find((i) => i.name === "upstream-overridden");
     expect(upstream?.readOnly).toBe(true);
     expect(upstream?.source).toBe("ai-tools");
     expect(shared?.readOnly).toBe(false);
@@ -75,6 +75,6 @@ describe("skill-catalog", () => {
   it("ignores ai-tools when AI_TOOLS_SYNC=0", () => {
     process.env.AI_TOOLS_SYNC = "0";
     const catalog = buildMergedSkillCatalog(repo);
-    expect(catalog.some((e) => e.name === "bi-upstream-only")).toBe(false);
+    expect(catalog.some((e) => e.name === "upstream-only")).toBe(false);
   });
 });

@@ -1,7 +1,7 @@
 /**
  * Discover plugin-contributed MCP server packages so bootstrap/health-check can
- * install their dependencies — a plugin's stdio MCP server (e.g. the BI plugin's
- * `mcp-servers/devhub-bi-server`) needs its own `node_modules`, just like core's
+ * install their dependencies — a plugin's stdio MCP server (e.g. a plugin's
+ * `mcp-servers/team-tools-server`) needs its own `node_modules`, just like core's
  * `mcp-servers/devhub-server`.
  *
  * Convention: a plugin ships its servers under `<pluginRoot>/mcp-servers/<name>/`,

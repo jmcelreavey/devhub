@@ -14,7 +14,7 @@ vi.mock("./client", () => ({
   withPaseo: (fn: (session: { daemon: typeof daemon }) => Promise<unknown>) => fn({ daemon }),
 }));
 
-import { staleDays, sweepPaseoWorkspaces, sweepPaseoWorkspacesQuietly } from "./workspaces";
+import { loadPaseoWorktreeActivity, staleDays, sweepPaseoWorkspaces, sweepPaseoWorkspacesQuietly } from "./workspaces";
 
 const NOW = Date.parse("2026-10-05T12:00:00Z");
 const daysAgo = (days: number) => new Date(NOW - days * 86_400_000).toISOString();
@@ -168,6 +168,38 @@ describe("sweepPaseoWorkspaces: idle chats", () => {
     daemon.archiveWorkspace.mockRejectedValueOnce(new Error("busy"));
     vi.spyOn(console, "error").mockImplementation(() => undefined);
     await expect(sweep()).resolves.toMatchObject({ staleArchived: 1 });
+  });
+});
+
+describe("cleanup activity evidence", () => {
+  it("reports active workspaces, scripts and waiting chats without archiving anything", async () => {
+    listing(workspace("done", "p", "worktree", live), workspace("running", "p", "worktree", gone, { status: "running" }),
+      workspace("script", "p", "worktree", "/script", { scripts: [{ lifecycle: "running" }] }),
+      workspace("waiting", "p", "worktree", "/waiting"));
+    daemon.fetchAgents.mockResolvedValue(page([chat("done", daysAgo(10)), chat("waiting", daysAgo(1), { pendingPermissions: [{}] })]));
+    expect(await loadPaseoWorktreeActivity()).toEqual([
+      { path: live, active: false, updatedAt: Date.parse(daysAgo(10)) },
+      { path: gone, active: true, updatedAt: 0 },
+      { path: "/script", active: true, updatedAt: 0 },
+      { path: "/waiting", active: true, updatedAt: Date.parse(daysAgo(1)) },
+    ]);
+    expect(daemon.archiveWorkspace).not.toHaveBeenCalled();
+    expect(daemon.removeProject).not.toHaveBeenCalled();
+  });
+  it("reads every agent and workspace page", async () => {
+    daemon.fetchAgents.mockResolvedValueOnce({ entries: [], pageInfo: { hasMore: true, nextCursor: "agents-2" } })
+      .mockResolvedValueOnce(page([chat("w", daysAgo(1), { status: "initializing" })]));
+    daemon.fetchWorkspaces.mockResolvedValueOnce({ entries: [], pageInfo: { hasMore: true, nextCursor: "workspaces-2" } })
+      .mockResolvedValueOnce(page([workspace("w", "p", "worktree", live)]));
+    expect(await loadPaseoWorktreeActivity()).toEqual([{ path: live, active: true, updatedAt: Date.parse(daysAgo(1)) }]);
+    expect(daemon.fetchAgents).toHaveBeenLastCalledWith({ page: { limit: 200, cursor: "agents-2" } });
+    expect(daemon.fetchWorkspaces).toHaveBeenLastCalledWith({ page: { limit: 200, cursor: "workspaces-2" } });
+  });
+  it.each(["agents", "workspaces"])("refuses incomplete %s pagination", async (kind) => {
+    listing(workspace("w", "p", "worktree", live));
+    const fetchPage = kind === "agents" ? daemon.fetchAgents : daemon.fetchWorkspaces;
+    fetchPage.mockResolvedValue({ entries: [], pageInfo: { hasMore: true, nextCursor: null } });
+    await expect(loadPaseoWorktreeActivity()).rejects.toThrow("pagination is incomplete");
   });
 });
 

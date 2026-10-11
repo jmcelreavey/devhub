@@ -43,13 +43,13 @@ export const GOALS: Goal[] = [
     id: "ops",
     label: "Running services",
     description: "Infrastructure, monitoring, and on-call context",
-    steps: ["datadog", "bi"],
+    steps: ["datadog", "infra"],
   },
   {
     id: "everything",
     label: "All of it",
     description: "Show every integration",
-    steps: ["github", "agent", "calendar", "jira", "datadog", "bi"],
+    steps: ["github", "agent", "calendar", "jira", "datadog", "infra"],
   },
 ];
 

@@ -2,7 +2,7 @@
  * "You usually also change X" — co-change statistics from local history.
  *
  * Measured on this repo's own history, `manifest.ts` had never been committed
- * without `types.ts` across 261 commits, and `bi-ops.ts` carried its test 78% of
+ * without `types.ts` across 261 commits, and `team-ops.ts` carried its test 78% of
  * the time. Those are forgotten-companion detectors that no remote service can
  * offer, because the evidence is the commit log sitting on disk.
  */

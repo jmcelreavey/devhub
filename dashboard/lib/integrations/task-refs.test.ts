@@ -1,0 +1,32 @@
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { afterEach, expect, it, vi } from "vitest";
+const scope = vi.hoisted(() => ({ root: "" }));
+vi.mock("@/lib/notes/dir", () => ({ getActiveTasksDir: () => scope.root }));
+vi.mock("@/lib/tasks/storage", () => ({ ensureTasksMigrated: async () => undefined }));
+import { createTask, findTask, patchTask } from "@shared/tasks/store.ts";
+import { taskRefs, refsRevision, linkTaskRef } from "./task-refs";
+import type { Task } from "@shared/tasks/types.ts";
+afterEach(() => { if (scope.root) fs.rmSync(scope.root, { recursive: true, force: true }); });
+it("keeps legacy links and account-qualified refs without mutating saved tasks", () => {
+  const task = { jiraKey: "APP-1", integrationRefs: [{ provider: "jira", account: "other", kind: "issue", id: "APP-1" }], links: [{ kind: "url", id: "pr", href: "https://github.com/org/repo/pull/2", label: "PR" }] } as unknown as Task;
+  const refs = taskRefs(task);
+  expect(refs).toHaveLength(3); expect(task.integrationRefs).toHaveLength(1);
+  expect(refs.filter((r) => r.provider === "jira").map((r) => r.account)).toEqual(["other", "default"]);
+  expect(refs.find((r) => r.kind === "pr")?.id).toBe("org/repo/2");
+});
+it("rejects stale link updates and preserves legacy fields on removal", async () => {
+  scope.root = fs.mkdtempSync(path.join(os.tmpdir(), "devhub-task-links-"));
+  const task = createTask(scope.root, { text: "APP-1 work", startDate: "2026-10-09" });
+  patchTask(scope.root, task.id, { jiraKey: "APP-1" });
+  const original = findTask(scope.root, task.id)!;
+  const ref = { provider: "github", account: "work", kind: "issue" as const, id: "org/repo/1" };
+  const revision = refsRevision(taskRefs(original));
+  await linkTaskRef(task.id, ref, revision, false);
+  await expect(linkTaskRef(task.id, ref, revision, true)).rejects.toMatchObject({ kind: "conflict" });
+  const current = findTask(scope.root, task.id)!;
+  await linkTaskRef(task.id, ref, refsRevision(taskRefs(current)), true);
+  expect(findTask(scope.root, task.id)?.jiraKey).toBe("APP-1");
+  expect(findTask(scope.root, task.id)?.integrationRefs).toBeUndefined();
+});

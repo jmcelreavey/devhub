@@ -27,7 +27,7 @@ export function isStepComplete(step: Step, status: SetupStatus): boolean {
   if (step.id === "datadog") return status.datadog;
   if (step.id === "calendar") return status.calendar;
   if (step.id === "jira") return status.jira;
-  if (step.id === "bi") return status.bi;
+  if (step.id === "infra") return status.infra;
   if (step.id === "agent") return Boolean(status.agentVars?.provider);
   return true;
 }
@@ -354,16 +354,16 @@ export function InfraStep({
   account,
   checking,
   onCheckConnection,
-  capiRepoPath,
-  onCapiRepoPathChange,
+  scriptsRepoPath,
+  onScriptsRepoPathChange,
 }: {
   configured: boolean;
   awsProfile: string | null;
   account: string | null;
   checking: boolean;
   onCheckConnection: () => void;
-  capiRepoPath: string;
-  onCapiRepoPathChange: (v: string) => void;
+  scriptsRepoPath: string;
+  onScriptsRepoPathChange: (v: string) => void;
 }) {
   return (
     <div>
@@ -413,13 +413,13 @@ export function InfraStep({
           Script repo path <span style={{ fontWeight: 400, color: "var(--text-subtle)" }}>(optional - enables script discovery)</span>
         </label>
         <p style={{ fontSize: "11px", color: "var(--text-subtle)", marginBottom: "8px", lineHeight: 1.5 }}>
-          Absolute path to a local script repo. Enables the Scripts panel on the Ops page to discover
-          and run <code>scripts/**/main.ts</code> and <code>mongo/**/*.js</code>.
+          Optional local automation folder. Plugins define their own discovery and execution rules;
+          saving this path does not run any scripts.
         </p>
         <input
           type="text"
-          value={capiRepoPath}
-          onChange={(e) => onCapiRepoPathChange(e.target.value)}
+          value={scriptsRepoPath}
+          onChange={(e) => onScriptsRepoPathChange(e.target.value)}
           placeholder="e.g. ~/dev/scripts"
           style={{
             width: "100%",
@@ -435,10 +435,10 @@ export function InfraStep({
       </div>
       <div style={{ display: "flex", gap: "8px", marginTop: "14px", flexWrap: "wrap" }}>
         <Link
-          href="/ops"
+          href="/plugins"
           className="btn btn-primary"
         >
-          Open Ops page <ExternalLink size={12} />
+          Open Plugins <ExternalLink size={12} />
         </Link>
         <button
           type="button"
@@ -855,7 +855,7 @@ export function DatadogStep({
           value={form.email}
           onChange={(v) => setForm({ ...form, email: v })}
           placeholder="you@company.com"
-          hint="DevHub matches this against the Datadog on-call schedule. Shared with the ops integration (BI_OPS_USER_EMAIL)."
+          hint="DevHub matches this against the Datadog on-call schedule. Shared with the ops integration (DATADOG_USER_EMAIL)."
         />
         <FormField
           label={hasApplicationKey ? "Replace application key" : "Application key (for counts + on-call)"}

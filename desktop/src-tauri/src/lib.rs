@@ -2768,6 +2768,10 @@ pub fn run() {
             let _window =
                 WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
                     .title("DevHub")
+                    // Keep OS resize hit-testing on all edges/corners, including
+                    // the native titlebar and macOS traffic lights.
+                    .decorations(true)
+                    .resizable(true)
                     // Let HTML file inputs and drop zones receive images, including Paseo inside its iframe.
                     .disable_drag_drop_handler()
                     .inner_size(1280.0, 820.0)

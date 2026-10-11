@@ -1,8 +1,8 @@
 import { PLUGIN_NAV_ITEMS,PLUGIN_SECTION_TABS } from "./plugin-nav.generated";
 
-export type NavGroup = "workspace" | "library" | "bi" | "system";
+export type NavGroup = "workspace" | "library" | "infra" | "system";
 
-export type NavGate = "always" | "calendar" | "github" | "jira" | "datadog" | "bi" | "opencode" | "claude" | "cursor" | "chatgpt" | "antigravity";
+export type NavGate = "always" | "calendar" | "github" | "jira" | "datadog" | "infra" | "opencode" | "claude" | "cursor" | "chatgpt" | "antigravity";
 
 export interface NavItem {
   href: string;
@@ -18,19 +18,19 @@ export interface NavItem {
 export const NAV_GROUPS: { id: NavGroup; label: string }[] = [
   { id: "workspace", label: "Workspace" },
   { id: "library", label: "Library" },
-  { id: "bi", label: "BI" },
+  { id: "infra", label: "Infrastructure" },
   { id: "system", label: "System" },
 ];
 
 /** Empty bucket map for grouping sidebar destinations. */
 export function emptyNavGroups(): Record<NavGroup, NavItem[]> {
-  return { workspace: [], library: [], bi: [], system: [] };
+  return { workspace: [], library: [], infra: [], system: [] };
 }
 
 /**
  * Bucket core + plugin destinations for the sidebar / mobile drawer.
  * Plugin items land first within each group so a plugin can own the top of its
- * section (e.g. Ops before Datadog under BI).
+ * section (e.g. Ops before Datadog under Infrastructure).
  */
 export function groupSidebarNav(
   core: NavItem[],
@@ -62,7 +62,7 @@ export function groupSidebarNav(
  *
  * - Work        = Tasks + Tickets (tabs on /work)
  * - Library     = Notes / Docs / Diagrams (tabs over /notes…)
- * - BI          = Ops (plugin) / Datadog — first-class items under a BI group
+ * - Infrastructure          = Ops (plugin) / Datadog — first-class items under a Infrastructure group
  * - System      = Status / Logs / Actions / Setup (tabs over /status…)
  * - Search        = unified discovery (exact / ranked / semantic via Recall);
  *                   Recall's graph + ingest controls live at /recall, linked
@@ -89,11 +89,11 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/skills", label: "Skills", icon: "skills", group: "library" },
   { href: "/repos", label: "Repos", icon: "repos", group: "library", desktopOnly: true },
   // Beside Repos, and desktop-only for the same reason: both reach local files
-  // and local CLIs. Ungated — SQLite connections need no setup at all, and BI
+  // and local CLIs. Ungated — SQLite connections need no setup at all, and Infrastructure
   // connections simply don't appear without the plugin.
   { href: "/db", label: "Databases", icon: "database", group: "library", desktopOnly: true },
 
-  { href: "/datadog", label: "Datadog", icon: "datadog", group: "bi", gate: "datadog" },
+  { href: "/datadog", label: "Datadog", icon: "datadog", group: "infra", gate: "datadog" },
 
   { href: "/status", label: "System", icon: "status", group: "system" },
   { href: "/agents", label: "Agents", icon: "agents", group: "system" },
@@ -126,6 +126,8 @@ export const LEGACY_NAV_ITEMS: NavItem[] = [
   { href: "/actions", label: "Actions", icon: "actions", group: "system", desktopOnly: true },
   { href: "/logs", label: "Logs", icon: "status", group: "system", desktopOnly: true },
   { href: "/plugins", label: "Plugins", icon: "skills", group: "system" },
+  { href: "/integrations", label: "Integrations", icon: "setup", group: "system" },
+  { href: "/browser", label: "Browser", icon: "setup", group: "system" },
   { href: "/setup", label: "Setup", icon: "setup", group: "system" },
 ];
 
@@ -174,6 +176,8 @@ export const SECTION_TABS: Record<string, SectionTab[]> = {
       { href: "/logs", label: "Logs", desktopOnly: true },
       { href: "/actions", label: "Actions", desktopOnly: true },
       { href: "/plugins", label: "Plugins" },
+      { href: "/integrations", label: "Integrations" },
+      { href: "/browser", label: "Browser" },
       { href: "/setup", label: "Setup" },
     ],
     PLUGIN_SECTION_TABS.system,
@@ -185,7 +189,7 @@ export interface SetupGateStatus {
   datadog?: boolean;
   calendar?: boolean;
   jira?: boolean;
-  bi?: boolean;
+  infra?: boolean;
   opencode?: boolean;
   claude?: boolean;
   cursor?: boolean;

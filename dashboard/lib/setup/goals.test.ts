@@ -15,7 +15,7 @@ const ALL_STEPS = [
   { id: "datadog" },
   { id: "calendar" },
   { id: "jira" },
-  { id: "bi" },
+  { id: "infra" },
   { id: "agent" },
   { id: "done" },
 ];

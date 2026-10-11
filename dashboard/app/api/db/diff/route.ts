@@ -59,7 +59,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   }
 
   try {
-    // Sequential, not parallel: with BI connections both sides may need the
+    // Sequential, not parallel: with plugin connections both sides may need the
     // same AWS profile, and hammering two environments at once is how you
     // discover a rate limit.
     const leftObjects = await listObjects(left, namespace);

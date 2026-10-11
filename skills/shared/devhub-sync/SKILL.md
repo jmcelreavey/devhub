@@ -1,6 +1,6 @@
 ---
 name: devhub-sync
-description: Sync DevHub public, private, and plugin repositories safely. Use when syncing devhub, devhub-private and devhub-bi, pulling upstream DevHub changes, or when sync leaves repos diverged.
+description: Sync DevHub public, private, and plugin repositories safely. Use when syncing devhub, devhub-private and team-tools, pulling upstream DevHub changes, or when sync leaves repos diverged.
 metadata:
   short-description: Sync DevHub public/private/plugin repos
 ---
@@ -13,7 +13,7 @@ Use this for the three-repo maintenance loop:
 
 - `~/Developer/devhub` — public/core DevHub.
 - `~/Developer/devhub-private` — private mirror with `upstream` pointing at public/core.
-- `~/Developer/devhub-bi` — BI plugin source repo.
+- `~/Developer/team-tools` — example plugin source repo.
 
 The goal is usually: clean local branches, push private/plugin work, pull latest public core into the private mirror, then send generic private changes back to public core without notes, tasks, collections, identity, or env-local data.
 
@@ -34,7 +34,7 @@ Default to PR. Direct `main` push is allowed only when the user explicitly choos
 ```bash
 git -C ~/Developer/devhub fetch --all --prune
 git -C ~/Developer/devhub-private fetch --all --prune
-git -C ~/Developer/devhub-bi fetch --all --prune
+git -C ~/Developer/team-tools fetch --all --prune
 ```
 
 2. Inspect status, remotes, branches, and ahead/behind counts before editing.
@@ -55,12 +55,12 @@ git -C ~/Developer/devhub-private commit -m "chore: devhub private sync YYYY-MM-
 git -C ~/Developer/devhub-private push origin main
 ```
 
-5. Commit and push BI plugin work in `devhub-bi` to its default branch (`master` today unless the repo has moved to `main`). Then materialize into private/core only if verifying dashboard integration. Skip this step when the backlog has no BI plugin changes and `devhub-bi` is clean/even with origin.
+5. Commit and push example plugin work in `team-tools` to its default branch (`master` today unless the repo has moved to `main`). Then materialize into private/core only if verifying dashboard integration. Skip this step when the backlog has no example plugin changes and `team-tools` is clean/even with origin.
 
 ```bash
-git -C ~/Developer/devhub-bi add -A -- . ':(exclude).devhub'
-git -C ~/Developer/devhub-bi commit -m "feat: <short plugin change>"
-git -C ~/Developer/devhub-bi push origin HEAD
+git -C ~/Developer/team-tools add -A -- . ':(exclude).devhub'
+git -C ~/Developer/team-tools commit -m "feat: <short plugin change>"
+git -C ~/Developer/team-tools push origin HEAD
 ```
 
 6. Pull public core updates into the private mirror using the mirror script, never merge/rebase histories.

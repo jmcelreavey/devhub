@@ -76,7 +76,7 @@ describe("October default", () => {
 describe("pre-paint seasonal bootstrap", () => {
   function boot(date: string, values: Map<string, string>) {
     const attrs = new Map<string, string>();
-    const root = { getAttribute: (k: string) => attrs.get(k) ?? null, setAttribute: (k: string, v: string) => attrs.set(k, v), removeAttribute: (k: string) => attrs.delete(k) };
+    const root = { getAttributeNames: () => [...attrs.keys()], getAttribute: (k: string) => attrs.get(k) ?? null, setAttribute: (k: string, v: string) => attrs.set(k, v), removeAttribute: (k: string) => attrs.delete(k) };
     runInNewContext(getThemeBootstrapInlineScript(), {
       document: { documentElement: root }, URLSearchParams,
       window: { location: { search: `?hollowNow=${date}` }, matchMedia: () => ({ matches: true }) },

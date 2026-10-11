@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import { CORE_THEME_PRESETS, THEME_PRESETS } from "@/lib/theme-presets";
+import { PLUGIN_THEME_PRESETS } from "@/lib/plugin-branding.generated";
 
 /**
  * The picker renders `darkSwatch` / `lightSwatch` as the preview chip, but the
@@ -32,6 +33,27 @@ function bgFor(mode: "dark" | "light", preset: string): string | null {
 }
 
 describe("core theme presets", () => {
+  it("pins the default and Halloween themes before the remaining core presets", () => {
+    expect(CORE_THEME_PRESETS.map((preset) => preset.id)).toEqual([
+      "graphite", "hollow", "forest", "midnight", "tokyo", "catppuccin",
+    ]);
+  });
+
+  it("shares the core order with every theme list and appends plugins in declaration order", () => {
+    const coreIds = new Set<string>(CORE_THEME_PRESETS.map((preset) => preset.id));
+    expect(THEME_PRESETS).toEqual([
+      ...CORE_THEME_PRESETS,
+      ...PLUGIN_THEME_PRESETS.filter((preset) => !coreIds.has(preset.id)),
+    ]);
+  });
+
+  it.each([
+    ["graphite", "Graphite Neon (Default)", "DevHub's default: charcoal + lime"],
+    ["hollow", "Hollow (Halloween) 🎃", "Spooky Halloween theme, switches on automatically in October"],
+  ])("explains %s without changing its saved id", (id, label, description) => {
+    expect(CORE_THEME_PRESETS.find((preset) => preset.id === id)).toMatchObject({ id, label, description });
+  });
+
   it.each(CORE_THEME_PRESETS.map((p) => [p.id, p] as const))(
     "%s declares both modes in globals.css",
     (id) => {
@@ -94,6 +116,25 @@ function luminance(hex: string): number {
     .map((channel) => channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4);
   return channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722;
 }
+
+describe("AA text and controls across every core surface", () => {
+  for (const preset of CORE_THEME_PRESETS) {
+    it.each(["dark", "light"] as const)(`${preset.id} %s keeps all text at 4.5:1 and controls at 3:1`, mode => {
+      for (const surface of ["--bg", "--bg-sidebar", "--bg-surface", "--bg-elevated", "--bg-overlay"]) {
+        const background = tokenFor(mode, preset.id, surface)!;
+        for (const token of ["--text", "--text-muted", "--text-subtle", "--accent-text", "--accent-text-hover", "--success", "--warning", "--danger", "--info"]) {
+          const foreground = tokenFor(mode, preset.id, token)!;
+          expect(foreground, `${preset.id} ${mode} ${token}`).toMatch(/^#[0-9a-f]{6}$/i);
+          const ratio = (Math.max(luminance(foreground), luminance(background)) + .05) / (Math.min(luminance(foreground), luminance(background)) + .05);
+          expect(ratio, `${preset.id} ${mode} ${token} on ${surface}`).toBeGreaterThanOrEqual(4.5);
+        }
+        const border = tokenFor(mode, preset.id, preset.id === "graphite" ? "--graphite-control-border" : "--control-border")!;
+        const ratio = (Math.max(luminance(border), luminance(background)) + .05) / (Math.min(luminance(border), luminance(background)) + .05);
+        expect(ratio, `${preset.id} ${mode} controls on ${surface}`).toBeGreaterThanOrEqual(3);
+      }
+    });
+  }
+});
 
 describe("primary button contrast", () => {
   for (const preset of THEME_PRESETS) {

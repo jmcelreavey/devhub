@@ -66,8 +66,8 @@ describe("buildManagedCatalogRows", () => {
 
   it("keeps ai-tools catalog row without local overlay when in sync", () => {
     const rows = buildManagedCatalogRows(
-      [skill("bi-foo", "ai-tools")],
-      [localCandidate("bi-foo", "in-sync", false)],
+      [skill("team-foo", "ai-tools")],
+      [localCandidate("team-foo", "in-sync", false)],
     );
     expect(rows).toHaveLength(1);
     expect(rows[0].kind).toBe("catalog");
@@ -81,12 +81,12 @@ describe("buildManagedCatalogRows", () => {
 describe("canDeleteRow", () => {
   it("allows devhub catalog and local-only, blocks ai-tools", () => {
     const rows = buildManagedCatalogRows(
-      [skill("shared", "devhub"), skill("bi-up", "ai-tools")],
+      [skill("shared", "devhub"), skill("team-up", "ai-tools")],
       [localCandidate("local-only", "new")],
     );
     const byName = Object.fromEntries(rows.map((r) => [r.name, r]));
     expect(canDeleteRow(byName.shared)).toBe(true);
-    expect(canDeleteRow(byName["bi-up"])).toBe(false);
+    expect(canDeleteRow(byName["team-up"])).toBe(false);
     expect(canDeleteRow(byName["local-only"])).toBe(true);
   });
 });
@@ -96,14 +96,14 @@ describe("add visibility", () => {
     const rows = buildManagedCatalogRows(
       [
         skill("scope-creep-detector", "vendor"),
-        skill("bi-foo", "plugin:bi"),
+        skill("team-foo", "plugin:team-tools"),
       ],
       [
         { ...localCandidate("scope-creep-detector", "new"), blockedFromCatalog: true },
-        { ...localCandidate("bi-foo", "new"), blockedFromCatalog: true },
+        { ...localCandidate("team-foo", "new"), blockedFromCatalog: true },
       ],
     );
-    expect(rows.map((r) => r.name).sort()).toEqual(["bi-foo", "scope-creep-detector"]);
+    expect(rows.map((r) => r.name).sort()).toEqual(["scope-creep-detector", "team-foo"]);
     expect(rows.every((r) => r.kind === "catalog")).toBe(true);
     expect(rows.every((r) => !canAddToCatalog(r))).toBe(true);
   });

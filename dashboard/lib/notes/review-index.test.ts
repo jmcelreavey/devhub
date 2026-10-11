@@ -14,21 +14,21 @@ function link(href: string, label: string) {
 
 describe("buildReviewNoteRef", () => {
   it("takes repo and PR from an embedded PR link", () => {
-    const ref = buildReviewNoteRef("pr-reviews/example-org-capi-525.json", [
-      link("https://github.com/example-org/capi/pull/525", "PR 525"),
+    const ref = buildReviewNoteRef("pr-reviews/example-org-payments-525.json", [
+      link("https://github.com/example-org/payments/pull/525", "PR 525"),
       para("PTF-3774 hybrid search"),
     ]);
-    expect(ref.repo).toBe("capi");
+    expect(ref.repo).toBe("payments");
     expect(ref.prNumbers).toContain(525);
     expect(ref.tickets).toEqual(["PTF-3774"]);
   });
 
   it("falls back to the filename when the note has no PR link", () => {
-    const ref = buildReviewNoteRef("pr-reviews/example-org-capi-543.json", [para("no links")]);
+    const ref = buildReviewNoteRef("pr-reviews/example-org-payments-543.json", [para("no links")]);
     expect(ref.prNumbers).toEqual([543]);
     // Org/repo can't be split reliably, so the whole prefix is kept and matched
     // by suffix later.
-    expect(ref.repo).toBe("example-org-capi");
+    expect(ref.repo).toBe("example-org-payments");
   });
 
   it("handles repo names containing hyphens", () => {
@@ -50,9 +50,9 @@ describe("buildReviewNoteRef", () => {
 describe("matchReviewNotes", () => {
   const notes: ReviewNoteRef[] = [
     {
-      path: "pr-reviews/example-org-capi-525.json",
-      title: "example-org-capi-525",
-      repo: "capi",
+      path: "pr-reviews/example-org-payments-525.json",
+      title: "example-org-payments-525",
+      repo: "payments",
       prNumbers: [525],
       tickets: ["PTF-3774"],
     },
@@ -66,37 +66,37 @@ describe("matchReviewNotes", () => {
   ];
 
   it("matches a squash PR number within the same repo", () => {
-    const m = matchReviewNotes(notes, "capi", "PTF-3774 - Hybrid and vector search (#525)");
+    const m = matchReviewNotes(notes, "payments", "PTF-3774 - Hybrid and vector search (#525)");
     expect(m).toHaveLength(1);
     expect(m[0]).toMatchObject({ confidence: "pr", via: "#525" });
   });
 
   it("matches on ticket when there is no PR number", () => {
-    const m = matchReviewNotes(notes, "capi", "PTF-3774 - Make posts search production-ready");
+    const m = matchReviewNotes(notes, "payments", "PTF-3774 - Make posts search production-ready");
     expect(m[0]).toMatchObject({ confidence: "ticket", via: "PTF-3774" });
   });
 
   it("labels a cross-repo ticket hit as related, not as the review", () => {
-    // The exact false positive the prototype produced: a DP-6144 commit in capi
+    // The exact false positive the prototype produced: a DP-6144 commit in payments
     // pulling in a review note about posts-ai.
-    const m = matchReviewNotes(notes, "capi", "DP-6144: Support Categorized Questions (#539)");
+    const m = matchReviewNotes(notes, "payments", "DP-6144: Support Categorized Questions (#539)");
     expect(m).toHaveLength(1);
     expect(m[0]).toMatchObject({ confidence: "related", via: "DP-6144" });
   });
 
   it("does not match a PR number belonging to another repo", () => {
-    // #38 exists, but as a posts-ai PR — a capi commit numbered 38 is unrelated.
-    const m = matchReviewNotes(notes, "capi", "chore: something (#38)");
+    // #38 exists, but as a posts-ai PR — a payments commit numbered 38 is unrelated.
+    const m = matchReviewNotes(notes, "payments", "chore: something (#38)");
     expect(m).toEqual([]);
   });
 
   it("prefers the PR match and does not duplicate the note via its ticket", () => {
-    const m = matchReviewNotes(notes, "capi", "PTF-3774 - search (#525)");
+    const m = matchReviewNotes(notes, "payments", "PTF-3774 - search (#525)");
     expect(m).toHaveLength(1);
     expect(m[0]!.confidence).toBe("pr");
   });
 
   it("returns nothing when the commit references nothing", () => {
-    expect(matchReviewNotes(notes, "capi", "chore: tidy imports")).toEqual([]);
+    expect(matchReviewNotes(notes, "payments", "chore: tidy imports")).toEqual([]);
   });
 });

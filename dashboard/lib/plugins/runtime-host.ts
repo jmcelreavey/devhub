@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { StringDecoder } from "node:string_decoder";
 import path from "node:path";
 import { execExternal } from "@/lib/exec-external";
 import { PluginApiError, toolEnv, type PluginContext } from "./context";
@@ -11,6 +12,37 @@ import { rows, findEntry } from "./views";
 import { runtimeFile, verifyRuntimeFiles } from "./runtime-files";
 import type { RuntimeContribution } from "./runtime-contract";
 import { whichOnPath } from "./runtime";
+
+export interface RuntimeEvent { type: "output"; text: string }
+/** Version-one streaming routes use newline-delimited output events and one final result. */
+export class RuntimeStream {
+  private decoder = new StringDecoder("utf8");
+  private pending = "";
+  private result: unknown;
+  private complete = false;
+  constructor(private emit?: (event: RuntimeEvent) => void) {}
+  push(chunk: Buffer): void {
+    this.pending += this.decoder.write(chunk);
+    if (Buffer.byteLength(this.pending) > 256 * 1024) throw new Error("Stream record too large");
+    let end: number;
+    while ((end = this.pending.indexOf("\n")) >= 0) {
+      const line = this.pending.slice(0, end);
+      this.pending = this.pending.slice(end + 1);
+      if (!line) continue;
+      const event: unknown = JSON.parse(line);
+      if (!event || typeof event !== "object" || this.complete) throw new Error("Invalid stream");
+      const record = event as Record<string, unknown>;
+      if (record.type === "output" && typeof record.text === "string" && record.text.length <= 16384) this.emit?.({ type: "output", text: record.text });
+      else if (record.type === "result" && Object.hasOwn(record, "result")) { this.result = record.result; this.complete = true; }
+      else throw new Error("Invalid stream record");
+    }
+  }
+  finish(): unknown {
+    this.pending += this.decoder.end();
+    if (this.pending.trim() || !this.complete) throw new Error("Incomplete stream");
+    return this.result;
+  }
+}
 
 export interface LoadedRuntime {
   id: string;
@@ -73,9 +105,11 @@ export function stopRuntimeWorkers(name: string): void {
 }
 
 /** Request-scoped processes avoid listening ports and orphaned daemon registrations. */
-export async function invokeRuntime(ctx: PluginContext, name: string, request: RuntimeRequest, signal?: AbortSignal): Promise<unknown> {
+export async function invokeRuntime(ctx: PluginContext, name: string, request: RuntimeRequest, signal?: AbortSignal, onEvent?: (event: RuntimeEvent) => void): Promise<unknown> {
   const plugin = loadRuntime(ctx, name);
   if (!declared(plugin.runtime, request)) throw new PluginApiError(404, "RUNTIME_ROUTE", "The plugin did not declare this route.");
+  const route = request.kind === "api" ? plugin.runtime.routes.find((r) => r.path === request.path && r.method === request.method) : undefined;
+  const stream = route?.stream ? new RuntimeStream(onEvent) : undefined;
   const input = JSON.stringify(request);
   if (Buffer.byteLength(input) > 64 * 1024) throw new PluginApiError(413, "RUNTIME_SIZE", "The plugin request is too large.");
   const data = path.join(ctx.paths.pluginHome, "runtime-data", plugin.id);
@@ -103,10 +137,11 @@ export async function invokeRuntime(ctx: PluginContext, name: string, request: R
     args.push(runtimeFile(plugin.root, plugin.runtime.entry));
     const result = await execExternal(process.execPath, args, {
       cwd: data, env: { ...runtimeEnvironment(plugin.runtime, ctx.env, data, plugin.commandDirectories), ...(homeReads.length ? { DEVHUB_PLUGIN_HOST_HOME: ctx.home } : {}) }, input,
-      timeoutMs: 30_000, maxBuffer: 2 * 1024 * 1024, label: `plugin:${name}`, signal: controller.signal,
+      timeoutMs: (route?.timeoutSeconds ?? 30) * 1000, maxBuffer: 2 * 1024 * 1024, label: `plugin:${name}`, signal: controller.signal,
+      onStdout: stream ? (chunk) => stream.push(chunk) : undefined,
     });
     if (!findEntry(ctx, name)?.enabled) throw new Error("Plugin disabled");
-    const output: unknown = JSON.parse(result.stdout);
+    const output: unknown = stream ? stream.finish() : JSON.parse(result.stdout);
     if (request.kind === "page" && typeof output !== "string") throw new Error("Page must return HTML");
     return output;
   } catch {

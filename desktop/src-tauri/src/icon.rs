@@ -2,7 +2,7 @@
 //!
 //! The bundled `.icns` is the DevHub Shift Dock mark. Plugin branding overlays the Dock
 //! at runtime. macOS's persistent Dock tile reads `CFBundleIconFile`, so a
-//! BI-branded *bundle* made `setApplicationIconImage` a no-op when switching
+//! plugin-branded *bundle* made `setApplicationIconImage` a no-op when switching
 //! back to default. Resetting default uses `nil` (restore the bundle icon).
 
 use serde::Deserialize;
@@ -81,7 +81,7 @@ fn apply_window_icons(app: &AppHandle, png: &[u8]) -> Result<(), String> {
 /// macOS has no window icon; `Window::set_icon` does not move the Dock tile.
 /// `setApplicationIconImage` overlays a custom image. Passing `nil` restores
 /// the bundled `CFBundleIconFile` — that is the default reset, and it only
-/// works if the bundle `.icns` is the Shift Dock mark, not BI.
+/// works if the bundle `.icns` is the Shift Dock mark, not a plugin mark.
 #[cfg(target_os = "macos")]
 fn set_macos_dock_icon(png: &[u8]) -> Result<(), String> {
     use cocoa::appkit::NSImage;

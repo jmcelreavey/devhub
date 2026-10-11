@@ -14,7 +14,7 @@ related:
 
 Plugins let a separate repo (or local directory) contribute assets — skills, agents, MCP
 configs — into DevHub without living in the core repo. This keeps company-specific or
-private content (e.g. `devhub-bi`) out of the shareable core while still syncing it to
+private content (e.g. `team-tools`) out of the shareable core while still syncing it to
 your tools. See [`CONTRIBUTING.md`](../../CONTRIBUTING.md) for the broader template/fork strategy.
 
 The plugin loader is a generalisation of the original `ai-tools` skill merge: instead of
@@ -70,7 +70,7 @@ Docs and persona-modes are not yet plugin-aware (different delivery mechanisms).
 Tier-1 assets mirror core directories and merge into the same catalogs:
 
 ```
-devhub-bi/
+team-tools/
   devhub-plugin.json
   agents/<name>.md
   skills/<name>/SKILL.md
@@ -97,7 +97,7 @@ manifest field:
 ```json
 "dashboard": {
   "root": "dashboard",
-  "paths": ["app/ops", "app/api/bi", "lib/bi-ops.ts", "components/CapiScriptsCard.tsx"]
+  "paths": ["app/team-tools", "app/api/team-tools", "lib/team-ops.ts", "components/TeamScriptsCard.tsx"]
 }
 ```
 
@@ -113,11 +113,10 @@ resolve unchanged and Next compiles them as if they were core files. It:
 
 Nav: plugins declare `dashboard.nav` entries in `devhub-plugin.json`. The materialiser
 writes them into `lib/plugin-nav.generated.ts`; core merges them into the sidebar via
-`groupSidebarNav` (and into ⌘P via `ALL_NAV_DESTINATIONS`). Use `group: "bi"` for
-BI-owned destinations — Ops ships that way from `devhub-bi`. `lib/bi-presence.ts`
-opens that gate when an enabled plugin declares `navGate: "bi"`, even before AWS or
-email setup. Existing local AWS/email detection remains available; core holds no BI
-feature code.
+`groupSidebarNav` and into ⌘P via `ALL_NAV_DESTINATIONS`. Use `group: "infra"` for
+infrastructure destinations. `lib/infrastructure-presence.ts` opens that gate when an
+enabled plugin declares `navGate: "infra"`, even before AWS setup. Generic AWS profiles
+and an optional automation folder can also open the gate; domain logic stays in plugins.
 
 ### Database connections
 
@@ -128,8 +127,8 @@ a `DbConnectionProvider` (`list()` cheap, `resolve(id)` may mint credentials).
 ```json
 "dashboard": {
   "root": "dashboard",
-  "paths": ["lib/bi-db-provider.ts"],
-  "connections": "lib/bi-db-provider.ts"
+  "paths": ["lib/team-db-provider.ts"],
+  "connections": "lib/team-db-provider.ts"
 }
 ```
 
@@ -186,7 +185,7 @@ shows a **Plugin-owned files edited in core** banner (`GET /api/status/materiali
 | `missing-source` | A materialised file has no matching plugin source |
 | `core-only-copy` | A path is listed in `.git/info/exclude` but no longer contributed by any enabled plugin |
 
-Fix: edit the plugin checkout (e.g. `~/Developer/devhub-bi/dashboard/…`), then restart the
+Fix: edit the plugin checkout (e.g. `~/Developer/team-tools/dashboard/…`), then restart the
 dev server or run `sync_plugins`. Never edit materialised copies in the core tree — see
 AGENTS.md → Plugin Architecture.
 
@@ -244,10 +243,10 @@ Each plugin repo has a `devhub-plugin.json` at its root:
 
 ```json
 {
-  "name": "bi",
+  "name": "team-tools",
   "version": "0.1.0",
   "devhubApi": "1",
-  "navGate": "bi",
+  "navGate": "infra",
   "contributes": {
     "agents": "agents/",
     "skills": "skills/"
@@ -278,7 +277,7 @@ them on every forker. Declare them in the manifest:
 machine-local registry, and for each *enabled* plugin verifies every required `command`
 resolves on `PATH`. If one is missing it prints the `install` hint and fails the install.
 
-This is how the **BI plugin requires `safe-chain`** while the public template does not — a
+This is how the **example plugin requires `safe-chain`** while the public template does not — a
 fresh fork with no plugins registered hits no requirements at all; the gate only bites once
 you register a plugin that opts in. The check is dependency-free (it runs before
 `node_modules` exists) and tolerant — a missing/broken registry or manifest is skipped,
@@ -287,7 +286,7 @@ never fatal.
 Layout inside a plugin mirrors core:
 
 ```
-devhub-bi/
+team-tools/
   devhub-plugin.json
   agents/<name>.md            # flat .md files (like agents/shared)
   skills/<name>/SKILL.md      # one dir per skill
@@ -300,10 +299,10 @@ devhub-bi/
 Register and manage plugins from the DevHub repo root:
 
 ```bash
-npm run plugins -- add ~/Developer/devhub-bi
+npm run plugins -- add ~/Developer/team-tools
 npm run plugins -- list                 # enabled, valid plugins
-npm run plugins -- disable bi
-npm run plugins -- enable bi
+npm run plugins -- disable team-tools
+npm run plugins -- enable team-tools
 ```
 
 Mutations validate the manifest and registry, preserve unrelated settings and write
@@ -315,7 +314,7 @@ enabled (same home as the `mcp-personal/` catalog):
 ```json
 {
   "plugins": [
-    { "name": "bi", "path": "~/Developer/devhub-bi", "enabled": true }
+    { "name": "team-tools", "path": "~/Developer/team-tools", "enabled": true }
   ]
 }
 ```

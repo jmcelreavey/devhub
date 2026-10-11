@@ -17,13 +17,13 @@ import { isDesktop, openInBrowser } from "@/lib/desktop/bridge";
 const PASEO_FRAME_SANDBOX = "allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads allow-modals";
 
 /** This frame has no activity subscriptions: only local navigation can select a chat. */
-export function PersistentAgents() {
+export function PersistentAgents({ sideRun }: { sideRun?: { id: string; conversationId?: string } } = {}) {
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
-  const active = pathname === "/agents" && params.get("view") !== "connection" && params.get("view") !== "usage";
-  const conversation = params.get("conversation");
-  const runLink = params.get("run");
+  const active = Boolean(sideRun) || (pathname === "/agents" && params.get("view") !== "connection" && params.get("view") !== "usage");
+  const conversation = sideRun?.conversationId ?? (sideRun ? null : params.get("conversation"));
+  const runLink = sideRun?.id ?? params.get("run");
   const [origin, setOrigin] = useState<string>();
   const [error, setError] = useState<string>();
   const [setupHelp, setSetupHelp] = useState<{ detail: string | null; setupHref: string | null }>({ detail: null, setupHref: null });
@@ -80,12 +80,13 @@ export function PersistentAgents() {
   }, [origin, confirm]);
   useEffect(() => {
     const open = (event: Event) => {
+      if (sideRun) return;
       const id = (event as CustomEvent<unknown>).detail;
       if (typeof id === "string" && id) setRequested(previous => ({ id, serial: (previous?.serial ?? 0) + 1 }));
     };
     window.addEventListener(AGENT_CONVERSATION_EVENT, open);
     return () => window.removeEventListener(AGENT_CONVERSATION_EVENT, open);
-  }, []);
+  }, [sideRun]);
 
   const connect = useCallback(async () => {
     setLoading(true);
@@ -157,7 +158,7 @@ export function PersistentAgents() {
 
   if (!active && !origin) return null;
   return (
-    <section aria-label="Agents chats" hidden={!active} style={{ position: "absolute", inset: "57px 0 0", display: active ? "flex" : "none", flexDirection: "column", background: "var(--bg)" }}>
+    <section aria-label="Agents chats" hidden={!active} style={{ position: "absolute", inset: sideRun ? "0" : "57px 0 0", display: active ? "flex" : "none", flexDirection: "column", background: "var(--bg)" }}>
       {error && <div className="tone-panel tone-panel--warning m-4" role="alert">
         <p>{error}</p>
         {setupHelp.detail ? <details className="mt-2 text-xs"><summary>Developer detail</summary><p className="mt-1">{setupHelp.detail}</p></details> : null}
@@ -175,7 +176,7 @@ export function PersistentAgents() {
             if (query) dismissedLink.current = origin + ":" + query;
             setChatError(undefined);
             setRequested(undefined);
-            router.replace("/agents");
+            if (!sideRun) router.replace("/agents");
           }}>Dismiss</button>
           {chatRetryable && <button className="btn btn-ghost" onClick={() => setRetry(value => value + 1)}>Try again</button>}
         </div>

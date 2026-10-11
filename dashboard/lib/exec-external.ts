@@ -38,8 +38,12 @@ export interface ExecExternalOptions {
   input?: string | Buffer;
   /** Capture stdout as bytes so Git blobs are not decoded as text. */
   binary?: boolean;
+  /** Observe bounded stdout while retaining the final result. */
+  onStdout?: (chunk: Buffer) => void;
   /** Kills the child when aborted. Rejects with an error {@link isExecAbort} recognises. */
   signal?: AbortSignal;
+  /** Owned service with its own health UI; remains timed and cancellable. */
+  managedService?: boolean;
 }
 
 export interface ExecExternalResult {
@@ -64,7 +68,7 @@ export async function execExternal(
   opts: ExecExternalOptions = {},
 ): Promise<ExecExternalResult> {
   const timeoutMs = opts.timeoutMs ?? DEFAULT_EXEC_TIMEOUT_MS;
-  const id = beginExternalCall({ file, args, cwd: opts.cwd, label: opts.label, timeoutMs });
+  const id = beginExternalCall({ file, args, cwd: opts.cwd, label: opts.label, timeoutMs, managedService: opts.managedService });
   const gitCommand = isGit(file);
   const env = gitCommand ? (terminalShellEnv(opts.env ?? process.env) as NodeJS.ProcessEnv) : opts.env;
   let executable = file;
@@ -83,7 +87,7 @@ export async function execExternal(
     executable = gate.bin;
   }
   try {
-    if (opts.binary || opts.input !== undefined || opts.signal) {
+    if (opts.binary || opts.input !== undefined || opts.signal || opts.onStdout) {
       const captured = await spawnCollected(executable, [...args], {
         cwd: opts.cwd,
         env,
@@ -91,6 +95,7 @@ export async function execExternal(
         timeoutMs,
         input: opts.input,
         binary: opts.binary === true,
+        onStdout: opts.onStdout,
         signal: opts.signal,
       });
       endExternalCall(id, { ok: true, timedOut: false });
@@ -124,6 +129,7 @@ interface SpawnCollectedOptions {
   timeoutMs: number;
   input?: string | Buffer;
   binary: boolean;
+  onStdout?: (chunk: Buffer) => void;
   signal?: AbortSignal;
 }
 
@@ -182,6 +188,8 @@ function spawnCollected(file: string, args: string[], opts: SpawnCollectedOption
         return;
       }
       stdoutChunks.push(chunk);
+      try { opts.onStdout?.(chunk); }
+      catch { stop(new Error("Invalid streamed output")); }
     });
     child.stderr?.on("data", (chunk: Buffer) => {
       stderrLen += chunk.length;

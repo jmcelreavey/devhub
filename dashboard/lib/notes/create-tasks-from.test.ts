@@ -86,8 +86,8 @@ Unrelated prose.
 
 describe("planTitleFromMarkdown", () => {
   it("uses first h1", () => {
-    expect(planTitleFromMarkdown("# BI Job Scout analytics\n\nbody", "projects/x")).toBe(
-      "BI Job Scout analytics",
+    expect(planTitleFromMarkdown("# Sample project analytics\n\nbody", "projects/x")).toBe(
+      "Sample project analytics",
     );
   });
 });

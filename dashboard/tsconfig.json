@@ -55,7 +55,9 @@
     "../shared/notes-assets/server.ts",
     "./.next/types/**/*.ts",
     "./.next/types/**/*.ts",
-    "./.next/dev/types/**/*.ts"
+    "./.next/dev/types/**/*.ts",
+    ".next-pong-qa/types/**/*.ts",
+    ".next-pong-qa/dev/types/**/*.ts"
   ],
   "exclude": [
     "node_modules",

@@ -46,7 +46,7 @@ For the "just push everything to main/master" workflow, use `scripts/devhub-ship
 minutes). It commits notes/tasks and code as separate commits, pushes origin main,
 ports the private-only content diff onto the public core via the backport script
 (personal paths dropped, leak scan gates), pushes upstream **main directly**, advances
-the sync marker, then commits & pushes enabled plugin repos (e.g. devhub-bi) to their
+the sync marker, then commits & pushes enabled plugin repos (e.g. team-tools) to their
 branch. `--dry-run` previews; `--no-upstream` skips the public core.
 
 Judgement still applies: company/private logic belongs in a plugin, not in core — the

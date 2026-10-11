@@ -308,7 +308,7 @@ try {
   run("ditto", [built, INSTALL_PATH]);
   ok(`installed to ${INSTALL_PATH}`);
   // Dock caches CFBundleIconFile by path + mtime. A same-version upgrade
-  // that only swapped the .icns otherwise keeps showing yesterday's BI tile.
+  // that only swapped the .icns otherwise keeps showing yesterday's plugin tile.
   spawnSync("touch", [INSTALL_PATH]);
   spawnSync("killall", ["Dock"], { stdio: "ignore" });
   ok("touched the bundle and restarted Dock so the icon cache drops");

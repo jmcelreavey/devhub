@@ -24,6 +24,8 @@ Assume you are the second opinion, not the original author. Agreement is allowed
 
 Say "rubber duck" or "second opinion" and optionally describe what you want reviewed. The skill works on the full conversation context.
 
+If the user says the last message didn't land, re-pitch that point first, in plain English, using the repo's `GLOSSARY.md` terms when the repo has one. Then do the skeptical read. The re-pitch is adapted from Matt Pocock's `wait-what` skill (MIT).
+
 ## Workflow
 
 ### Reconstruct the request

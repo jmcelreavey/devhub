@@ -11,14 +11,13 @@ import { fetchStatusRows, type StatusSnapshot, type ServiceInfo, type ServicesSt
 import styles from "./status.module.css";
 import { CheckoutRebuildCard } from "@/components/desktop/CheckoutRebuildCard";
 import { CopyButton } from "@/components/ui/CopyButton";
-import { StatusDot } from "@/components/ui/StatusDot";
 import { copyTextToClipboard } from "@/lib/clipboard";
 import { useLive } from "@/lib/hooks/use-fetch";
 import { getNow,subscribeMinute } from "@/lib/minute-tick";
 import { revalidateScriptsHistory } from "@/lib/scripts-history-swr";
 import { formatRelativePastAge } from "@/lib/utils";
 import { waitForScriptRun } from "@/lib/wait-for-script-run";
-import { AlertTriangle,ArrowDown,ArrowUp,Check,Cloud,ExternalLink,GitBranch,Hammer,History,Link2,Play,QrCode,RefreshCw,RotateCw,Wifi } from "lucide-react";
+import { AlertTriangle,ArrowDown,ArrowUp,Check,Cloud,GitBranch,Hammer,History,Link2,Play,QrCode,RefreshCw,RotateCw,Wifi } from "lucide-react";
 import Link from "next/link";
 import QRCode from "qrcode";
 import { useCallback,useEffect,useRef,useState,useSyncExternalStore,type ReactNode } from "react";
@@ -146,94 +145,8 @@ function McpStateDot({ running, binaryMissing }: { running: boolean; binaryMissi
   );
 }
 
-interface BiSnapshot {
-  awsProfile: string | null;
-  awsIdentity: { account: string; arn: string } | null;
-  kubeContext: string | null;
-}
 
-function InfraCard() {
-  const [snapshot, setSnapshot] = useState<BiSnapshot | null>(null);
-  const [loaded, setLoaded] = useState(false);
 
-  useEffect(() => {
-    let cancelled = false;
-    async function load() {
-      try {
-        const r = await fetch("/api/bi");
-        if (!r.ok) throw new Error(`status ${r.status}`);
-        const data = (await r.json()) as BiSnapshot;
-        if (!cancelled) setSnapshot(data);
-      } catch {
-        if (!cancelled) setSnapshot(null);
-      } finally {
-        if (!cancelled) setLoaded(true);
-      }
-    }
-    void load();
-    const id = setInterval(load, 5 * 60_000);
-    return () => {
-      cancelled = true;
-      clearInterval(id);
-    };
-  }, []);
-
-  const authed = Boolean(snapshot?.awsIdentity);
-  const profile = snapshot?.awsProfile ?? null;
-  const ctx = snapshot?.kubeContext ?? null;
-
-  return (
-    <div className="card min-w-0 flex flex-col">
-      <div className="card-header">
-        <span className="flex items-center gap-1.5"><Cloud size={12} />Infra</span>
-        <Link
-          href="/ops"
-          className="inline-flex items-center gap-1 text-[11px] text-text-muted"
-          title="Open Ops page"
-        >
-          Ops <ExternalLink size={10} aria-hidden />
-        </Link>
-      </div>
-      <div className="card-body flex-1" style={{ padding: "8px 16px" }}>
-        {!loaded ? (
-          <p className="text-xs py-2 text-text-subtle">Loading…</p>
-        ) : (
-          <div className="flex flex-col gap-1.5 py-1">
-            <div className="flex items-center justify-between gap-2 text-sm">
-              <span className="flex items-center gap-2">
-                <StatusDot ok={authed} />
-                <span className="text-text">AWS</span>
-              </span>
-              {profile ? (
-                <span className="flex items-center gap-2">
-                  <code className="font-mono text-xs text-text-muted">{profile}</code>
-                  <span className={`badge ${authed ? "badge-success" : "badge-muted"}`}>
-                    {authed ? "signed in" : "expired"}
-                  </span>
-                </span>
-              ) : (
-                <span className="text-xs text-text-subtle">not set</span>
-              )}
-            </div>
-            <div className="flex items-center justify-between gap-2 text-sm">
-              <span className="flex items-center gap-2">
-                <StatusDot ok={Boolean(ctx)} />
-                <span className="text-text">kubectl</span>
-              </span>
-              {ctx ? (
-                <code className="font-mono text-[11px] truncate" style={{ color: "var(--text-muted)", maxWidth: 180 }} title={ctx}>
-                  {ctx}
-                </code>
-              ) : (
-                <span className="text-xs text-text-subtle">no context</span>
-              )}
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
 
 export default function StatusPage() {
   const tickNow = useSyncExternalStore(subscribeMinute, getNow, () => 0);
@@ -924,9 +837,9 @@ export default function StatusPage() {
         {statusTab === "runtime" && (
         <>
         <ExternalCommandsPanel />
-        {/* Services + MCP + BI: shared row on large screens */}
+        {/* Services + MCP: shared row on large screens */}
         <SectionLabel>Services &amp; Integrations</SectionLabel>
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)_minmax(0,0.9fr)] lg:items-stretch">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)] lg:items-stretch">
         <div className="card p-5 space-y-3"><h3 className="font-medium">Agents workspace</h3><p className="text-sm text-text-muted">{!services ? "Status unavailable" : services.agents?.active ? "Connected" : "Not connected"}</p><a className="btn btn-ghost" href="/agents?view=connection">Manage connection</a></div>
 
         <div className="card min-w-0 flex flex-col">
@@ -967,7 +880,6 @@ export default function StatusPage() {
           </div>
         </div>
 
-        <InfraCard />
         </div>
         </>
         )}

@@ -198,7 +198,7 @@ async function main() {
         });
       }
     }
-    // Plugin-contributed MCP servers (e.g. the BI plugin's devhub-bi-server).
+    // Plugin-contributed MCP servers (e.g. a plugin's team-tools-server).
     for (const { plugin, dir, hasNodeModules } of pluginMcpServerDirs()) {
       if (hasNodeModules) continue;
       console.log(`  · Installing ${plugin} MCP server dependencies...`);

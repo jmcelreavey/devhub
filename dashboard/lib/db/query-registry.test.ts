@@ -39,7 +39,7 @@ describe("summarizeStatement", () => {
 });
 
 describe("query registry", () => {
-  const query = { connectionId: "bi:rds:capi:dev", engine: "postgres" as const, timeoutMs: 60_000 };
+  const query = { connectionId: "team:rds:payments:dev", engine: "postgres" as const, timeoutMs: 60_000 };
 
   it("reports a query as in flight until it ends", () => {
     const id = beginQuery({ ...query, statement: "SELECT 1" });

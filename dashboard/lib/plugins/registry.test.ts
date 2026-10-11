@@ -41,18 +41,18 @@ describe("expandHome", () => {
 
 describe("readManifest", () => {
   it("accepts a valid manifest", () => {
-    makePlugin(pluginRoot, { name: "bi", version: "0.1.0", devhubApi: "1", contributes: { agents: "agents/" } });
+    makePlugin(pluginRoot, { name: "team-tools", version: "0.1.0", devhubApi: "1", contributes: { agents: "agents/" } });
     const res = readManifest(pluginRoot);
     expect(res.ok).toBe(true);
-    if (res.ok) expect(res.manifest.name).toBe("bi");
+    if (res.ok) expect(res.manifest.name).toBe("team-tools");
   });
   it("rejects an unsupported devhubApi", () => {
-    makePlugin(pluginRoot, { name: "bi", version: "0.1.0", devhubApi: "99", contributes: {} });
+    makePlugin(pluginRoot, { name: "team-tools", version: "0.1.0", devhubApi: "99", contributes: {} });
     const res = readManifest(pluginRoot);
     expect(res.ok).toBe(false);
   });
   it("rejects an invalid name slug", () => {
-    makePlugin(pluginRoot, { name: "BI Plugin", version: "0.1.0", devhubApi: "1", contributes: {} });
+    makePlugin(pluginRoot, { name: "Invalid Plugin", version: "0.1.0", devhubApi: "1", contributes: {} });
     expect(readManifest(pluginRoot).ok).toBe(false);
   });
   it("reports a missing manifest without throwing", () => {
@@ -60,7 +60,7 @@ describe("readManifest", () => {
   });
   it("accepts a requires.commands block", () => {
     makePlugin(pluginRoot, {
-      name: "bi",
+      name: "team-tools",
       version: "0.1.0",
       devhubApi: "1",
       contributes: {},
@@ -72,7 +72,7 @@ describe("readManifest", () => {
   });
   it("rejects a requires.commands entry without a command", () => {
     makePlugin(pluginRoot, {
-      name: "bi",
+      name: "team-tools",
       version: "0.1.0",
       devhubApi: "1",
       contributes: {},
@@ -88,14 +88,14 @@ describe("listEnabledPlugins", () => {
   });
 
   it("loads an enabled plugin and skips a disabled one", () => {
-    makePlugin(pluginRoot, { name: "bi", version: "0.1.0", devhubApi: "1", contributes: { agents: "agents/" } });
+    makePlugin(pluginRoot, { name: "team-tools", version: "0.1.0", devhubApi: "1", contributes: { agents: "agents/" } });
     writeRegistry([
-      { name: "bi", path: pluginRoot, enabled: true },
+      { name: "team-tools", path: pluginRoot, enabled: true },
       { name: "off", path: pluginRoot, enabled: false },
     ]);
     const plugins = listEnabledPlugins(home);
     expect(plugins).toHaveLength(1);
-    expect(plugins[0].name).toBe("bi");
+    expect(plugins[0].name).toBe("team-tools");
   });
 
   it("skips entries whose path is missing", () => {
@@ -104,7 +104,7 @@ describe("listEnabledPlugins", () => {
   });
 
   it("skips a registry name that disagrees with the manifest name", () => {
-    makePlugin(pluginRoot, { name: "bi", version: "0.1.0", devhubApi: "1", contributes: {} });
+    makePlugin(pluginRoot, { name: "team-tools", version: "0.1.0", devhubApi: "1", contributes: {} });
     writeRegistry([{ name: "wrong", path: pluginRoot, enabled: true }]);
     expect(listEnabledPlugins(home)).toEqual([]);
   });
@@ -132,12 +132,12 @@ describe("listEnabledPlugins", () => {
 describe("pluginAssetDirs", () => {
   it("returns existing contributed dirs tagged with origin", () => {
     fs.mkdirSync(path.join(pluginRoot, "agents"), { recursive: true });
-    makePlugin(pluginRoot, { name: "bi", version: "0.1.0", devhubApi: "1", contributes: { agents: "agents/", docs: "docs/" } });
-    writeRegistry([{ name: "bi", path: pluginRoot, enabled: true }]);
+    makePlugin(pluginRoot, { name: "team-tools", version: "0.1.0", devhubApi: "1", contributes: { agents: "agents/", docs: "docs/" } });
+    writeRegistry([{ name: "team-tools", path: pluginRoot, enabled: true }]);
 
     const dirs = pluginAssetDirs("agents", home);
     expect(dirs).toHaveLength(1);
-    expect(dirs[0].origin).toBe("plugin:bi");
+    expect(dirs[0].origin).toBe("plugin:team-tools");
     expect(dirs[0].dir).toBe(path.join(pluginRoot, "agents"));
 
     // docs declared but the dir doesn't exist -> skipped
@@ -145,8 +145,8 @@ describe("pluginAssetDirs", () => {
   });
 
   it("rejects a contributes path that escapes the plugin root", () => {
-    makePlugin(pluginRoot, { name: "bi", version: "0.1.0", devhubApi: "1", contributes: { agents: "../escape" } });
-    writeRegistry([{ name: "bi", path: pluginRoot, enabled: true }]);
+    makePlugin(pluginRoot, { name: "team-tools", version: "0.1.0", devhubApi: "1", contributes: { agents: "../escape" } });
+    writeRegistry([{ name: "team-tools", path: pluginRoot, enabled: true }]);
     expect(pluginAssetDirs("agents", home)).toEqual([]);
   });
 });

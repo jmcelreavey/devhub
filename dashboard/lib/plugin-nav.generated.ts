@@ -5,4 +5,4 @@ import type { NavItem, SectionTab } from "./nav";
 
 export const PLUGIN_NAV_ITEMS: NavItem[] = [];
 
-export const PLUGIN_SECTION_TABS: Partial<Record<"library" | "system" | "bi", SectionTab[]>> = {};
+export const PLUGIN_SECTION_TABS: Partial<Record<"library" | "system" | "infra", SectionTab[]>> = {};

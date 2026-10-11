@@ -6,12 +6,12 @@
  *
  * 1. **Core wins on collision.** A plugin cannot shadow a user's own saved
  *    connection by claiming its id.
- * 2. **A provider that throws is reported, not fatal.** If the BI plugin cannot
+ * 2. **A provider that throws is reported, not fatal.** If the plugin plugin cannot
  *    reach `~/.aws/credentials`, the SQLite connections still list. The rail
  *    showing five of six sources with one visible error beats an empty page.
  *
  * The list is cached because the rail refetches it often and `list()` is
- * contractually cheap but not free — the BI provider reads an IAM config that
+ * contractually cheap but not free — the plugin provider reads an IAM config that
  * is itself TTL-cached behind `gh api`. The cache is dropped whenever something
  * that changes access changes: an AWS profile switch, a saved-connection edit.
  */

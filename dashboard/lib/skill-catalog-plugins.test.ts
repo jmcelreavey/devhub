@@ -47,11 +47,11 @@ afterEach(() => {
   }
 });
 
-function registerBiPlugin(): void {
+function registerTeamPlugin(): void {
   fs.writeFileSync(
     path.join(pluginRoot, "devhub-plugin.json"),
     JSON.stringify({
-      name: "bi",
+      name: "team-tools",
       version: "0.1.0",
       devhubApi: "1",
       contributes: { skills: "skills/" },
@@ -62,7 +62,7 @@ function registerBiPlugin(): void {
   fs.writeFileSync(
     reg,
     JSON.stringify({
-      plugins: [{ name: "bi", path: pluginRoot, enabled: true }],
+      plugins: [{ name: "team-tools", path: pluginRoot, enabled: true }],
     }),
   );
 }
@@ -85,13 +85,13 @@ describe("buildMergedSkillCatalog with plugins", () => {
     writeSkill(path.join(repoRoot, "skills", "shared"), "shared-skill", "CORE");
     writeSkill(path.join(repoRoot, "skills", "shared"), "core-only", "core");
     writeSkill(path.join(pluginRoot, "skills"), "shared-skill", "PLUGIN");
-    writeSkill(path.join(pluginRoot, "skills"), "bi-iam", "plugin");
-    registerBiPlugin();
+    writeSkill(path.join(pluginRoot, "skills"), "team-iam", "plugin");
+    registerTeamPlugin();
 
     const catalog = buildMergedSkillCatalog(repoRoot);
     const byName = Object.fromEntries(catalog.map((e) => [e.name, e]));
 
-    expect(byName["bi-iam"].origin).toBe("plugin:bi");
+    expect(byName["team-iam"].origin).toBe("plugin:team-tools");
     // collision: core kept, plugin copy dropped
     expect(byName["shared-skill"].origin).toBe("devhub");
     expect(byName["shared-skill"].dir).toContain(path.join("skills", "shared"));
@@ -103,28 +103,28 @@ describe("buildMergedSkillCatalog with plugins", () => {
     });
 
     const list = listSkillsFromCatalog(catalog);
-    expect(list.find((s) => s.name === "bi-iam")?.readOnly).toBe(true);
+    expect(list.find((s) => s.name === "team-iam")?.readOnly).toBe(true);
     expect(list.find((s) => s.name === "core-only")?.readOnly).toBe(false);
   });
 
   it("treats plugin-only skills as non-collectible (upstreamOnlySkillNames)", () => {
-    writeSkill(path.join(pluginRoot, "skills"), "bi-iam", "plugin");
-    registerBiPlugin();
-    expect(upstreamOnlySkillNames(repoRoot).has("bi-iam")).toBe(true);
+    writeSkill(path.join(pluginRoot, "skills"), "team-iam", "plugin");
+    registerTeamPlugin();
+    expect(upstreamOnlySkillNames(repoRoot).has("team-iam")).toBe(true);
   });
 
   it("lets an enabled plugin override the same skill from ai-tools", () => {
     process.env.AI_TOOLS_ROOT = aiToolsRoot;
     delete process.env.AI_TOOLS_SYNC;
     writeSkill(path.join(aiToolsRoot, "skills"), "mongo-query", "upstream");
-    writeSkill(path.join(pluginRoot, "skills"), "bi-mongo-query", "plugin");
-    registerBiPlugin();
+    writeSkill(path.join(pluginRoot, "skills"), "upstream-mongo-query", "plugin");
+    registerTeamPlugin();
 
     const entry = buildMergedSkillCatalog(repoRoot).find(
-      (skill) => skill.name === "bi-mongo-query",
+      (skill) => skill.name === "upstream-mongo-query",
     );
 
-    expect(entry?.origin).toBe("plugin:bi");
+    expect(entry?.origin).toBe("plugin:team-tools");
     expect(entry?.dir).toContain(pluginRoot);
     expect(entry?.overridesUpstream).toBe(true);
   });

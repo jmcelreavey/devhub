@@ -15,7 +15,8 @@ readAgentRun,
 updateAgentRunStatus,
 type AgentRun,
 } from "@/lib/agent-runs/store";
-import { upsertTaskAgentRun } from "@/lib/tasks/task-agent-runs";
+import { patchTaskAgentRun, taskRunRole, upsertTaskAgentRun } from "@/lib/tasks/task-agent-runs";
+import { worktreeFingerprint } from "@/lib/workflows/fingerprint";
 import { paseoUrl } from "@/lib/paseo/client";
 import { startPaseoAgent } from "@/lib/paseo/dispatch";
 import { resolvePaseoLaunch } from "@/lib/paseo/launch";
@@ -234,8 +235,8 @@ export async function dispatchAgentRun(input: AgentDispatchInput): Promise<Agent
 
   try {
 
-  if (input.activity?.taskId && input.activity.action !== "plan") {
-    await upsertTaskAgentRun({ taskId: input.activity.taskId, runId: id, status: "queued", provider: launch.provider });
+  if (input.activity?.taskId) {
+    await upsertTaskAgentRun({ taskId: input.activity.taskId, role: taskRunRole(input.activity.action), runId: id, status: "queued", provider: launch.provider });
   }
 
   const inherit = input.resumeSessionId && parent ? { worktree: parent.spec.worktree, baseSha: parent.spec.baseSha } : input.inherit;
@@ -262,6 +263,9 @@ export async function dispatchAgentRun(input: AgentDispatchInput): Promise<Agent
 
     run.spec = { ...run.spec, cwd, baseSha, worktree };
     writeRunSpec(run.dir, run.spec);
+    if (input.activity?.taskId) {
+      await patchTaskAgentRun(input.activity.taskId, id, { cwd, ...(input.activity.action === "review" ? { codeFingerprint: await worktreeFingerprint(cwd) } : {}) });
+    }
     const started = await startPaseoAgent({
       run, launch, prompt: input.prompt, resumeAgentId: input.resumeSessionId,
       // Only the send/create can lose its ack. A failed connection or preflight

@@ -10,13 +10,16 @@ import type { Metadata,Viewport } from "next";
 import { Instrument_Sans } from "next/font/google";
 import { Suspense } from "react";
 import "./globals.css";
+import "@/components/releases/releases.css";
 // Machine-local palette + @font-face for the active branding plugin (empty baseline
 // when none is enabled). Imported after globals so a plugin can override core tokens.
 import { AgentLaunchSheet } from "@/components/agents/AgentLaunchSheet";
 import { PackagedCheckoutBanner } from "@/components/desktop/PackagedCheckoutBanner";
 import { UpdateBanner } from "@/components/desktop/UpdateBanner";
+import { ReleaseNotesProvider, WhatsNewBanner } from "@/components/releases/ReleaseNotes";
 import { PaseoUpdateNotice } from "@/components/persistent/PaseoUpdateNotice";
 import { NotesOverlayProvider } from "@/components/notes/NotesOverlayProvider";
+import { WorkflowNotifications } from "@/components/tasks/WorkflowNotifications";
 import { PersistentAgents } from "@/components/persistent/PersistentAgents";
 import { PersistentRepoLearnDock } from "@/components/persistent/PersistentRepoLearnDock";
 import { CollapsibleSidebar } from "@/components/shell/CollapsibleSidebar";
@@ -36,6 +39,8 @@ import { TerminalDock } from "@/components/shell/TerminalDock";
 import { TerminalTranscriptModal } from "@/components/shell/TerminalTranscriptModal";
 import { ThemeSystemSync } from "@/components/shell/ThemeSystemSync";
 import { HollowGate } from "@/components/hollow/HollowGate";
+import { GraphiteGate } from "@/components/graphite/GraphiteGate";
+import { ThemeEffectsGate } from "@/components/themes/ThemeEffectsGate";
 import { BootScreenProvider } from "@/components/today/TodayBootScreen";
 import { ToastProvider } from "@/components/shell/ToastProvider";
 import { UiPrefsBootstrap } from "@/components/shell/UiPrefsBootstrap";
@@ -178,10 +183,13 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         </Suspense>
         <ThemeSystemSync />
         <HollowGate />
+        <GraphiteGate />
+        <ThemeEffectsGate />
         <ToastProvider>
           <ConfirmProvider>
             <Suspense fallback={null}>
             <WorkspaceTabsProvider>
+            <ReleaseNotesProvider>
             <NavProgress />
             <DashboardShell />
             <KeyboardShortcuts />
@@ -207,6 +215,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
               {/* Renders nothing outside the packaged desktop app. Placed above
                   <main> rather than inside it so it never scrolls away mid-download. */}
               <UpdateBanner />
+              <WhatsNewBanner />
               <PaseoUpdateNotice />
               <PackagedCheckoutBanner />
 
@@ -215,6 +224,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
                     <WorkspaceTabPanels>{children}</WorkspaceTabPanels>
                   </BootScreenProvider>
                   <PersistentAgents />
+                  <WorkflowNotifications />
               </main>
             </div>
 
@@ -225,6 +235,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
             <TerminalTranscriptModal />
             <PWAInstallPrompt />
             <KonamiGate />
+            </ReleaseNotesProvider>
             </WorkspaceTabsProvider>
             </Suspense>
           </ConfirmProvider>

@@ -2,6 +2,7 @@
 
 import { ReactNode } from "react";
 import { todayISO } from "@/lib/utils";
+import { ShiftDockMark } from "@/components/graphite/ShiftDockMark";
 
 interface EmptyStateProps {
   icon?: ReactNode;
@@ -48,6 +49,7 @@ export function EmptyState({ icon, title, subtitle, action, quips, bare }: Empty
           : "empty-state card card-body flex flex-col items-start justify-center py-6 text-left"
       }
     >
+      <span className="graphite-empty-dock"><ShiftDockMark /></span>
       <div className="flex items-start gap-2.5">
         {icon ? (
           <span className="empty-pop shrink-0 mt-0.5 text-text-subtle" aria-hidden>

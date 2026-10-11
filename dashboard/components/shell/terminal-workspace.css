@@ -314,23 +314,6 @@ body[data-motion="off"] .terminal-block-chip[data-pending]::after {
     animation: none !important;
   }
 }
-.dock-popout-resize-w {
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 6px;
-  z-index: 10;
-}
-
-.dock-popout-resize-s {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  height: 6px;
-  z-index: 10;
-}
 .terminal-host-wrap {
   position: relative;
   height: 100%;

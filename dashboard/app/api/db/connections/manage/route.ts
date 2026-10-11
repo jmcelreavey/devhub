@@ -33,7 +33,7 @@ const ConnectionSchema = z.object({
    * Defaults to read-only when omitted.
    *
    * A hand-added connection has no external authority to derive access from —
-   * unlike a BI connection, whose mode comes from the AWS profile — so the user
+   * unlike a plugin connection, whose mode comes from the AWS profile — so the user
    * sets it. Defaulting to read means pointing this at production by mistake is
    * survivable.
    */

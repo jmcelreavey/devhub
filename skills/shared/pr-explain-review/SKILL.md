@@ -395,6 +395,12 @@ automatic PR/repo links cannot reconstruct task context you delete.
 Pass Markdown to `notes_write` (the server converts it to BlockNote). Use this
 section layout — it's what the dashboard note view is tuned for.
 
+When the prompt says to follow `code-review`, the note also has `## Standards`
+and `## Spec`, after `## Review Findings` and before `## Conventions`. Take
+them from that skill. Do not fold a standards finding into Conventions, or a
+spec gap into Ticket & Conversation. The two axes stay separate so one cannot
+hide the other.
+
 The H1 is **just the PR title** (no `repo#number` prefix). Directly under it,
 put a small sub-header line that links to the PR — the `repo#number` as the
 link text. Keep it a normal line (not a heading) so it reads as a small link,

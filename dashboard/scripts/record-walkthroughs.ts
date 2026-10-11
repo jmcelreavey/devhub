@@ -9,9 +9,10 @@
  *
  * Each clip is a CDP screencast. The MP4 is resampled to a fixed frame rate and piped to
  * ffmpeg as H.264, so it plays inline in DevHub's docs viewer; the GIF is what GitHub shows
- * in the README. A clip with `mp4: false` is README-only.
+ * in the README and Markdown guides. A clip with `mp4: false` is GIF-only.
  * DEMO_ONLY=today,notes records a subset while working on a walk.
  */
+import { NEW_FEATURE_CLIPS } from "./record-new-features";
 import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
@@ -42,10 +43,10 @@ const FPS = 25;
 /** localStorage keys PWAInstallPrompt reads; set so its hint never covers a shot. */
 const PWA_HINT_KEYS = ["devhub:pwa-dismissed", "devhub:pwa-status-browser-hint-dismissed"] as const;
 
-interface Clip {
+export interface Clip {
   /** Output file stem: docs/assets/demos/<name>.mp4 and <name>.gif */
   name: string;
-  /** Set to false for a clip only the README shows, so no MP4 sits unlinked in the docs. */
+  /** Set to false for a GIF-only clip, so no MP4 sits unlinked in the docs. */
   mp4?: false;
   /** Set to false for a clip only the docs show, so no GIF sits unlinked. */
   gif?: false;
@@ -76,6 +77,7 @@ function topTab(page: Page, name: string) {
 }
 
 const CLIPS: Clip[] = [
+  ...NEW_FEATURE_CLIPS,
   {
     name: "today",
     start: "/",

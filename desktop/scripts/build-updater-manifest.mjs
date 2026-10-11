@@ -21,8 +21,9 @@
  */
 import fs from "node:fs";
 import path from "node:path";
+import { requireReleaseNotes } from "../../shared/release-notes/index.mjs";
 
-const [distDir, version] = process.argv.slice(2);
+const [distDir, version, changelog = new URL("../../CHANGELOG.md", import.meta.url)] = process.argv.slice(2);
 if (!distDir || !version) {
   process.stderr.write("usage: build-updater-manifest.mjs <dist-dir> <version>\n");
   process.exit(1);
@@ -100,9 +101,17 @@ if (Object.keys(platforms).length === 0) {
   process.exit(1);
 }
 
+let notes;
+try {
+  notes = requireReleaseNotes(fs.readFileSync(changelog, "utf8"), version);
+} catch (error) {
+  process.stderr.write(`${error.message}\n`);
+  process.exit(1);
+}
+
 const manifest = {
   version,
-  notes: `See https://github.com/${repo}/releases/tag/${tag}`,
+  notes,
   pub_date: new Date().toISOString(),
   platforms,
 };

@@ -5,7 +5,7 @@
  *
  * Found by running recall against the real vault, which is the only way it
  * *could* have been found. A query for a ticket key returned five hits that
- * were all the same rolled-over task — "Address BI Jobs Feedback [PTF-4484]" —
+ * were all the same rolled-over task — "Address sample Feedback [PTF-4484]" —
  * on five consecutive dates. The per-source cap in `recall()` cannot see it:
  * the same open task is projected onto each day it spans, so the index is
  * correct in reporting five distinct sources. They just say the same thing.
@@ -28,7 +28,7 @@
  * task compare at 1.0 against itself while leaving prose comparisons untouched.
  *
  * The ref equality gate is what stops that from over-reaching. Two chunks
- * reading "Address BI Jobs Feedback" under *different* tickets have identical
+ * reading "Address sample Feedback" under *different* tickets have identical
  * non-numeric vocabulary but different refs, and they are not duplicates —
  * they're two tickets that happen to be described the same way, and
  * suppressing one would hide real information.

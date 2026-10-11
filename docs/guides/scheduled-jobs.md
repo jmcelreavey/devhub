@@ -30,6 +30,32 @@ In the desktop app, **closing the window hides it and keeps DevHub running** —
 
 Only one DevHub process should run the scheduler. A dev server started beside the desktop app shares `~/.local/state/devhub/jobs.json`; start it with `DEVHUB_SCHEDULER=0`.
 
+## Weekly worktree cleanup
+
+Agent checkouts can each hold several GB of dependencies and builds. On **Actions → Scheduled Jobs**, click **Schedule weekly cleanup** to add `worktree_cleanup` for **Sunday 03:17 local time** (`17 3 * * 0`). This is a one-click preset, not an automatically seeded job: the scheduler has no defaults/seeding mechanism. An existing cleanup job disables the preset to avoid duplicates. Wake is off; a missed run catches up when DevHub is running and the Mac is awake. You can enable wake on the saved job.
+
+The action reuses the worktree report inventory, but is deliberately stricter than the review-only `worktree_cleanup_scan`. It only considers Git-registered worktrees inside the linked checkout's `.devhub/checkouts` directory. It never deletes branches, the main checkout, locked worktrees, symlinked checkout directories or nested repositories.
+
+A whole worktree is removed with `git worktree remove` and `git worktree prune` only when **all** of these hold:
+
+- Its named branch has zero commits beyond `origin/main`. A merged PR, squash-equivalent content or commits pushed to another branch aren't enough. Missing Git evidence blocks removal.
+- There are no staged, modified or untracked source files. Only unstaged/untracked `dashboard/lib/plugin-branding.generated.ts` and `dashboard/app/plugin-branding.generated.css` are disposable generated-file exceptions. Ignored files outside recognised build directories and those exceptions also keep the checkout, including local `.env` files.
+- No active task, agent/task run, Paseo workspace or open DevHub terminal refers to it, and no running process has a cwd in it. Queued, paused and waiting-for-input work stays protected. Paseo and `lsof` must both be available; incomplete activity evidence means nothing is deleted.
+- Every file and directory has been idle for at least two days. Nested files, Git index/HEAD/reflog mtimes and recorded run/chat activity count; an old top-level directory timestamp alone isn't enough.
+
+Kept worktrees idle for at least **seven days** can lose only ignored `node_modules`, `.next` and Cargo `target` directories (a `target` must have a neighbouring `Cargo.toml`). Tracked files, source changes, other output directories and symlink targets stay untouched. Active, locked or uninspectable worktrees aren't trimmed either. Dependencies/builds are recreated by the next install/build.
+
+Safety evidence is refreshed before removal and before each build-directory deletion. There is no force-removal option. The run log lists removed paths, retained branches, skipped worktrees and freed space, with per-path and total allocated-space estimates. Filesystem compression, shared blocks and concurrent disk activity can make free-space readings differ.
+
+To preview without changing worktrees, generated files, Git metadata or builds:
+
+```bash
+cd dashboard
+npx tsx scripts/run-action.ts worktree_cleanup --dry-run
+```
+
+From an API client, `POST /api/scripts` with `{ "script": "worktree_cleanup", "dryRun": true }` starts the same preview; use the returned run id to read its log. Omit `--dry-run` / set `dryRun: false` only when you intend to apply it. `worktree_cleanup_scan` remains review-only and never removes files.
+
 ## Waking the Mac
 
 Scheduling a wake needs root, so DevHub ships a tiny helper that does only that.

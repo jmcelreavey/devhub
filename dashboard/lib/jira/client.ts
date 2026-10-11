@@ -544,7 +544,7 @@ async function loadJiraMeta(
  * write expects just the team id. Normalize whatever shape we copied from a
  * reference ticket down to what create/update accepts.
  */
-function normalizeTeamValueForWrite(raw: unknown): unknown {
+export function normalizeTeamValueForWrite(raw: unknown): unknown {
   if (raw && typeof raw === "object") {
     const o = raw as Record<string, unknown>;
     if (typeof o.id === "string" || typeof o.id === "number") return o.id;
@@ -596,7 +596,7 @@ function adfListItem(text: string): Record<string, unknown> {
 }
 
 /** Markdown → ADF doc. Supports headings, bullet/ordered lists, and the inline marks above. */
-function markdownToADF(md: string): unknown {
+export function markdownToADF(md: string): unknown {
   const lines = md.replace(/\r\n/g, "\n").split("\n");
   const content: Array<Record<string, unknown>> = [];
   let i = 0;

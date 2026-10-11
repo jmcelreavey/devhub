@@ -17,10 +17,12 @@
 import { execGh, isGithubCliAuthenticated } from "@/lib/gh-exec";
 import { countChecks } from "@/lib/github/pr-state";
 import { draftTasksFromAlerts } from "@/lib/tasks/alert-drafts";
+import { updateWorkflow } from "@/lib/workflows/store";
 import {
   isActiveTaskAgentRunStatus,
   listTaskAgentRunTaskIds,
   listTaskAgentRuns,
+  latestImplementationRun,
   patchTaskAgentRun,
   type TaskAgentRunPatch,
   type TaskAgentRunRecord,
@@ -132,7 +134,7 @@ async function githubLogin(): Promise<string | null> {
 export function runsToWatch(): Array<{ taskId: string; run: TaskAgentRunRecord }> {
   const out: Array<{ taskId: string; run: TaskAgentRunRecord }> = [];
   for (const taskId of listTaskAgentRunTaskIds()) {
-    const run = listTaskAgentRuns(taskId)[0];
+    const run = latestImplementationRun(listTaskAgentRuns(taskId));
     if (!run || isActiveTaskAgentRunStatus(run.status)) continue;
     if (run.prState === "merged" || run.prState === "closed") continue;
     if (!run.prUrl) continue;
@@ -158,6 +160,12 @@ export async function watchTaskPrs(now = new Date()): Promise<TaskPrWatchResult>
     const view = await readPrView(run.prUrl);
     if (!view) continue;
     const patch = assessTaskPr(view, run, { now: now.toISOString(), self });
+    if ((patch.attention && patch.attention.key !== run.attention?.key) || (patch.prState !== run.prState && ["merged", "closed"].includes(patch.prState ?? ""))) {
+      await updateWorkflow(taskId, undefined, (state) => {
+        if (!["paused", "complete", "abandoned"].includes(state.status)) state.status = "waiting-user";
+        return patch.attention ? "PR needs attention: " + patch.attention.kind : "PR " + patch.prState;
+      });
+    }
     await patchTaskAgentRun(taskId, run.runId, patch);
     result.checked += 1;
     if (patch.attention) result.attention += 1;

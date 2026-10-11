@@ -1,6 +1,6 @@
 /**
- * Standard locations where CLIs (gh, aws, bike, etc.) are installed.
- * Shared across bi-ops, gh-exec, health-check, standup-doctor, etc.
+ * Standard locations where CLIs (gh, aws, ssh, etc.) are installed.
+ * Shared across plugin operations, gh-exec, health-check, standup-doctor, etc.
  *
  * /opt/homebrew/bin  — Apple Silicon Homebrew
  * /usr/local/bin     — Intel Homebrew, standard Linux

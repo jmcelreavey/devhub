@@ -32,7 +32,7 @@ const LOGO_PLUGIN_SENTINEL = "__bottle__";
  * Blocking `<head>` script — same FOUC pattern as the theme bootstrap.
  *
  * SSR cannot read localStorage, so the boot overlay used to paint the plugin
- * mark (BI) whenever a branding plugin was installed, then swap after hydrate.
+ * plugin mark whenever a branding plugin was installed, then swap after hydrate.
  * This runs during HTML parse, before body, and sets `data-logo` on `<html>`:
  * `__bottle__` is the historical key for the plugin brand; anything else
  * (including no key) is the DevHub Shift Dock mark.

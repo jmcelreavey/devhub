@@ -2,9 +2,9 @@
 
 DevHub is a local dashboard for your working day as a developer: tasks, notes, pull requests, repos and your AI coding agents in one window. Everything is stored as files on your own machine, and GitHub, Jira, Google Calendar and the other integrations are optional. It also keeps your AI tools (Claude Code, Codex, Cursor, OpenCode and Antigravity) on the same skills and standards, so you set them up once.
 
-![DevHub: today's tasks, a note, syncing the persona to supported tools, and searching your notes](docs/assets/demos/dashboard.gif)
+![DevHub 2.1.0: theme effects, What's new, browser, reviewed integrations, Telegram, editor Ask AI and resizing](docs/assets/demos/overview-2.1.0.gif)
 
-<sub>Recorded against disposable demo data, not a real account.</sub>
+<sub>DevHub 2.1.0, recorded against disposable fixture data. Provider replies are simulated; nothing is sent to real accounts.</sub>
 
 ## Install
 
@@ -57,9 +57,11 @@ You don't need Git, GitHub or a fork to start. [Getting started without Git](doc
 - Press **⌘P** (Ctrl+P on Windows and Linux) and jump to anything.
 - Connect GitHub with **Setup → GitHub → Sign in with GitHub** to switch on **PRs**.
 
-### Hollow (October only)
+### Hollow (Halloween) 🎃
 
-Every October, DevHub switches itself to **Hollow**, an optional spooky theme, the first time you open it. Not for you? Click the palette icon (**Appearance**) in the top bar and pick another theme. DevHub keeps your pick for the rest of the month. If you leave Hollow on, your old theme comes back when October ends. Jump scares and sound are off unless you turn them on, and the fog and creatures have their own switches in the same menu. See [Theming](docs/guides/theming.md#hollow-the-october-theme).
+Every October, DevHub switches itself to **Hollow (Halloween) 🎃**, an optional spooky Halloween theme, the first time you open it. Not for you? Click the palette icon (**Appearance**) in the top bar and pick another theme. DevHub keeps your pick for the rest of the month. If you leave Hollow (Halloween) on, your old theme comes back when October ends. Jump scares and sound are off unless you turn them on, and the fog and creatures have their own switches in the same menu. See [Theming](docs/guides/theming.md#hollow-halloween).
+
+**Graphite Neon (Default)** is DevHub's default: charcoal + lime, with a lime-lit workshop and a soft mouse follower. Both are on by default; **Appearance → Theme effects** has the **Workshop effects** master switch and the separate **Cursor follower** switch. They respect reduced motion and step aside over typing, editors and terminals. [Theming](docs/guides/theming.md#graphite-neon-default-workshop-effects) has the switches and a new demo.
 
 ## A quick tour
 
@@ -74,6 +76,30 @@ Your day on one page: tasks, the plans that are ready for an agent to pick up, a
 Every open task, filterable by tag, date or status, plus History for what got done, moved or abandoned. A Jira tab appears once Jira is connected, and **Review** gives you the week in numbers.
 
 ![Filtering tasks, then task history and the weekly review](docs/assets/demos/work.gif)
+
+### Task workflows
+
+Checks, independent reviews and your publication decisions stay with the task across restarts. A code change makes old evidence stale. You approve the exact destination and content before publication; an interrupted command isn't quietly rerun. See [Task checks and review persistence](docs/guides/task-checks-and-reviews.md).
+
+### Browser
+
+Browse inside DevHub, or open the same task profile in native Chrome for private sign-in. The agent only reads when you hand over control; clicks, typed values and file transfers need their own approval. Windows/WSL browser controls aren't enabled yet.
+
+![Task browser controls and a reviewed file request](docs/assets/demos/browser.gif)
+
+<sub>Real controls with a simulated Chrome stream and file request, not a live account. [Browser guide](docs/guides/managed-browser.md).</sub>
+
+### Integrations
+
+Find and link Jira/GitHub work across accounts, then review exact ticket or PR proposals before anything is sent. Slack and Telegram can request allowlisted actions and deliver opt-in workflow alerts; chat cannot approve a write. See [Integrations](docs/guides/integrations.md).
+
+### Editor and code discussions
+
+Select code in Repos → Changes, review the snapshot and ask an assistant beside the diff without another worktree. An optional Cursor/VS Code add-on captures unsaved selections; install the separate in-app editor only if you need it.
+
+![Reviewing captured code and choosing a discussion](docs/assets/demos/editor-ask-ai.gif)
+
+<sub>Invented code and assistant choices; no model request is sent. [Editor guide](docs/guides/editor.md).</sub>
 
 ### PRs
 
@@ -97,7 +123,9 @@ A skill is a reusable set of instructions for your AI tools. Write it once and D
 
 In the desktop app, **Sync skills** needs a linked DevHub checkout. Until you link one it says "No linked git checkout". Setup's optional private repo step creates one for you, and the other syncs don't need it. See [Git sync and linked checkouts](docs/getting-started/desktop-app.md#git-sync-and-linked-checkouts).
 
-There's more: Repos with a git client, Databases (SQLite, Postgres and MongoDB) and full-text Search. The [feature tour](docs/guides/feature-tour.md) covers all of it.
+The shared catalogue also includes Matt Pocock adaptations for debugging, design interviews, code reviews and architecture. [Skills](docs/guides/skills.md#matt-pocock-adaptations) explains which ones and how they sync.
+
+There's more: Repos with a git client, Databases (SQLite, Postgres and MongoDB), full-text Search and resize handles on every edge of Today cards and floating panels. The [feature tour](docs/guides/feature-tour.md) covers all of it.
 
 ## Plugins
 
@@ -113,6 +141,8 @@ npm run plugins -- list
 ```
 
 `npm run plugins -- disable <name>` and `npm run plugins -- enable <name>` turn one off and on. The list of plugins is a machine-local file, `~/.config/devhub/plugins.json`. [Creating a plugin](docs/contributing/creating-plugins.md) has the manifest and the details, and [Plugin system](docs/architecture/plugins.md) explains how it works.
+
+Portable plugins can declare reviewed actions, streaming output and status routes through the generic request-worker API. No dashboard rebuild is needed for a portable bundle. [Plugin actions](docs/guides/plugin-actions.md) covers the contract; company tools stay in separate private plugins.
 
 ## Updates
 
@@ -158,7 +188,7 @@ DevHub is built for one person on a trusted machine. It listens on `127.0.0.1` b
 
 ## Documentation
 
-Everything else lives in [`docs/`](docs/README.md): the [feature tour](docs/guides/feature-tour.md), [architecture](docs/architecture/overview.md), [environment variables](docs/reference/environment-variables.md), [platform support](docs/reference/platform-support.md) and [contributing](CONTRIBUTING.md).
+Release history is in [CHANGELOG.md](CHANGELOG.md), with private-main work separated under Unreleased. Everything else lives in [`docs/`](docs/README.md): the [feature tour](docs/guides/feature-tour.md), [architecture](docs/architecture/overview.md), [environment variables](docs/reference/environment-variables.md), [platform support](docs/reference/platform-support.md) and [contributing](CONTRIBUTING.md).
 
 ## Licence
 

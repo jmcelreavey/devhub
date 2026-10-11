@@ -65,7 +65,7 @@ Notes, search and the command palette have their own clips in [Notes system](not
 
 ## Navigation (2026-09 IA)
 
-The sidebar is driven by `dashboard/lib/nav.ts` — **14** core sidebar destinations in `NAV_ITEMS` (plugin items such as Ops merge in separately), grouped into **Workspace**, **Library**, **BI**, and **System**. Integration-gated items stay hidden until `GET /api/setup/status` reports the matching flag. Plugin destinations (e.g. Ops) merge in via `groupSidebarNav`.
+The sidebar is driven by `dashboard/lib/nav.ts` — **14** core sidebar destinations in `NAV_ITEMS` (plugin items such as Ops merge in separately), grouped into **Workspace**, **Library**, **Infrastructure**, and **System**. Integration-gated items stay hidden until `GET /api/setup/status` reports the matching flag. Plugin destinations (e.g. Ops) merge in via `groupSidebarNav`.
 
 Coding chats live on **Agents** (`/agents`). `/chamber` and `/opencode` redirect there; `/agent-activity` redirects to `/agents`. There are no sidebar rows that open a Claude / Cursor / ChatGPT / Antigravity terminal tab.
 
@@ -82,8 +82,8 @@ Coding chats live on **Agents** (`/agents`). `/chamber` and `/opencode` redirect
 | Skills     | `/skills`   | Shared skill catalog, persona, MCP catalog                                                    |
 | Repos      | `/repos`    | Desktop nav only; sibling clones sorted by recent git activity. Click a card for `/repos/<name>` (work hub). Owned radar at `?view=owned` |
 | Databases  | `/db`       | Desktop nav only, **ungated**. SQLite works with no setup; plugins can add connection providers. See [Database client](database-client.md) |
-| Ops        | `/ops`      | BI group; from BI plugin (`gate: bi`)                                                         |
-| Datadog    | `/datadog`  | BI group; gated on `datadog`                                                                  |
+| Ops        | `/ops`      | Infrastructure group; from a plugin (`gate: infra`)                                                         |
+| Datadog    | `/datadog`  | Infrastructure group; gated on `datadog`                                                                  |
 | System     | `/status`   | Top-bar tabs: Status, Logs (desktop), Actions (desktop), Setup                                |
 | Agents     | `/agents`   | System group. Tabs: Chats / Usage / Connection (old `?view=activity` links open Chats). See [Agents (Paseo)](../guides/paseo-agents.md) |
 
@@ -105,13 +105,13 @@ are AND-ed on every tab.
 
 **Library** and **System** use `SectionTabs` in the top bar on sibling routes such as `/docs` and `/setup`. Library tabs are **Notes**, **Docs**, **Diagrams**, **Live links** (gated on GitHub), and **Radar**. Search and Databases have sidebar destinations. Appraisal, Research, My Voice and Conventions remain reachable through **⌘P**.
 
-System tabs are **Status**, **Logs** (desktop), **Actions** (desktop), and **Setup**. **BI** is a sidebar group: Ops comes from the BI plugin and Datadog from core.
+System tabs are **Status**, **Logs** (desktop), **Actions** (desktop), and **Setup**. **Infrastructure** is a sidebar group: Ops comes from the Infrastructure plugin and Datadog from core.
 
 **Diagrams** (`/diagrams`, Library tab) opens a browse-by-folder landing page — recent diagrams plus folder cards (`lib/diagrams/diagram-browse.ts`). Click a card or recent item to open the tldraw editor at `/diagrams/[...path]`.
 
 ### Legacy routes
 
-Older URLs still work and remain reachable via **⌘P** (`LEGACY_NAV_ITEMS` in `nav.ts`): `/own`, `/appraisal`, `/one-on-one`, `/recall`, `/radar`, `/research`, `/learnings`, `/voice`, `/conventions`, `/diagrams`, `/docs`, `/shared`, `/actions`, `/logs`, `/setup`. Library tabs cover `/radar`, `/diagrams`, `/docs`, and `/shared`; the other Library tools stay in the palette. `/own` redirects to `/repos?view=owned`. `/tasks` and `/tickets` redirect to `/work` and are not in `ALL_NAV_DESTINATIONS`. `/ops` (plugin) and `/datadog` live under the **BI** sidebar group. `/chamber` and `/opencode` redirect to `/agents`; `/agent-activity` redirects to `/agents`.
+Older URLs still work and remain reachable via **⌘P** (`LEGACY_NAV_ITEMS` in `nav.ts`): `/own`, `/appraisal`, `/one-on-one`, `/recall`, `/radar`, `/research`, `/learnings`, `/voice`, `/conventions`, `/diagrams`, `/docs`, `/shared`, `/actions`, `/logs`, `/setup`. Library tabs cover `/radar`, `/diagrams`, `/docs`, and `/shared`; the other Library tools stay in the palette. `/own` redirects to `/repos?view=owned`. `/tasks` and `/tickets` redirect to `/work` and are not in `ALL_NAV_DESTINATIONS`. `/ops` (plugin) and `/datadog` live under the **Infrastructure** sidebar group. `/chamber` and `/opencode` redirect to `/agents`; `/agent-activity` redirects to `/agents`.
 
 On mobile, the bottom shelf uses **Work** (`/work`) instead of separate Tasks/Tickets entries.
 
@@ -298,7 +298,7 @@ See [Capability Radar plan](../archive/capability-radar-plan.md) for scan archit
 
 ## Databases
 
-**Library → Databases** (`/db`, desktop nav, ungated) is the in-app client for PostgreSQL, MongoDB, and SQLite. Connections come from a local provider (hand-added + discovered `.db` files) and from a plugin `dashboard.connections` module (BI RDS/Atlas). The MCP `db_*` tools share the same pool and write gate. Full architecture: [Database client](database-client.md).
+**Library → Databases** (`/db`, desktop nav, ungated) is the in-app client for PostgreSQL, MongoDB, and SQLite. Connections come from a local provider (hand-added + discovered `.db` files) and from a plugin `dashboard.connections` module (Infrastructure RDS/Atlas). The MCP `db_*` tools share the same pool and write gate. Full architecture: [Database client](database-client.md).
 
 ## Recall
 
@@ -399,7 +399,6 @@ The Status page (`/status`) aggregates Git, sync, services, and infra into one o
 | Skill sync             | `GET /api/sync-health` plus preview diffs when unhealthy                                                                             | Links to Agents library; see [Skills guide](../guides/skills.md#sync-preview-before-sync)                                                                                                                                                                                                                                   |
 | Services               | **Agents workspace** card: whether the Paseo daemon answers (`GET /api/status/services`)                                              | Connected / not connected; restart from **Agents → Connection**                                                                                                                                                                                                                                                              |
 | MCP                    | Runtime scan of `mcp/shared/` only                                                                                                   | Idle = normal; missing binary = warning                                                                                                                                                                                                                                                                                     |
-| Infra                  | AWS profile/identity and kubectl context via `GET /api/bi` (plugin-backed)                                                           | Polls every 5 minutes; links to `/ops`                                                                                                                                                                                                                                                                                      |
 | External commands      | `GET /api/status/exec` — in-flight `execExternal` calls, slow recent ones, and in-flight DB queries                                  | Hidden when idle. An **overdue** row names the command (or query) holding things up. MCP: `status_exec`. See below.                                                                                                                                                                                                         |
 | LAN access             | Wi‑Fi IPv4 badge + QR                                                                                                                | Client builds `http://<ip>:<port>…` for phone access on the same network                                                                                                                                                                                                                                                    |
 | Dashboard rebuild      | `GET/POST /api/status/dashboard/rebuild`                                                                                             | **Rebuild & restart** runs `npm run restart` in the linked checkout (production build + relaunch). Unavailable when the desktop shell supervises the server (`DEVHUB_SHELL_SUPERVISED=1`) or in a packaged app — use **View → Rebuild Dashboard…** or **Check for Updates** instead. Reopening DevHub does **not** rebuild. |

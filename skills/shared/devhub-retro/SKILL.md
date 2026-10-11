@@ -36,6 +36,19 @@ A finding needs **at least two occurrences**. Look for:
   `skillUsage` is a retirement candidate (move it to `skills/parked/`), but
   the count only covers Claude Code — say so if it may be used from Cursor,
   Codex or OpenCode.
+- A mechanical miss (a banned import, a file-location rule, a fixed pattern).
+  Propose a lint, pre-commit, or CI check. The repo's existing check command
+  comes first: an unwired or broken guardrail is the finding. A judgement
+  call stays in the review skill (`code-review`, `pr-explain-review`), not
+  another paragraph in the implement skill. The implementer is already short
+  of context. The reviewer reads a diff.
+- A session that took too long to find a file (a navigation pointer), an
+  expensive tool call that a smaller one would replace, a steering line that
+  does not change behaviour, or a fact the agent could not see (logs, a
+  read-only API).
+
+Adapted in part from Matt Pocock's `retro` skill (MIT). The two-occurrence
+bar above still applies to this weekly window.
 
 ## 3. Propose
 

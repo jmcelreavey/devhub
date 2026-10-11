@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireDashboardAuth, withErrorHandler } from "@/lib/api-utils";
-import { fetchPrState, PR_REPO_RE } from "@/lib/github/pr-state";
+import { PR_REPO_RE } from "@/lib/github/pr-state";
+import { githubScreen } from "@/lib/integrations/screen-data";
+const fetchPrState = githubScreen.state;
 
 export const dynamic = "force-dynamic";
 

@@ -6,7 +6,7 @@
  * classifier made of it. The classifier produces the good error message; this
  * produces the actual property.
  *
- * `pg` is imported dynamically for the same reason `bi-rds.ts` does it —
+ * `pg` is imported dynamically for the same reason the connection pool does it —
  * nothing should load a database driver on a page that never opens a database.
  */
 

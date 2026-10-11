@@ -407,7 +407,7 @@ export interface LabPlan {
   /** Introducing commit line, when found ("<sha> <subject> (<date>)"). */
   introduced: string | null;
   recent: string[];
-  /** Notes MCP path for the lab note (e.g. "learnings/labs/capi/mongodb"). */
+  /** Notes MCP path for the lab note (e.g. "learnings/labs/payments/mongodb"). */
   notePath: string;
   /** True when a lab note already exists (Show vs Build). */
   exists: boolean;

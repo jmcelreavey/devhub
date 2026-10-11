@@ -61,7 +61,7 @@ function state(): PoolState {
 
 /**
  * Engines are loaded on first use. Installing DevHub and never opening a Mongo
- * connection should never load the Mongo driver — the same reason `bi-rds.ts`
+ * connection should never load the Mongo driver — the same reason the PostgreSQL adapter
  * writes `await import("pg")` rather than a top-level import.
  *
  * Each engine's phase adds its entry here.

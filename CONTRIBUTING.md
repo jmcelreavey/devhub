@@ -108,12 +108,14 @@ generic defaults for these paths:
 | `persona/identity.txt` | Your voice/tone                                | —                 |
 | `skills/shared/my-voice/{writing-style,learned-voice}.md` | Your writing samples and learned voice rules | — |
 | `dashboard/.env.local` | Secrets/config                                 | — (git-ignored)   |
+| `private/` | Mirror-only domain files, archived guides and assets | — |
+| `.devhub/` | Local checkouts, caches and run state | — (never commit) |
 
 Set the env vars to point these at a separate (e.g. private) location to keep personal
 data out of the repo tree entirely. Defaults stay `REPO_ROOT/<dir>` for back-compat.
 
 The backport workflow branches off `upstream/main` and applies only public code and
-catalogue changes as content patches. Public and private histories stay separate.
+catalogue changes as content patches. `--snapshot` compares the final source tree against public main, rather than replaying commits. Public and private histories stay separate.
 Review the patch and run the leak scan before publishing; path exclusions cannot
 recognise personal content copied into a code file.
 

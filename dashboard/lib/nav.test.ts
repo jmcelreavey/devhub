@@ -71,22 +71,22 @@ describe("NAV_ITEMS (sidebar IA)", () => {
     expect(sidebar).toContain("/notes"); // Library
     expect(sidebar).toContain("/status"); // System
   });
-  it("gives Datadog a first-class BI sidebar slot", () => {
+  it("gives Datadog a first-class infrastructure sidebar slot", () => {
     const datadog = NAV_ITEMS.find((item) => item.href === "/datadog");
     expect(datadog).toBeDefined();
-    expect(datadog?.group).toBe("bi");
+    expect(datadog?.group).toBe("infra");
     expect(datadog?.gate).toBe("datadog");
     expect(hrefs(LEGACY_NAV_ITEMS)).not.toContain("/datadog");
   });
-  it("exposes a BI nav group between Library and System", () => {
-    expect(NAV_GROUPS.map((g) => g.id)).toEqual(["workspace", "library", "bi", "system"]);
+  it("exposes a infrastructure nav group between Library and System", () => {
+    expect(NAV_GROUPS.map((g) => g.id)).toEqual(["workspace", "library", "infra", "system"]);
   });
-  it("merges plugin Ops into the BI sidebar group ahead of Datadog", () => {
+  it("merges plugin Ops into the infrastructure sidebar group ahead of Datadog", () => {
     if (!PLUGIN_NAV_ITEMS.some((i) => i.href === "/ops")) return;
     const grouped = groupSidebarNav(NAV_ITEMS, PLUGIN_NAV_ITEMS, {
-      setup: { bi: true, datadog: true },
+      setup: { infra: true, datadog: true },
     });
-    expect(grouped.bi.map((i) => i.href)).toEqual(["/ops", "/datadog"]);
+    expect(grouped.infra.map((i) => i.href)).toEqual(["/ops", "/datadog"]);
     expect(grouped.system.map((i) => i.href)).not.toContain("/ops");
   });
 });
@@ -100,20 +100,20 @@ describe("filterNavBySetup", () => {
     expect(visible).toContain("/notes");
   });
 
-  it("hides Ops when BI is not configured (plugin nav present)", () => {
-    if (!PLUGIN_NAV_ITEMS.some((i) => i.href === "/ops")) return; // skip when BI plugin nav not materialised
-    const visible = hrefs(filterNavBySetup(ALL_NAV_DESTINATIONS, { bi: false }));
+  it("hides Ops when infrastructure is not configured (plugin nav present)", () => {
+    if (!PLUGIN_NAV_ITEMS.some((i) => i.href === "/ops")) return; // skip when infrastructure plugin nav not materialised
+    const visible = hrefs(filterNavBySetup(ALL_NAV_DESTINATIONS, { infra: false }));
     expect(visible).not.toContain("/ops");
   });
 
-  it("shows Ops only when BI is configured (plugin nav present)", () => {
+  it("shows Ops only when infrastructure is configured (plugin nav present)", () => {
     if (!PLUGIN_NAV_ITEMS.some((i) => i.href === "/ops")) return;
-    expect(hrefs(filterNavBySetup(ALL_NAV_DESTINATIONS, { bi: true }))).toContain("/ops");
+    expect(hrefs(filterNavBySetup(ALL_NAV_DESTINATIONS, { infra: true }))).toContain("/ops");
     expect(hrefs(filterNavBySetup(ALL_NAV_DESTINATIONS, {}))).not.toContain("/ops");
   });
 
   it("gates other integrations independently of Ops", () => {
-    const visible = hrefs(filterNavBySetup(ALL_NAV_DESTINATIONS, { datadog: true, bi: false }));
+    const visible = hrefs(filterNavBySetup(ALL_NAV_DESTINATIONS, { datadog: true, infra: false }));
     expect(visible).toContain("/datadog");
     expect(visible).not.toContain("/ops");
   });

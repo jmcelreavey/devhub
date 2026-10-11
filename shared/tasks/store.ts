@@ -202,6 +202,7 @@ export function createTask(tasksDir: string, input: NewTaskInput, now = new Date
 }
 
 export interface TaskPatch {
+  integrationRefs?: Task["integrationRefs"];
   text?: string;
   due?: string | null;
   links?: EntityRef[];
@@ -228,6 +229,7 @@ export function patchTask(tasksDir: string, id: string, patch: TaskPatch, now = 
   else if (typeof patch.due === "string") task.due = patch.due;
   if (patch.links) task.links = patch.links.length > 0 ? patch.links : undefined;
   if (patch.links && task.links === undefined) delete task.links;
+  if (patch.integrationRefs) task.integrationRefs = patch.integrationRefs.length ? patch.integrationRefs : undefined;
   if (patch.stage === "draft") task.stage = "draft";
   else if (patch.stage === "ready") delete task.stage;
   if (typeof patch.notePath === "string") task.notePath = patch.notePath;

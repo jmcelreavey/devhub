@@ -28,14 +28,14 @@ describe("buildCouplingIndex", () => {
 
 describe("suggestCompanions", () => {
   it("suggests the companion you left out", () => {
-    const index = buildCouplingIndex(pairCommits("src/bi-ops.ts", "src/bi-ops.test.ts", 8));
-    const out = suggestCompanions(index, ["src/bi-ops.ts"]);
+    const index = buildCouplingIndex(pairCommits("src/team-ops.ts", "src/team-ops.test.ts", 8));
+    const out = suggestCompanions(index, ["src/team-ops.ts"]);
     expect(out).toHaveLength(1);
     expect(out[0]).toMatchObject({
-      path: "src/bi-ops.test.ts",
+      path: "src/team-ops.test.ts",
       together: 8,
       confidence: 1,
-      because: "src/bi-ops.ts",
+      because: "src/team-ops.ts",
     });
   });
 

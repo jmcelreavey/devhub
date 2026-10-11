@@ -56,6 +56,21 @@ jobs:
     outputs:
       matrix: ${{ steps.plan.outputs.matrix }}
     steps:
+      - uses: actions/checkout@v4
+      - name: Validate release notes before building
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.version || github.ref_name }}
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' }}
+        run: |
+          if ! node desktop/scripts/extract-release-notes.mjs "${RELEASE_VERSION#v}"; then
+            if [ "$DRY_RUN" = "true" ]; then
+              echo "::warning::No changelog entry for this dry-run version. Update CHANGELOG before a tagged release."
+            else
+              echo "::error::Missing or invalid CHANGELOG entry. Update CHANGELOG before release."
+              exit 1
+            fi
+          fi
       - name: Select build matrix
         id: plan
         shell: bash
@@ -468,6 +483,7 @@ jobs:
   # is built on Linux and handed to the Windows job as a tarball.
   wsl-payload:
     name: Windows app - Linux payload
+    needs: plan
     # `windows` and `windows-smoke` hang off this job, so skipping it skips the
     # whole Windows leg of a macos_intel_only dispatch.
     if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.macos_intel_only) }}
@@ -687,11 +703,15 @@ jobs:
       - name: Build updater manifest
         run: node desktop/scripts/build-updater-manifest.mjs dist "${GITHUB_REF_NAME#v}"
 
+      - name: Extract release body
+        run: node desktop/scripts/extract-release-notes.mjs "${GITHUB_REF_NAME#v}" CHANGELOG.md dist/release-notes.md
+
       - name: Publish
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
-          generate_release_notes: true
+          body_path: dist/release-notes.md
+          generate_release_notes: false
           fail_on_unmatched_files: true
           files: |
             dist/*.dmg

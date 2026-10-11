@@ -1,0 +1,253 @@
+/*
+ * Graphite Neon: a charcoal workbench, machined rails and the lime Shift Dock.
+ * Decoration lives behind content or on a 1–2px edge, never as a text overlay.
+ * Every animated selector has an effect flag and the shared motion gate.
+ */
+:root[data-theme-preset="graphite"] {
+  --graphite-grid-ink: color-mix(in srgb, var(--accent) 7%, transparent);
+  --graphite-light: color-mix(in srgb, var(--accent) 8%, transparent);
+  --graphite-edge: color-mix(in srgb, var(--accent) 36%, var(--border-muted));
+  --graphite-glow: color-mix(in srgb, var(--accent) 18%, transparent);
+  --graphite-grid: linear-gradient(transparent, transparent);
+  --graphite-aura: linear-gradient(transparent, transparent);
+}
+:root[data-theme="light"][data-theme-preset="graphite"] {
+  --graphite-grid-ink: color-mix(in srgb, var(--accent) 5%, transparent);
+  --graphite-light: color-mix(in srgb, var(--accent) 5%, transparent);
+  --graphite-glow: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+:root[data-theme-preset="graphite"][data-graphite-grid="on"] {
+  --graphite-grid: linear-gradient(var(--graphite-grid-ink) 1px, transparent 1px), linear-gradient(90deg, var(--graphite-grid-ink) 1px, transparent 1px);
+}
+:root[data-theme-preset="graphite"][data-graphite-glow="on"] {
+  --graphite-aura: radial-gradient(ellipse at 80% 0%, var(--graphite-light), transparent 60%);
+}
+:root[data-theme-preset="graphite"] #main-content {
+  background-image: var(--graphite-aura), var(--graphite-grid);
+  background-size: 100% 100%, 40px 40px, 40px 40px;
+  background-position: top right;
+}
+:root[data-theme-preset="graphite"][data-graphite-glow="on"] :is(.hub-topbar, .workspace-tab-strip) {
+  border-bottom-color: var(--graphite-edge);
+}
+:root[data-theme-preset="graphite"][data-graphite-glow="on"] :is(.nav-item, .nav-item-collapsed)[data-active] {
+  box-shadow: inset 0 0 0 1px var(--accent), 0 3px 18px -5px var(--graphite-glow);
+}
+:root[data-theme-preset="graphite"][data-graphite-glow="on"] :is(.card, .hub-card):focus-within {
+  border-color: var(--graphite-edge);
+}
+:root[data-theme-preset="graphite"][data-graphite-glow="on"] .brand-dot {
+  box-shadow: 0 4px 24px -6px var(--graphite-glow);
+}
+/* A travelling edge, not a scan over text. Fixed size keeps compositing cheap. */
+:root[data-theme-preset="graphite"][data-graphite-scanlines="on"] #main-content::after {
+  content: "";
+  position: fixed;
+  right: 0;
+  top: 20%;
+  width: 2px;
+  height: 180px;
+  background: linear-gradient(transparent, var(--accent), transparent);
+  pointer-events: none;
+  opacity: .45;
+  z-index: 1;
+}
+:root[data-theme-preset="graphite"] :is(.btn, .card-header) { position: relative; }
+:root[data-theme-preset="graphite"][data-graphite-interaction="on"] .btn {
+  overflow: hidden;
+  transition: transform 160ms var(--ease-swift);
+}
+:root[data-theme-preset="graphite"][data-graphite-interaction="on"] .btn::after {
+  content: "";
+  position: absolute;
+  height: 2px;
+  width: 36%;
+  bottom: 0;
+  left: 0;
+  background: linear-gradient(90deg, transparent, currentColor, transparent);
+  transform: translateX(-110%);
+  opacity: 0;
+  pointer-events: none;
+}
+:root[data-theme-preset="graphite"] .graphite-dock-mark { width: 64px; height: 64px; overflow: visible; flex: none; }
+.graphite-dock-rails { fill: var(--text-subtle); }
+.graphite-dock-feed { fill: var(--accent); opacity: .55; }
+.graphite-dock-hub { fill: var(--accent); transform-origin: 48px 32px; }
+.graphite-dock-socket { fill: var(--accent); opacity: .16; transform-origin: 48px 32px; }
+.graphite-boot-mark, .boot-line-graphite, .graphite-empty-dock { display: none; }
+:root[data-theme-preset="graphite"] .graphite-boot-mark { display: block; width: 88px; height: 88px; }
+:root[data-theme-preset="graphite"] .boot-mark { width: 120px; height: 120px; }
+:root[data-theme-preset="graphite"] .boot-mark :is(.boot-ring, .boot-logo) { display: none; }
+:root[data-theme-preset="graphite"] .boot-mark::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border: 1px solid var(--border);
+  border-radius: 28px;
+  background: var(--bg-surface);
+  z-index: -1;
+}
+:root[data-theme-preset="graphite"][data-graphite-glow="on"] .boot-mark::before {
+  border-color: var(--graphite-edge);
+  box-shadow: 0 12px 48px -16px var(--graphite-glow);
+}
+:root[data-theme-preset="graphite"] .boot-screen { background-image: var(--graphite-aura), var(--graphite-grid); background-size: 100% 100%, 40px 40px, 40px 40px; }
+:root[data-theme-preset="graphite"] .boot-line-default { display: none; }
+:root[data-theme-preset="graphite"] .boot-line-graphite { display: inline; }
+:root[data-theme-preset="graphite"] .boot-bar { height: 3px; width: 120px; }
+:root[data-theme-preset="graphite"] .boot-bar > i { animation: none; background: var(--accent); width: 100%; opacity: .5; }
+:root[data-theme-preset="graphite"] .graphite-empty-dock { display: block; }
+:root[data-theme-preset="graphite"] .empty-state:has(.graphite-empty-dock) .empty-pop { display: none; }
+:root[data-theme-preset="graphite"] .empty-state .graphite-dock-mark { width: 44px; height: 44px; margin: 0 6px 12px 0; }
+:root[data-theme-preset="graphite"] :is(.task-agent-chip[data-kind="running"], .terminal-block-badge[data-state="running"], .graphite-preview-agent) {
+  color: var(--accent-text);
+}
+:root[data-theme-preset="graphite"] :is(.task-agent-chip[data-kind="running"], .terminal-block-badge[data-state="running"])::before,
+.graphite-preview-agent > i {
+  content: "";
+  width: 5px;
+  height: 5px;
+  flex: none;
+  border-radius: 2px;
+  background: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-dim);
+}
+.graphite-cursor-follower {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 22px;
+  height: 22px;
+  border: 1px solid color-mix(in srgb, var(--accent) 60%, transparent);
+  border-radius: 50%;
+  box-shadow: 0 0 7px color-mix(in srgb, var(--accent) 16%, transparent);
+  pointer-events: none;
+  z-index: 10050;
+  contain: layout style;
+}
+.graphite-cursor-follower > span {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  transform: scale(0);
+  pointer-events: none;
+}
+@media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
+  :root[data-theme-preset="graphite"][data-graphite-master="on"][data-graphite-cursor="on"][data-graphite-motion="on"] body:not([data-motion="off"]) .graphite-cursor-follower:not([hidden]) {
+    display: block;
+  }
+}
+.graphite-celebration {
+  position: fixed;
+  left: 50%;
+  bottom: 72px;
+  z-index: 9700;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: calc(100vw - 32px);
+  padding: 12px 20px 12px 14px;
+  border: 1px solid var(--accent);
+  border-radius: 14px;
+  color: var(--text);
+  background: var(--bg-sidebar);
+  box-shadow: 0 12px 40px -12px var(--graphite-glow);
+  font-size: 13px;
+  font-weight: 600;
+  opacity: 0;
+  pointer-events: none;
+}
+.graphite-celebration svg { stroke: var(--accent); stroke-width: 3; stroke-linecap: round; fill: none; flex: none; }
+.graphite-celebration rect { fill: var(--accent); }
+.graphite-celebration .graphite-celebration-check { stroke: var(--accent-fg); stroke-width: 1.5; }
+
+/* A compact working sample gives each switch a visible consequence. */
+:root[data-theme-preset="graphite"] .accent-picker-pop { width: min(360px, calc(100vw - 24px)); border-radius: 14px; padding: 12px; }
+.graphite-picker-title { display: flex; align-items: center; justify-content: space-between; padding: 0 2px 4px; font-size: 13px; }
+.graphite-picker-views { display: flex; gap: 4px; padding: 3px 0 7px; }
+.graphite-picker-views button { flex: 1; padding: 8px; border: 0; border-bottom: 1px solid var(--border); background: transparent; color: var(--text-muted); font-size: 12px; cursor: pointer; }
+.graphite-picker-views button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent-text); }
+.graphite-preview { position: relative; overflow: hidden; padding: 18px 16px 14px; border: 1px solid var(--graphite-edge); border-radius: 10px; background-color: var(--bg); background-image: var(--graphite-aura), var(--graphite-grid); background-size: 100% 100%, 20px 20px, 20px 20px; }
+.graphite-preview-heading { display: flex; align-items: center; gap: 14px; }
+.graphite-preview-heading strong { font-size: 17px; letter-spacing: -.02em; }
+.graphite-preview-heading p { font-size: 11px; line-height: 1.5; color: var(--text-muted); margin: 4px 0 0; }
+.graphite-preview-heading .graphite-dock-mark { width: 52px; height: 52px; }
+.graphite-preview-work { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 16px 0; }
+.graphite-preview-agent { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 8px; font-size: 11px; }
+.graphite-preview-agent small { color: var(--text-subtle); font-size: 10px; }
+.graphite-chart { display: flex; align-items: end; gap: 3px; width: 90px; height: 32px; flex: none; }
+.graphite-chart > i { flex: 1; border-radius: 2px 2px 0 0; background: var(--chart-1); transform-origin: bottom; }
+.graphite-preview-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.graphite-preview-actions .btn { min-height: 32px; font-size: 11px; }
+.graphite-toggle {
+  width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  padding: 11px 4px; border: 0; border-bottom: 1px solid var(--border-muted); background: transparent;
+  color: var(--text); text-align: left; cursor: pointer;
+}
+.graphite-toggle:hover:not(:disabled) { background: var(--bg-surface); }
+.graphite-toggle:disabled { cursor: default; opacity: .55; }
+.graphite-toggle strong { display: block; font-size: 12px; font-weight: 550; }
+.graphite-toggle small { display: block; margin-top: 3px; color: var(--text-muted); font-size: 11px; line-height: 1.45; max-width: 29ch; }
+.graphite-toggle-master { margin-top: 8px; padding-block: 14px; }
+.graphite-toggle-master strong { font-size: 13px; font-weight: 650; }
+.graphite-switch { width: 30px; height: 18px; padding: 3px; border: 1px solid var(--graphite-control-border); border-radius: 6px; flex: none; background: var(--bg); }
+.graphite-switch > i { display: block; width: 10px; height: 10px; border-radius: 2px; background: var(--text-subtle); }
+.graphite-toggle[aria-checked="true"] .graphite-switch { background: var(--accent); border-color: var(--accent); }
+.graphite-toggle[aria-checked="true"] .graphite-switch > i { transform: translateX(12px); background: var(--accent-fg); }
+.graphite-settings-footnote, .graphite-motion-note { font-size: 11px; line-height: 1.5; color: var(--text-muted); margin: 12px 4px 4px; }
+.graphite-motion-note { padding: 8px; background: var(--bg-surface); border-radius: 6px; }
+
+/* The live motion gate also removes WAAPI particles on hide, reduce or kill. */
+@media (prefers-reduced-motion: no-preference) {
+  :root[data-theme-preset="graphite"][data-graphite-motion="on"][data-graphite-interaction="on"] body:not([data-motion="off"]) {
+    :is(.graphite-switch > i, .brand-dot .devhub-mark) { transition: transform 220ms var(--ease-swift); }
+  }
+  :root[data-theme-preset="graphite"][data-graphite-motion="on"][data-graphite-scanlines="on"] body:not([data-motion="off"]) #main-content::after { animation: graphite-edge-scan 14s ease-in-out infinite; }
+  :root[data-theme-preset="graphite"][data-graphite-motion="on"][data-graphite-loader="on"] body:not([data-motion="off"]) :is(.graphite-boot-mark, .graphite-preview) .graphite-dock-hub { animation: graphite-dock 2.4s var(--ease-swift) infinite; }
+  :root[data-theme-preset="graphite"][data-graphite-motion="on"][data-graphite-loader="on"] body:not([data-motion="off"]) :is(.graphite-boot-mark, .graphite-preview) .graphite-dock-feed { animation: graphite-charge 2.4s ease-in-out infinite; }
+  :root[data-theme-preset="graphite"][data-graphite-motion="on"][data-graphite-activity="on"] body:not([data-motion="off"]) :is(.task-agent-chip[data-kind="running"], .terminal-block-badge[data-state="running"])::before,
+  :root[data-theme-preset="graphite"][data-graphite-motion="on"][data-graphite-activity="on"] body:not([data-motion="off"]) .graphite-preview-agent > i { animation: graphite-charge 2.2s ease-in-out infinite; }
+  :root[data-theme-preset="graphite"][data-graphite-motion="on"][data-graphite-activity="on"] body:not([data-motion="off"]) .nav-rail { animation: graphite-arrive 350ms var(--ease-swift); }
+  :root[data-theme-preset="graphite"][data-graphite-motion="on"][data-graphite-emptystates="on"] body:not([data-motion="off"]) .graphite-empty-dock .graphite-dock-hub { animation: graphite-dock 1.2s var(--ease-swift) 1; }
+  :root[data-theme-preset="graphite"][data-graphite-motion="on"][data-graphite-charts="on"] body:not([data-motion="off"]) .graphite-chart > i { animation: graphite-chart-rise 350ms var(--ease-swift) backwards; transform-origin: bottom; }
+  :root[data-theme-preset="graphite"][data-graphite-motion="on"][data-graphite-charts="on"] body:not([data-motion="off"]) .graphite-meter-fill { animation: graphite-meter-fill 350ms var(--ease-swift) backwards; transform-origin: left; }
+  :root[data-theme-preset="graphite"][data-graphite-motion="on"][data-graphite-interaction="on"] body:not([data-motion="off"]) {
+    .btn:not(:disabled):active { transform: translateY(1px) scale(.98); }
+    .graphite-toggle:not(:disabled):active .graphite-switch { transform: scale(.94); }
+  }
+}
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  :root[data-theme-preset="graphite"][data-graphite-motion="on"][data-graphite-interaction="on"] body:not([data-motion="off"]) {
+    .btn:not(:disabled):hover::after { animation: graphite-sweep 600ms var(--ease-swift); }
+    .brand-dot:hover .devhub-mark { transform: perspective(160px) rotateY(-10deg) rotateX(6deg) translateY(-1px); }
+  }
+}
+/* Explicit off states override the older global Graphite shimmer/hover rules. */
+:root[data-theme-preset="graphite"]:is([data-graphite-master="off"], [data-graphite-loader="off"], [data-graphite-motion="off"]) :is(.skeleton::after, .boot-bar > i) { animation: none !important; }
+:root[data-theme-preset="graphite"]:is([data-graphite-master="off"], [data-graphite-interaction="off"]) .btn { transform: none !important; transition: none !important; }
+:root[data-theme-preset="graphite"]:is([data-graphite-master="off"], [data-graphite-emptystates="off"]) .empty-pop { animation: none !important; }
+:root[data-theme-preset="graphite"]:is([data-graphite-master="off"], [data-graphite-celebrations="off"]) .task-check-pulse { animation: none !important; }
+:root[data-theme-preset="graphite"][data-graphite-motion="off"] #main-content::after { opacity: 0; }
+:root[data-theme-preset="graphite"] body[data-motion="off"] *,
+:root[data-theme-preset="graphite"] body[data-motion="off"] *::before,
+:root[data-theme-preset="graphite"] body[data-motion="off"] *::after { animation: none !important; transition: none !important; }
+
+@media (max-width: 767px) {
+  :root[data-theme-preset="graphite"] .accent-picker-pop { position: fixed; top: 12px; left: 12px; right: auto; width: calc(100vw - 24px); max-height: calc(100dvh - 24px); }
+  .graphite-toggle { min-height: 52px; }
+  .graphite-preview-actions .btn, .graphite-picker-views button { min-height: 40px; }
+}
+
+@keyframes graphite-dock {
+  0%, 12% { transform: translateX(-18px) scale(.65); opacity: .4; }
+  38%, 78% { transform: translateX(0) scale(1); opacity: 1; }
+  100% { transform: translateX(0) scale(1); opacity: .4; }
+}
+@keyframes graphite-charge { 0%, 100% { opacity: .45; } 45%, 65% { opacity: 1; } }
+@keyframes graphite-edge-scan { 0%, 100% { transform: translateY(-120px); opacity: 0; } 30%, 70% { opacity: .45; } 90% { transform: translateY(50vh); opacity: 0; } }
+@keyframes graphite-sweep { 0% { transform: translateX(-110%); opacity: 0; } 20% { opacity: .8; } 100% { transform: translateX(380%); opacity: 0; } }
+@keyframes graphite-arrive { from { opacity: .5; transform: scale(.5); } to { opacity: 1; transform: scale(1); } }
+@keyframes graphite-meter-fill { from { transform: scaleX(.2); opacity: .5; } to { transform: scaleX(1); opacity: 1; } }
+@keyframes graphite-chart-rise { from { transform: scaleY(.2); opacity: .5; } to { transform: scaleY(1); opacity: 1; } }

@@ -22,13 +22,13 @@ export type DbEnvTone = "neutral" | "accent" | "warning" | "danger";
  * renders it on every page load.
  */
 export interface DbConnectionRef {
-  /** Stable and provider-namespaced, e.g. `bi:rds:capi:prd`, `local:insider-cache`. */
+  /** Stable and provider-namespaced, e.g. `team:rds:payments:prd`, `local:app-cache`. */
   id: string;
   label: string;
   engine: DbEngine;
   /** Database bound by a single-database connection such as MongoDB. Safe metadata, not credentials. */
   database?: string;
-  /** Rail grouping header, e.g. "BI · prd". */
+  /** Rail grouping header, e.g. "plugin · prd". */
   group?: string;
   /** Environment name when the provider has one; drives `tone`. */
   env?: string;
@@ -36,7 +36,7 @@ export interface DbConnectionRef {
   accessMode: DbAccessMode;
   /**
    * Writes here need a typed confirmation naming the connection. Set by the
-   * provider — for BI this is `isDangerousProfile()`, i.e. prd + privileged.
+   * provider — for plugin this is `isDangerousProfile()`, i.e. prd + privileged.
    */
   dangerous: boolean;
   source: "user" | `plugin:${string}`;
@@ -61,7 +61,7 @@ export interface DbConnectionRef {
   /**
    * Epoch ms when the credentials behind this connection stop working.
    *
-   * Surfaced so the rail can warn *before* the failure. Every BI connection
+   * Surfaced so the rail can warn *before* the failure. Every plugin connection
    * dies at the same moment each day and the current experience is to find out
    * by clicking one — which is a worse way to learn it than a countdown that
    * was there all along.
@@ -79,7 +79,7 @@ export interface DbConnectionRef {
 export interface DbRemedy {
   /** Stable id, so an agent can name the fix it is about to apply. */
   id: string;
-  /** Button text, e.g. "Switch to dev-dad" or "Bring Tailscale up". */
+  /** Button text, e.g. "Switch to dev-team" or "Bring Tailscale up". */
   label: string;
   /** Dashboard path to POST to. */
   endpoint: string;
@@ -103,7 +103,7 @@ export interface DbPreflightCheck {
    * How to fix *this* check.
    *
    * Attached per check rather than per connection because the two things that
-   * block a BI connection — the wrong AWS profile and a down tailnet — have
+   * block a plugin connection — the wrong AWS profile and a down tailnet — have
    * different fixes and can fail independently. A single connection-level
    * remedy could only ever address one of them.
    */
@@ -124,7 +124,7 @@ export interface PostgresTarget {
   password: string;
   /**
    * RDS presents an Amazon-issued cert that the default trust store rejects.
-   * `bi-rds.ts` already connects with `rejectUnauthorized: false`, which is
+   * a private PostgreSQL adapter already connects with `rejectUnauthorized: false`, which is
    * what `sslmode=require` means: encrypted, not verified.
    */
   ssl: boolean | { rejectUnauthorized: boolean };

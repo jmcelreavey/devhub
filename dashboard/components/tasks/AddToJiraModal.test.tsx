@@ -5,10 +5,11 @@ import type { ReactNode } from "react";
 import { AddToJiraModal } from "./AddToJiraModal";
 
 const mocks = vi.hoisted(() => ({
-  fetch: vi.fn(), success: vi.fn(), error: vi.fn(), mutate: vi.fn(),
+  fetch: vi.fn(), success: vi.fn(), error: vi.fn(), mutate: vi.fn(), review: vi.fn(),
   metaLoading: false,
 }));
 vi.mock("swr", () => ({ mutate: mocks.mutate }));
+vi.mock("@/components/integrations/WriteReview", () => ({ openWriteReview: mocks.review }));
 vi.mock("@/lib/hooks/use-toast", () => ({ useToast: () => ({ success: mocks.success, error: mocks.error }) }));
 vi.mock("@/lib/hooks/use-fetch", () => ({
   useLive: (key: string | null) => ({
@@ -65,6 +66,25 @@ it("shows the generated draft, accepts edits and creates only after the user cli
     projectKey: "TEST", summary: "My revised title", description: "My revised description",
     parentKey: "TEST-1", assignToMe: true, sprintId: 12,
   });
+});
+
+it("keeps the ticket form without an error or task link when confirmation is cancelled", async () => {
+  mocks.review.mockResolvedValueOnce(null);
+  mocks.fetch.mockResolvedValueOnce(Response.json({ proposal: { id: "cancelled-proposal" } }, {
+    status: 202, headers: { "x-devhub-confirmation": "required" },
+  }));
+  render(<AddToJiraModal {...props} />);
+  fireEvent.change(screen.getByRole("textbox", { name: "Title" }), { target: { value: "Keep this title" } });
+  fireEvent.change(screen.getByRole("textbox", { name: "Description" }), { target: { value: "Keep these details" } });
+  fireEvent.click(screen.getByRole("button", { name: "Create ticket" }));
+  await waitFor(() => expect(mocks.review).toHaveBeenCalledTimes(1));
+  await waitFor(() => expect(screen.getByRole("button", { name: "Create ticket" })).toBeEnabled());
+  expect(props.onCreated).not.toHaveBeenCalled();
+  expect(props.onClose).not.toHaveBeenCalled();
+  expect(mocks.success).not.toHaveBeenCalled();
+  expect(mocks.error).not.toHaveBeenCalled();
+  expect(screen.getByRole("textbox", { name: "Title" })).toHaveValue("Keep this title");
+  expect(screen.getByRole("textbox", { name: "Description" })).toHaveValue("Keep these details");
 });
 
 it("cancels generation when the review form closes", async () => {

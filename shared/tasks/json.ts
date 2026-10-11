@@ -21,6 +21,7 @@ export const TASK_KEYS = [
   "timeSpentMs",
   "notePath",
   "links",
+  "integrationRefs",
   "stage",
   "legacyIds",
 ] as const;

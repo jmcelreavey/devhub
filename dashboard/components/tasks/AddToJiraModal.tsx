@@ -1,4 +1,5 @@
 "use client";
+import { integrationFetch } from "@/lib/integrations/client-fetch";
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { mutate as globalMutate } from "swr";
@@ -247,7 +248,7 @@ export function AddToJiraModal({ open, task, date, generateOnOpen = false, onClo
     }
     setCreating(true);
     try {
-      const res = await fetch("/api/jira/issue", {
+      const res = await integrationFetch("/api/jira/issue", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -259,6 +260,7 @@ export function AddToJiraModal({ open, task, date, generateOnOpen = false, onClo
           sprintId: includeSprint ? meta?.sprint?.id ?? null : null,
         }),
       });
+      if (!res) return;
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         throw new Error(body.error || `Create failed (${res.status})`);

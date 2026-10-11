@@ -26,6 +26,28 @@ export async function POST(req: NextRequest, context: Context) {
     const parsed = requestSchema.safeParse(await readJson(req));
     if (!parsed.success) return pluginJson({ error: "Invalid runtime request" }, 400);
     const { name } = await context.params;
-    return pluginJson({ result: await invokeRuntime(serverPluginContext(), name, parsed.data, req.signal) });
+    const ctx = serverPluginContext();
+    const runtime = loadRuntime(ctx, name).runtime;
+    const streaming = parsed.data.kind === "api" && runtime.routes.some((route) => route.path === parsed.data.path && route.method === parsed.data.method && route.stream);
+    if (!streaming) return pluginJson({ result: await invokeRuntime(ctx, name, parsed.data, req.signal) });
+    const controller = new AbortController();
+    const abort = () => controller.abort();
+    req.signal.addEventListener("abort", abort, { once: true });
+    if (req.signal.aborted) abort();
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream<Uint8Array>({
+      start(output) {
+        const send = (event: unknown) => { if (!controller.signal.aborted) output.enqueue(encoder.encode(JSON.stringify(event) + "\n")); };
+        void invokeRuntime(ctx, name, parsed.data, controller.signal, send)
+          .then((result) => send({ type: "result", result }))
+          .catch(() => send({ type: "error", error: "Plugin request failed. Check its status before retrying an action." }))
+          .finally(() => {
+            req.signal.removeEventListener("abort", abort);
+            if (!controller.signal.aborted) output.close();
+          });
+      },
+      cancel() { abort(); req.signal.removeEventListener("abort", abort); },
+    });
+    return new Response(stream, { headers: { "Content-Type": "application/x-ndjson", "Cache-Control": "no-store", "X-Accel-Buffering": "no" } });
   } catch (err) { return pluginError(err); }
 }

@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
-import { execGh, isGithubCliAuthenticated, mapGithubCliError } from "@/lib/gh-exec";
-import { rowFromSearchItem, searchIssues } from "@/lib/github/prs";
+import { isGithubCliAuthenticated, mapGithubCliError } from "@/lib/gh-exec";
+import { rowFromSearchItem } from "@/lib/github/prs";
+import { githubScreen } from "@/lib/integrations/screen-data";
+const searchIssues = githubScreen.search;
 import {
   buildPrSearchQuery,
   type PrSearchApiPayload,
@@ -20,9 +22,7 @@ let orgsCache: { orgs: string[]; ts: number } | null = null;
 async function getUserOrgs(): Promise<string[]> {
   if (orgsCache && Date.now() - orgsCache.ts < ORGS_CACHE_TTL_MS) return orgsCache.orgs;
   try {
-    const { stdout } = await execGh(["api", "/user/orgs?per_page=100"]);
-    const parsed = JSON.parse(stdout) as Array<{ login?: string }>;
-    const orgs = parsed.map((o) => o.login).filter((l): l is string => !!l);
+    const orgs = await githubScreen.organizations();
     orgsCache = { orgs, ts: Date.now() };
     return orgs;
   } catch {

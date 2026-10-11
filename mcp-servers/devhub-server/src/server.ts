@@ -27,6 +27,11 @@ import { registerStatusTools } from "./tools/status.ts";
 import { registerBriefingTools } from "./tools/briefing.ts";
 import { registerCalendarTools } from "./tools/calendar.ts";
 import { registerWorkTools } from "./tools/work.ts";
+import { registerBrowserTools } from "./tools/browser.ts";
+import { registerIntegrationTools } from "./tools/integrations.ts";
+import { registerEditorTools } from "./tools/editor.ts";
+import { registerPluginActionTools } from "./tools/plugin-actions.ts";
+import { registerWorkflowTools } from "./tools/workflows.ts";
 import { registerAssetsTools } from "./tools/assets.ts";
 import { registerSearchTools } from "./tools/search.ts";
 import { registerScriptsTools } from "./tools/scripts.ts";
@@ -67,7 +72,7 @@ const TOOLSETS: Record<string, (server: McpServer, ctx: Context) => void> = {
   // Filesystem-backed (work headless, no dashboard required).
   notes: registerNotesTools,
   docs: registerDocsTools,
-  tasks: registerTasksTools,
+  tasks: (server, ctx) => { registerTasksTools(server, ctx); registerWorkflowTools(server, ctx); },
   diagrams: registerDiagramsTools,
   appraisal: registerAppraisalTools,
   "dx-audit": registerDxAuditTools,
@@ -85,7 +90,10 @@ const TOOLSETS: Record<string, (server: McpServer, ctx: Context) => void> = {
   jobs: registerJobsTools,
   briefing: registerBriefingTools,
   calendar: registerCalendarTools,
-  work: registerWorkTools,
+  work: (server, ctx) => { registerWorkTools(server, ctx); registerBrowserTools(server, ctx); },
+  integrations: registerIntegrationTools,
+  editor: registerEditorTools,
+  plugins: registerPluginActionTools,
   plans: registerPlanTools,
   assets: registerAssetsTools,
   search: registerSearchTools,

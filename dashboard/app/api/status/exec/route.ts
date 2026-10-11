@@ -45,6 +45,7 @@ export const GET = withErrorHandler(async () => {
 
   return NextResponse.json({
     inFlight,
+    services: listInFlightCalls(true),
     slowest: listSlowCalls(),
     dbQueries,
     dbSlowest: listSlowQueries(),

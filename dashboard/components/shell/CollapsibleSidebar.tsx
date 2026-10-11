@@ -1,6 +1,7 @@
 "use client";
 
 import { NavLink } from "@/components/shell/NavLink";
+import { WhatsNewPill } from "@/components/releases/ReleaseNotes";
 import { IconPicker } from "@/components/ui/IconPicker";
 import { BRAND_LABEL } from "@/lib/brand-mark";
 import { useRuntimeBrand } from "./RuntimeBrandProvider";
@@ -127,6 +128,8 @@ export function CollapsibleSidebar() {
           </Link>
         )}
       </nav>
+
+      <WhatsNewPill compact={collapsed} />
 
       {/* Footer - collapse toggle. Appearance lives in the top bar. */}
       <div

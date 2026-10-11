@@ -33,6 +33,8 @@ export async function register() {
     // Same single-owner rule: it writes the shared task sidecars.
     const { startTaskPrWatcher } = await import("./lib/tasks/task-pr-watch");
     startTaskPrWatcher();
+    const { startAlertWorker } = await import("./lib/integrations/alert-worker");
+    startAlertWorker();
     const { startAutoPrReviewPoller } = await import("./lib/github/auto-pr-review-poller");
     startAutoPrReviewPoller();
   } else {

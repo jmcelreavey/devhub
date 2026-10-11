@@ -1,4 +1,5 @@
 "use client";
+import { integrationFetch } from "@/lib/integrations/client-fetch";
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
@@ -220,11 +221,12 @@ export function useJiraTicketMenu(ticket: JiraTicket, onTransitioned?: () => voi
           setTransitionOpen(false);
           if (!transitionId) return;
           try {
-            const res = await fetch(`/api/jira/ticket/${ticket.key}/transition`, {
+            const res = await integrationFetch(`/api/jira/ticket/${ticket.key}/transition`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ transitionId }),
             });
+            if (!res) return;
             if (!res.ok) throw new Error("Transition failed");
             toast.success(`Updated ${ticket.key}`);
             void mutate("/api/jira/tickets");

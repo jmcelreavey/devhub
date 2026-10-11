@@ -18,6 +18,7 @@ import { useLive } from "@/lib/hooks/use-fetch";
 import { useToast } from "@/lib/hooks/use-toast";
 import { useConfirm } from "@/components/shell/ConfirmDialog";
 import { formatRelative } from "@/lib/utils";
+import { WORKTREE_CLEANUP_JOB } from "@/lib/scheduled-job-presets";
 import {
   installWakeHelper,
   isDesktop,
@@ -114,6 +115,7 @@ export function JobsManager() {
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   const [submitting, setSubmitting] = useState(false);
+  const [cleanupBusy, setCleanupBusy] = useState(false);
   // The shell never appears or disappears mid-session; false on the server.
   const desktop = useSyncExternalStore(noSubscribe, isDesktop, () => false);
   const [loginItem, setLoginItemState] = useState<LoginItemStatus | null>(null);
@@ -139,6 +141,19 @@ export function JobsManager() {
     },
     [mutate, toast],
   );
+
+  const scheduleCleanup = useCallback(async () => {
+    setCleanupBusy(true);
+    try {
+      await jobRequest("/api/jobs", "POST", WORKTREE_CLEANUP_JOB);
+      await mutate();
+      toast.success("Worktree cleanup scheduled for Sundays at 03:17.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Couldn't schedule cleanup");
+    } finally {
+      setCleanupBusy(false);
+    }
+  }, [mutate, toast]);
 
   const startCreate = useCallback(() => {
     setForm({ ...EMPTY_FORM, script: scripts[0] ?? "", provider: providers[0]?.id ?? "" });
@@ -237,6 +252,18 @@ export function JobsManager() {
       </div>
 
       <div className="card-body" style={{ padding: 0 }}>
+        {scripts.includes(WORKTREE_CLEANUP_JOB.script) && (
+          <div className="px-4 py-3 flex flex-wrap items-center gap-3" style={{ borderBottom: "1px solid var(--border-muted)" }}>
+            <div className="flex-1 min-w-0 text-xs text-text-subtle">
+              <div className="font-medium text-text">Keep agent checkouts from filling the disk</div>
+              Sundays at 03:17 local time. Removes safe 2-day-idle checkouts; trims ignored builds after 7 days. Keeps branches. No wake; catches up when awake.
+            </div>
+            <button type="button" className="btn btn-ghost shrink-0" onClick={scheduleCleanup}
+              disabled={cleanupBusy || jobs.some((job) => job.script === WORKTREE_CLEANUP_JOB.script)}>
+              {cleanupBusy ? "Scheduling…" : jobs.some((job) => job.script === WORKTREE_CLEANUP_JOB.script) ? "Cleanup scheduled" : "Schedule weekly cleanup"}
+            </button>
+          </div>
+        )}
         {wake && wake.helper !== "unsupported" && (
           <div
             className="px-4 py-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-text-subtle"

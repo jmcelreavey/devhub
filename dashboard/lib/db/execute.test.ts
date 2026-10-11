@@ -3,12 +3,12 @@ import { planExecution, planStatements } from "./execute";
 import type { DbConnectionRef } from "./types";
 
 const connection = (over: Partial<DbConnectionRef> = {}): DbConnectionRef => ({
-  id: "bi:rds:capi:dev",
-  label: "CAPI · dev",
+  id: "team:rds:payments:dev",
+  label: "Payments · dev",
   engine: "postgres",
   accessMode: "read",
   dangerous: false,
-  source: "plugin:bi",
+  source: "plugin:team-tools",
   ...over,
 });
 
@@ -48,7 +48,7 @@ describe("planExecution", () => {
   it("refuses a write on a read-only connection and names the connection", () => {
     const plan = planExecution(connection(), "UPDATE posts SET title = 'x'");
     expect(plan.refusal?.code).toBe("read_only");
-    expect(plan.refusal?.message).toContain("CAPI · dev");
+    expect(plan.refusal?.message).toContain("Payments · dev");
     expect(plan.refusal?.message).toMatch(/read-only/);
   });
 
@@ -94,7 +94,7 @@ describe("planExecution", () => {
 
   it("requires confirmation for a write on a dangerous connection", () => {
     const plan = planExecution(
-      connection({ accessMode: "write", dangerous: true, label: "CAPI · prd" }),
+      connection({ accessMode: "write", dangerous: true, label: "Payments · prd" }),
       "DELETE FROM posts WHERE id = 1",
     );
     expect(plan.refusal).toBeUndefined();

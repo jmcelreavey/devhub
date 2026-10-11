@@ -2,9 +2,11 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { Context } from "../context.ts";
 import { flattenTree } from "../shared.ts";
+import { registerReleaseNotesTools } from "./release-notes.ts";
 
 export function registerDocsTools(server: McpServer, ctx: Context): void {
   const { docsStorage, docsDir } = ctx;
+  registerReleaseNotesTools(server, ctx);
 
   server.registerTool(
     "docs_list",

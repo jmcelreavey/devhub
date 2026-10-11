@@ -17,12 +17,12 @@ beforeEach(() => {
   home = fs.mkdtempSync(path.join(os.tmpdir(), "devhub-home-"));
   pluginRoot = fs.mkdtempSync(path.join(os.tmpdir(), "devhub-plugin-"));
   writeJson(path.join(pluginRoot, "devhub-plugin.json"), {
-    name: "bi",
+    name: "team-tools",
     version: "0.1.0",
     devhubApi: "1",
     contributes: { mcp: "mcp/" },
   });
-  writeJson(pluginRegistryPath(home), { plugins: [{ name: "bi", path: pluginRoot, enabled: true }] });
+  writeJson(pluginRegistryPath(home), { plugins: [{ name: "team-tools", path: pluginRoot, enabled: true }] });
 });
 
 afterEach(() => {
@@ -31,15 +31,15 @@ afterEach(() => {
 
 describe("pluginMcpServerDirs", () => {
   it("finds server packages and reports node_modules presence", () => {
-    writeJson(path.join(pluginRoot, "mcp-servers", "devhub-bi-server", "package.json"), { name: "x" });
-    fs.mkdirSync(path.join(pluginRoot, "mcp-servers", "devhub-bi-server", "node_modules"), { recursive: true });
+    writeJson(path.join(pluginRoot, "mcp-servers", "team-tools-server", "package.json"), { name: "x" });
+    fs.mkdirSync(path.join(pluginRoot, "mcp-servers", "team-tools-server", "node_modules"), { recursive: true });
     // A non-package dir is ignored.
     fs.mkdirSync(path.join(pluginRoot, "mcp-servers", "not-a-pkg"), { recursive: true });
 
     const dirs = pluginMcpServerDirs(home);
     expect(dirs).toHaveLength(1);
-    expect(dirs[0].plugin).toBe("bi");
-    expect(path.basename(dirs[0].dir)).toBe("devhub-bi-server");
+    expect(dirs[0].plugin).toBe("team-tools");
+    expect(path.basename(dirs[0].dir)).toBe("team-tools-server");
     expect(dirs[0].hasNodeModules).toBe(true);
   });
 

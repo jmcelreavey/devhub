@@ -47,16 +47,16 @@ describe("ai-tools-skills", () => {
     spy.mockRestore();
   });
 
-  it("lists skills with a BI prefix when checkout exists", () => {
+  it("lists skills with an upstream prefix when checkout exists", () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "devhub-aitools-"));
     process.env.AI_TOOLS_ROOT = root;
     fs.mkdirSync(path.join(root, "skills/foo"), { recursive: true });
     fs.writeFileSync(path.join(root, "skills/foo/SKILL.md"), "# foo\n");
-    fs.mkdirSync(path.join(root, "skills/bi-bar"), { recursive: true });
-    fs.writeFileSync(path.join(root, "skills/bi-bar/SKILL.md"), "# bar\n");
+    fs.mkdirSync(path.join(root, "skills/upstream-bar"), { recursive: true });
+    fs.writeFileSync(path.join(root, "skills/upstream-bar/SKILL.md"), "# bar\n");
 
     expect(isAiToolsAvailable()).toBe(true);
-    expect(listAiToolsSkillNames()).toEqual(["bi-bar", "bi-foo"]);
+    expect(listAiToolsSkillNames()).toEqual(["upstream-bar", "upstream-foo"]);
     expect(resolveAiToolsRoot()).toBe(path.resolve(root));
 
     fs.rmSync(root, { recursive: true, force: true });

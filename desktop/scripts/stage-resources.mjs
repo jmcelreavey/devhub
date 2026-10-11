@@ -15,6 +15,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
+import { buildEditorExtension } from "../../scripts/build-editor-extension.mjs";
 import { repoRoot, resourcesDir } from "./staging-paths.mjs";
 
 function log(msg) {
@@ -29,6 +30,11 @@ function log(msg) {
  * a smaller bundle, it is a broken one.
  */
 const ALLOWLIST = [
+  { from: "scripts/owned-runtime.mjs", to: "scripts/owned-runtime.mjs" },
+  { from: "extensions/devhub-selection/package.json", to: "extensions/devhub-selection/package.json" },
+  { from: "extensions/devhub-selection/dist", to: "extensions/devhub-selection/dist" },
+  { from: "extensions/devhub-selection/README.md", to: "extensions/devhub-selection/README.md" },
+  { from: "extensions/devhub-selection/LICENSE", to: "extensions/devhub-selection/LICENSE" },
   { from: "skills/shared", to: "skills/shared" },
   { from: "scripts/checkout-rebuild.mjs", to: "scripts/checkout-rebuild.mjs" },
   { from: "scripts/checkout-payload-smoke.mjs", to: "scripts/checkout-payload-smoke.mjs" },
@@ -128,6 +134,7 @@ session, so keep it short — a few hundred words is plenty.
 `;
 
 export function stageResources() {
+  buildEditorExtension();
   fs.rmSync(resourcesDir, { recursive: true, force: true });
   fs.mkdirSync(resourcesDir, { recursive: true });
 

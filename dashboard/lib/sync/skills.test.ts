@@ -61,8 +61,8 @@ describe("syncSkills merged catalog", () => {
 
     const dst = path.join(home, ".codex/skills");
     expect(fs.readFileSync(path.join(dst, "local-skill", SKILL_MD), "utf-8")).toContain("body local");
-    const upstream = fs.readFileSync(path.join(dst, "bi-upstream-skill", SKILL_MD), "utf-8");
-    expect(upstream).toContain("name: bi-upstream-skill");
+    const upstream = fs.readFileSync(path.join(dst, "upstream-skill", SKILL_MD), "utf-8");
+    expect(upstream).toContain("name: upstream-skill");
     expect(upstream).toContain("body upstream");
   });
 
@@ -81,7 +81,7 @@ describe("syncSkills merged catalog", () => {
     });
 
     expect(fs.existsSync(path.join(codex, "stale-skill"))).toBe(false);
-    expect(fs.existsSync(path.join(codex, "bi-upstream-skill"))).toBe(true);
+    expect(fs.existsSync(path.join(codex, "upstream-skill"))).toBe(true);
   });
 
   it("preserves extra tool-dir skills unless prune is enabled", async () => {
@@ -103,8 +103,8 @@ describe("syncSkills merged catalog", () => {
   it("does not sync or prune excluded skills", async () => {
     setup();
     const codex = path.join(home, ".codex/skills");
-    fs.mkdirSync(path.join(codex, "bi-upstream-skill"), { recursive: true });
-    fs.writeFileSync(path.join(codex, "bi-upstream-skill", SKILL_MD), "kept-old-version\n");
+    fs.mkdirSync(path.join(codex, "upstream-skill"), { recursive: true });
+    fs.writeFileSync(path.join(codex, "upstream-skill", SKILL_MD), "kept-old-version\n");
 
     fs.writeFileSync(
       path.join(aiTools, "skills/upstream-skill", SKILL_MD),
@@ -117,10 +117,10 @@ describe("syncSkills merged catalog", () => {
       refreshAiTools: false,
       tool: "codex",
       prune: true,
-      excludeSkills: ["bi-upstream-skill"],
+      excludeSkills: ["upstream-skill"],
     });
 
-    expect(fs.readFileSync(path.join(codex, "bi-upstream-skill", SKILL_MD), "utf-8")).toBe(
+    expect(fs.readFileSync(path.join(codex, "upstream-skill", SKILL_MD), "utf-8")).toBe(
       "kept-old-version\n",
     );
     expect(fs.existsSync(path.join(codex, "local-skill"))).toBe(true);

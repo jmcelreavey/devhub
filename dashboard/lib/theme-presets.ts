@@ -1,4 +1,6 @@
 import type { ThemeMode } from "./theme-presets-types";
+import { getGraphiteBootstrapScript } from "./graphite-theme";
+import { getThemeEffectsBootstrapScript, THEME_EFFECTS, type ThemeEffectsDeclaration } from "./theme-effects";
 import {
   PLUGIN_THEME_PRESETS,
   PLUGIN_DEFAULT_PRESET,
@@ -22,6 +24,8 @@ export type ThemeModeSetting = "dark" | "light" | "system";
 export const THEME_MODE_KEY = "devhub:theme";
 export const THEME_PRESET_KEY = "devhub:theme-preset";
 export const THEME_EVENT = "devhub:theme-change";
+export const GRAPHITE_THEME_LABEL = "Graphite Neon (Default)";
+export const HOLLOW_THEME_LABEL = "Hollow (Halloween) 🎃";
 
 /**
  * Core palettes shipped by DevHub. Plugins can append more via branding.
@@ -31,11 +35,11 @@ export const THEME_EVENT = "devhub:theme-change";
  * variations on "desaturated dark neutral plus one accent", which made the
  * picker pointless. Each one now owns a lane nothing else occupies:
  *
- *   graphite    neutral achromatic charcoal + acid lime   (the default; untouched)
+ *   graphite    neutral achromatic charcoal + acid lime   — Shift Dock; the core default
  *   forest      warm brown-charcoal + burnt amber         — the only warm theme
  *   midnight    saturated oceanic navy + electric azure   — coldest, highest contrast
  *   tokyo       purple-black + violet/magenta neon        — neon-noir
- *   catppuccin  authentic Mocha/Latte mauve               — softest, lowest contrast
+ *   catppuccin  celadon / cream porcelain garden           — folded-leaf calm
  *   hollow      bruised near-black + dried blood           — horror; light is stained paper
  *
  * Swatches must match the real `--bg` in globals.css; they are what the picker
@@ -43,36 +47,49 @@ export const THEME_EVENT = "devhub:theme-change";
  */
 export const CORE_THEME_PRESETS = [
   {
-    id: "forest",
-    label: "Ember Dusk",
-    description: "Warm charcoal + burnt amber",
-    darkSwatch: "#14100c",
-    lightSwatch: "#fbf6f0",
-    darkAccent: "#ff8f3f",
-    lightAccent: "#b85c14",
-  },
-  {
-    id: "midnight",
-    label: "Abyss",
-    description: "Deep ocean navy + electric azure",
-    darkSwatch: "#050a17",
-    lightSwatch: "#eef4ff",
-    darkAccent: "#2f80ff",
-    lightAccent: "#1259d6",
-  },
-  {
     id: "graphite",
-    label: "Graphite Neon",
-    description: "Charcoal + lime",
-    // Both swatches had drifted from the stylesheet (#121417/#f5f7f8), so the
-    // picker previewed colours this theme never used. Caught by the test.
+    effects: THEME_EFFECTS.graphite,
+    label: GRAPHITE_THEME_LABEL,
+    description: "DevHub's default: charcoal + lime",
+    // Match Shift Dock's base and hub colours in both modes.
     darkSwatch: "#111416",
     lightSwatch: "#f7f8f9",
     darkAccent: "#9ed84a",
     lightAccent: "#4c840c",
   },
   {
+    id: HOLLOW_PRESET_ID,
+    effects: THEME_EFFECTS.hollow,
+    label: HOLLOW_THEME_LABEL,
+    description: "Spooky Halloween theme, switches on automatically in October",
+    darkSwatch: "#100c13",
+    lightSwatch: "#d8d4c9",
+    darkAccent: "#a3201c",
+    lightAccent: "#710f19",
+  },
+  {
+    id: "forest",
+    effects: THEME_EFFECTS.forest,
+    label: "Ember Dusk",
+    description: "Warm charcoal + burnt amber",
+    darkSwatch: "#14100c",
+    lightSwatch: "#fbf6f0",
+    darkAccent: "#ff8f3f",
+    lightAccent: "#94420c",
+  },
+  {
+    id: "midnight",
+    effects: THEME_EFFECTS.midnight,
+    label: "Abyss",
+    description: "Deep ocean navy + electric azure",
+    darkSwatch: "#050a17",
+    lightSwatch: "#eef4ff",
+    darkAccent: "#78b9ff",
+    lightAccent: "#1259d6",
+  },
+  {
     id: "tokyo",
+    effects: THEME_EFFECTS.tokyo,
     label: "Tokyo Night",
     description: "Purple-black + violet neon",
     darkSwatch: "#15121f",
@@ -82,21 +99,13 @@ export const CORE_THEME_PRESETS = [
   },
   {
     id: "catppuccin",
-    label: "Catppuccin",
-    description: "Mocha/Latte + mauve",
-    darkSwatch: "#1e1e2e",
-    lightSwatch: "#eff1f5",
-    darkAccent: "#cba6f7",
-    lightAccent: "#8839ef",
-  },
-  {
-    id: HOLLOW_PRESET_ID,
-    label: "Hollow",
-    description: "Bruised black + dried blood",
-    darkSwatch: "#100c13",
-    lightSwatch: "#d8d4c9",
-    darkAccent: "#a3201c",
-    lightAccent: "#710f19",
+    effects: THEME_EFFECTS.catppuccin,
+    label: "Porcelain Garden",
+    description: "Celadon + cream, folded-leaf calm",
+    darkSwatch: "#101b19",
+    lightSwatch: "#f7f6f0",
+    darkAccent: "#96d6bd",
+    lightAccent: "#216b53",
   },
 ] as const;
 
@@ -114,6 +123,7 @@ export type ThemePresetMeta = {
    * only the background made all six swatches look identical, which is the
    * exact complaint the palettes themselves were redesigned to fix.
    */
+  effects?: ThemeEffectsDeclaration;
   darkAccent?: string;
   lightAccent?: string;
 };
@@ -205,7 +215,7 @@ export function getThemeBootstrapInlineScript(): string {
   const presetKey = JSON.stringify(THEME_PRESET_KEY);
   const defaultPreset = JSON.stringify(DEFAULT_THEME_PRESET_ID);
   const defaultMode = JSON.stringify(DEFAULT_THEME_MODE_SETTING);
-  return `(function(){try{var m=${modeKey};var p=${presetKey};var setting=localStorage.getItem(m)||${defaultMode};if(setting!=="dark"&&setting!=="light"&&setting!=="system"){setting=${defaultMode};}var preset=localStorage.getItem(p)||${defaultPreset};if(!${JSON.stringify([...VALID_PRESET_IDS])}.includes(preset))preset=${defaultPreset};${getHollowSeasonBootstrapScript([...VALID_PRESET_IDS])}var resolved=setting;if(setting==="system"){resolved=(window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches)?"dark":"light";}var root=document.documentElement;root.setAttribute("data-theme",resolved);root.setAttribute("data-theme-mode",setting);root.setAttribute("data-theme-preset",preset);}catch(e){document.documentElement.setAttribute("data-theme","dark");document.documentElement.setAttribute("data-theme-mode",${defaultMode});document.documentElement.setAttribute("data-theme-preset",${defaultPreset});}})();${getHollowAttributeBootstrapScript()}`;
+  return `(function(){try{var m=${modeKey};var p=${presetKey};var setting=localStorage.getItem(m)||${defaultMode};if(setting!=="dark"&&setting!=="light"&&setting!=="system"){setting=${defaultMode};}var preset=localStorage.getItem(p)||${defaultPreset};if(!${JSON.stringify([...VALID_PRESET_IDS])}.includes(preset))preset=${defaultPreset};${getHollowSeasonBootstrapScript([...VALID_PRESET_IDS])}var resolved=setting;if(setting==="system"){resolved=(window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches)?"dark":"light";}var root=document.documentElement;root.setAttribute("data-theme",resolved);root.setAttribute("data-theme-mode",setting);root.setAttribute("data-theme-preset",preset);}catch(e){document.documentElement.setAttribute("data-theme","dark");document.documentElement.setAttribute("data-theme-mode",${defaultMode});document.documentElement.setAttribute("data-theme-preset",${defaultPreset});}})();${getHollowAttributeBootstrapScript()}${getGraphiteBootstrapScript()}${getThemeEffectsBootstrapScript()}`;
 }
 
 /** Reconcile a tab left open across midnight, resumed, or changed in another tab. */

@@ -1,3 +1,4 @@
+import type { IntegrationRef } from "../integration-ref.ts";
 import type { EntityRef } from "../entity-note/index.ts";
 
 export type { EntityRef };
@@ -38,6 +39,7 @@ export interface Task {
   /** Canonical companion note. */
   notePath?: string;
   links?: EntityRef[];
+  integrationRefs?: IntegrationRef[];
   /** Absent = ready; draft = captured idea that still needs a plan. */
   stage?: TaskStage;
   /** Every legacy day-file id that collapsed into this item, sorted. */

@@ -320,7 +320,7 @@ export const SetupSaveSchema = z.object({
       agentsPassword: z.string().max(500).optional(),
     })
     .optional(),
-  bi: z.object({ capiRepoPath: z.string().max(4096).optional() }).optional(),
+  infra: z.object({ scriptsRepoPath: z.string().max(4096).optional() }).optional(),
   agent: z
     .object({
       provider: z.string().max(100).optional(),

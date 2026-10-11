@@ -31,7 +31,7 @@ Configure Datadog from `/setup`.
 | Datadog API key         | Enables Datadog UI features, links, and API calls                       |
 | Datadog application key | Required for Events search, On-Call API, and recent-alerts panels     |
 | Datadog site            | Selects the Datadog region, such as US1 or EU                            |
-| Work email              | Saved as `BI_OPS_USER_EMAIL`; matched against the on-call roster        |
+| Work email              | Saved as `DATADOG_USER_EMAIL`; matched against the on-call roster        |
 | Schedule ID (optional)  | Saved as `DATADOG_ONCALL_SCHEDULE_ID`; comma-separated IDs to scope discovery in large orgs |
 
 The Datadog nav item appears once **both** API key and application key are saved. Work email only controls on-call matching — the page is still reachable without it, but on-call panels stay quiet.
@@ -46,7 +46,7 @@ Without a schedule ID, DevHub auto-discovers on-call schedules (up to 100) and c
 | ------------------------- | ------- |
 | `not_configured`          | No Datadog API key |
 | `needs_application_key`   | Application key missing |
-| `needs_email`             | `BI_OPS_USER_EMAIL` not set |
+| `needs_email`             | `DATADOG_USER_EMAIL` not set |
 | `upstream`                | Datadog API error |
 
 When `ok: true`, the response includes `onCall` (boolean), `users[]` (roster), and `checkedAt`.

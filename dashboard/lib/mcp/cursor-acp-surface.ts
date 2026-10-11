@@ -3,7 +3,7 @@ import type { Json } from "@/lib/json-file";
 /**
  * Cursor ACP (Implement / Plan, Cursor IDE) silently drops MCP tools past a
  * ~190-tool budget. Full DevHub (~177) plus agentmemory / lean-ctx / Playwriter
- * / BI overflows; later servers stay connected (resources list) but their tools
+ * / plugin overflows; later servers stay connected (resources list) but their tools
  * never appear — `execute`, `ctx_search`.
  *
  * Claude Code / Codex keep the full catalog. Only Cursor's mcp.json and the
@@ -18,7 +18,6 @@ export const CURSOR_MCP_PRIORITY_SERVERS = [
   "lean-ctx",
   "agentmemory",
   "figma",
-  "devhub-bi",
 ] as const;
 
 function asRecord(value: Json | undefined): Record<string, Json> | null {

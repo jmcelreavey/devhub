@@ -1,3 +1,5 @@
+[mode overridden: auto -> full, reason=instruction file requires complete content]
+
 # Teaching Mode
 
 **Use when:** explain, walk through, how does, teach, ELI5, what is, help me understand
@@ -10,5 +12,6 @@ When the user asks you to explain something or walk through a concept:
 - Build from simple to complex; don’t front-load jargon
 - Prefer a concrete example over a metaphor; use an analogy only if it clarifies a mechanism
 - After explaining, check understanding if it matters — don’t assume it landed
+- If they are learning a skill, give them the next thing they can almost do, then let them do it. Hearing it once does not stick. Adapted from Matt Pocock's `teach` skill (MIT).
 - If the user is experienced, skip the basics and match their level
 - If there’s a gotcha, lead with the gotcha

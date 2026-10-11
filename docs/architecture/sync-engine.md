@@ -19,7 +19,7 @@ graph LR
   subgraph sources["Sources, in precedence order"]
     core["Core repo<br/>skills/, agents/, mcp/shared/"]
     ai["ai-tools checkout<br/><i>optional upstream</i>"]
-    plug["Registered plugins<br/><i>e.g. devhub-bi</i>"]
+    plug["Registered plugins<br/><i>e.g. team-tools</i>"]
     personal["~/.config/devhub/<br/>mcp-personal/"]
   end
 
@@ -55,11 +55,11 @@ Codex MCP sync edits only the matching `[mcp_servers.*]` tables in `~/.codex/con
 
 DevHub `skills/shared/` is the source of truth for personal and dotfiles skills. Optional upstream/shared team skills can stay canonical in an **ai-tools** checkout; DevHub reads a local clone (default `~/Developer/ai-tools`) and merges it at sync time. DevHub wins when the same skill name exists in both trees.
 
-For compatibility with older shared catalogs, ai-tools skills are exposed with a `bi-`
+For compatibility with older shared catalogs, ai-tools skills are exposed with a `upstream-`
 catalog prefix unless the source directory already has that prefix. That prefix is a
 catalog naming convention, not a requirement that the upstream repo be company-specific.
 
-**Plugins generalise this.** Skills, agents, and MCP configs can also come from registered **plugins** (separate repos, e.g. the private `devhub-bi`) and are marked read-only. Core still wins collisions; for skills, an explicitly enabled plugin wins over the same name in the general ai-tools catalog. See [`plugins.md`](plugins.md) for the manifest, machine-local registry (`~/.config/devhub/plugins.json`), and complete precedence rules.
+**Plugins generalise this.** Skills, agents, and MCP configs can also come from registered **plugins** (separate repos, e.g. the private `team-tools`) and are marked read-only. Core still wins collisions; for skills, an explicitly enabled plugin wins over the same name in the general ai-tools catalog. See [`plugins.md`](plugins.md) for the manifest, machine-local registry (`~/.config/devhub/plugins.json`), and complete precedence rules.
 
 Environment:
 

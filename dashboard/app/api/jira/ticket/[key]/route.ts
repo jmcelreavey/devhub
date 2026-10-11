@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { getTicket } from "@/lib/jira/client";
+import { jiraScreen } from "@/lib/integrations/screen-data";
+const getTicket = jiraScreen.ticket;
 import { notConfigured } from "@/lib/api-utils";
 
 export async function GET(

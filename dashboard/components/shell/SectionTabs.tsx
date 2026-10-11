@@ -9,8 +9,8 @@ import { useSetupStatus } from "@/lib/hooks/use-setup-status";
 /**
  * Top-bar tab strip for merged destinations (2026-06 IA): when the current
  * route belongs to the Library (/notes, /docs, …) or System (/status, /logs,
- * …) families, show its sibling pages as tabs. BI destinations (Ops, Datadog)
- * are first-class sidebar items under the BI group — no top-bar strip. Gated
+ * …) families, show its sibling pages as tabs. Infrastructure destinations (Ops, Datadog)
+ * are first-class sidebar items under the Infrastructure group — no top-bar strip. Gated
  * tabs only appear when their integration is configured.
  */
 export function SectionTabs() {

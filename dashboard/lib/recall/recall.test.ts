@@ -186,7 +186,7 @@ describe("recall — end to end", () => {
     // can't see it — a ticket query returned five hits that were all the same
     // sentence on five consecutive dates.
     for (const date of ["2026-07-30", "2026-07-31", "2026-08-01", "2026-08-04", "2026-08-05"]) {
-      writeTasks(date, [{ text: "Address BI Jobs Feedback", jiraKey: "PTF-4484" }]);
+      writeTasks(date, [{ text: "Address sample Feedback", jiraKey: "PTF-4484" }]);
     }
     buildIndex();
 
@@ -221,7 +221,7 @@ describe("recall — end to end", () => {
     ];
     chores.forEach((chore, i) => {
       writeTasks(`2026-06-${String(i + 10).padStart(2, "0")}`, [
-        { text: "Address BI Jobs Feedback", jiraKey: "PTF-4484" },
+        { text: "Address sample Feedback", jiraKey: "PTF-4484" },
         { text: chore },
       ]);
     });

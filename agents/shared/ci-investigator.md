@@ -46,7 +46,7 @@ Load when relevant (do not duplicate their full workflows here):
 
 - `devhub-fix-pipeline` — when the user wants the failure fixed, not just explained (this agent stays read-only).
 - `git-hook-fix` — when the same checks fail locally in a pre-commit / pre-push hook.
-- `bi-branch-review` (BI plugin, if installed) — branch diff context when CI failed on a feature PR.
+- `code-review` — branch diff context when CI failed on a feature PR.
 
 ## Expected Output
 

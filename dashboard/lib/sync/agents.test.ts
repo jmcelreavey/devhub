@@ -40,11 +40,11 @@ describe("resolveAgentSources", () => {
     writeFile(path.join(pluginRoot, "agents", "plugin-only.md"), "plugin");
     writeFile(
       path.join(pluginRoot, "devhub-plugin.json"),
-      JSON.stringify({ name: "bi", version: "0.1.0", devhubApi: "1", contributes: { agents: "agents/" } }),
+      JSON.stringify({ name: "team-tools", version: "0.1.0", devhubApi: "1", contributes: { agents: "agents/" } }),
     );
     const reg = pluginRegistryPath(home);
     fs.mkdirSync(path.dirname(reg), { recursive: true });
-    fs.writeFileSync(reg, JSON.stringify({ plugins: [{ name: "bi", path: pluginRoot, enabled: true }] }));
+    fs.writeFileSync(reg, JSON.stringify({ plugins: [{ name: "team-tools", path: pluginRoot, enabled: true }] }));
 
     const sources = resolveAgentSources(repoRoot, home);
     expect([...sources.keys()].sort()).toEqual(["core-only", "plugin-only", "shared-name"]);
@@ -53,6 +53,6 @@ describe("resolveAgentSources", () => {
     expect(fs.readFileSync(sources.get("shared-name")!.file, "utf-8")).toBe("CORE WINS");
     expect(sources.get("shared-name")?.origin).toBe("core");
     // plugin-only tagged with plugin origin
-    expect(sources.get("plugin-only")?.origin).toBe("plugin:bi");
+    expect(sources.get("plugin-only")?.origin).toBe("plugin:team-tools");
   });
 });

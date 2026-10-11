@@ -9,7 +9,7 @@ import { datadogAppOrigin } from "@/lib/datadog/links";
 import { getResolvedGoogleCalendarEnv } from "@/lib/google-calendar";
 import { isGithubCliAuthenticated } from "@/lib/repos";
 import { ghAuthLoginCommand } from "@/lib/plugins/source";
-import { detectBiPresence } from "@/lib/bi-presence";
+import { detectInfrastructurePresence } from "@/lib/infrastructure-presence";
 import { getPeerServiceGateStatus, isOpenCodeConfigured } from "@/lib/peer-service-availability";
 import { isCursorAgentInstalled, readAgentCliSettings } from "@/lib/agent/cli-env";
 import {
@@ -85,18 +85,14 @@ export async function GET() {
   const github = await isGithubCliAuthenticated();
   const datadogApiKey = !!resolveEnvValue("DATADOG_API_KEY", overrides);
   const datadogApplicationKey = !!resolveDatadogApplicationKey(overrides);
-  const configuredEmail = resolveEnvValue("BI_OPS_USER_EMAIL", overrides);
+  const configuredEmail = resolveEnvValue("DATADOG_USER_EMAIL", overrides);
   const datadogEmail = !!configuredEmail;
   const datadogScheduleId = !!resolveEnvValue("DATADOG_ONCALL_SCHEDULE_ID", overrides);
   // The nav/page should be available once Datadog API credentials exist. Email
   // only controls on-call matching.
   const datadog = datadogApiKey && datadogApplicationKey;
 
-  // BI presence drives the `bi` nav gate. Detection is dependency-free (no BI feature
-  // libs) so the BI Ops module can live in the devhub-bi plugin. Rich identity/account
-  // data is shown by the plugin's /ops page via /api/bi.
-  const biPresence = detectBiPresence((key) => resolveEnvValue(key, overrides));
-  const bi = biPresence.bi;
+  const infrastructure = detectInfrastructurePresence((key) => resolveEnvValue(key, overrides));
 
   const bindHost = resolveEnvValue("DEVHUB_BIND_HOST", overrides)?.trim();
   const lanProxyHost = resolveEnvValue("DEVHUB_LAN_PROXY_HOST", overrides)?.trim();
@@ -118,7 +114,7 @@ export async function GET() {
     calendar,
     jira,
     datadog,
-    bi,
+    infra: infrastructure.infra,
     opencode: peerServices.opencode,
     claude: peerServices.claude,
     cursor: peerServices.cursor,
@@ -173,7 +169,7 @@ export async function GET() {
       hasApplicationKey: datadogApplicationKey,
       hasEmail: datadogEmail,
       hasScheduleId: datadogScheduleId,
-      email: resolveEnvValue("BI_OPS_USER_EMAIL", overrides) ?? "",
+      email: resolveEnvValue("DATADOG_USER_EMAIL", overrides) ?? "",
       scheduleId: resolveEnvValue("DATADOG_ONCALL_SCHEDULE_ID", overrides) ?? "",
       /**
        * So setup can link straight to the key pages rather than describing
@@ -194,12 +190,10 @@ export async function GET() {
       apiConfigured: isNotesAiConfigured(),
     },
 
-    biVars: {
-      awsProfile: biPresence.awsProfile,
-      // Live AWS account id comes from the BI plugin's /ops page (/api/bi), not here —
-      // keeps setup/status free of BI feature libs and avoids an STS call per poll.
+    infraVars: {
+      awsProfile: infrastructure.awsProfile,
       account: null,
-      capiRepoPath: biPresence.capiRepoPath,
+      scriptsRepoPath: infrastructure.scriptsRepoPath,
     },
   });
 }

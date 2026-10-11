@@ -58,8 +58,16 @@ interface ChatActivity {
  * Paseo leaves a workspace's own `activityAt` empty, so age comes from the
  * chats in it: the latest time any of them was updated or messaged.
  */
+function nextPageCursor(info: { hasMore: boolean; nextCursor?: string | null }, seen: Set<string>): string | undefined {
+  if (!info.hasMore) return undefined;
+  if (!info.nextCursor || seen.has(info.nextCursor)) throw new Error("Paseo pagination is incomplete; cannot verify activity.");
+  seen.add(info.nextCursor);
+  return info.nextCursor;
+}
+
 async function chatActivityByWorkspace(daemon: DaemonClient): Promise<Map<string, ChatActivity>> {
   const byWorkspace = new Map<string, ChatActivity>();
+  const cursors = new Set<string>();
   let cursor: string | undefined;
   do {
     const page = await daemon.fetchAgents({ page: { limit: PAGE_SIZE, ...(cursor ? { cursor } : {}) } });
@@ -71,18 +79,32 @@ async function chatActivityByWorkspace(daemon: DaemonClient): Promise<Map<string
       seen.live ||= agent.status === "running" || agent.status === "initializing" || agent.requiresAttention || agent.pendingPermissions.length > 0;
       byWorkspace.set(agent.workspaceId, seen);
     }
-    cursor = page.pageInfo.hasMore ? (page.pageInfo.nextCursor ?? undefined) : undefined;
+    cursor = nextPageCursor(page.pageInfo, cursors);
   } while (cursor);
   return byWorkspace;
 }
 
+export async function loadPaseoWorktreeActivity(): Promise<Array<{ path: string; active: boolean; updatedAt: number }>> {
+  return withPaseo(async ({ daemon }) => {
+    const chats = await chatActivityByWorkspace(daemon);
+    return (await fetchAllWorkspaces(daemon)).flatMap((workspace) => workspace.workspaceDirectory ? [{
+      path: workspace.workspaceDirectory,
+      active: Boolean(workspace.pinnedAt || workspace.archivingAt || chats.get(workspace.id)?.live ||
+        workspace.scripts.some((script) => script.lifecycle === "running") ||
+        (workspace.status !== "done" && workspace.status !== "failed")),
+      updatedAt: chats.get(workspace.id)?.lastActiveAt ?? 0,
+    }] : []);
+  });
+}
+
 async function fetchAllWorkspaces(daemon: DaemonClient): Promise<PaseoWorkspace[]> {
   const workspaces: PaseoWorkspace[] = [];
+  const cursors = new Set<string>();
   let cursor: string | undefined;
   do {
     const page = await daemon.fetchWorkspaces({ page: { limit: PAGE_SIZE, ...(cursor ? { cursor } : {}) } });
     workspaces.push(...page.entries);
-    cursor = page.pageInfo.hasMore ? (page.pageInfo.nextCursor ?? undefined) : undefined;
+    cursor = nextPageCursor(page.pageInfo, cursors);
   } while (cursor);
   return workspaces;
 }

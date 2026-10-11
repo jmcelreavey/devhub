@@ -47,7 +47,7 @@ Payload fields:
 | `workItems` | Parsed PR/work slices (`id`, `title`, `summary`, `repoHint`, `description`) |
 | `repos` | Repo EntityRef ids from the note + dialog overrides |
 | `parentKey` | Optional parent Jira key (epic/story); omit to create a parent |
-| `projectKey` | Jira project (default `PTF`) |
+| `projectKey` | Jira project (from the selected Jira project) |
 | `epicSummary` | Parent ticket summary when creating a new parent |
 | `jiraMeta` | Sprint/team hints when Jira is configured (for parent tickets only) |
 
@@ -69,6 +69,8 @@ checklists, or deliverable sections. Ask once if the scope is still ambiguous.
 
 ### 0. Confirm scope
 
+Prefer a vertical slice: a narrow path through the layers that someone can demo or verify on its own. Record what it is blocked by (other items, or nothing). If the current code is in the way, the first slice is the prefactor: make the change easy, then make the easy change. A wide mechanical change (a rename or retype that fans across every caller) is not one slice. Sequence it as add the new form, migrate callers in batches that stay green, then delete the old form once nothing calls it. Show the breakdown and the blocking edges before you publish, and change them if the user says the granularity is wrong. Adapted from Matt Pocock's `to-tickets` skill (MIT).
+
 - If no work items can be derived from the note and user instructions, ask how to slice it.
 - If multiple repos and items lack `repoHint`, ask which repo each item targets.
 - Do not create duplicate Jira keys or tasks for items that already have links in
@@ -85,7 +87,7 @@ Keep the returned gist URL — every ticket description and parent rollup links 
 ### 2. Resolve or create the Jira parent
 
 **When `parentKey` is set:** `getJiraIssue` to confirm it exists. Sub-tasks will be
-created under this parent (or under the creation parent per BI Jira hierarchy — see
+created under this parent (or under the creation parent per project Jira hierarchy — see
 `creationParentForLinkedIssue` behaviour in the dashboard: Tasks parent to Stories).
 
 **When `parentKey` is missing:** create a parent ticket first:

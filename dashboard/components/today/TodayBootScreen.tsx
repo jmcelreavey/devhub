@@ -3,6 +3,10 @@
 import { createContext, useCallback, useContext, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { useClientMounted } from "@/lib/hooks/use-client-mounted";
 import Image from "next/image";
+import { ShiftDockMark } from "@/components/graphite/ShiftDockMark";
+import { ThemeMark } from "@/components/themes/ThemeMark";
+import { useTheme } from "@/components/shell/ThemeToggle";
+import { THEME_EFFECTS } from "@/lib/theme-effects";
 import {
   BRAND_BOTTLE_IMAGE_SRC,
   BRAND_LABEL,
@@ -129,6 +133,7 @@ export function TodayBootScreen({ state }: { state: BootState }) {
 }
 
 function BootScreenVisual({ state }: { state: BootState }) {
+  const { preset } = useTheme();
   const [lineIdx, setLineIdx] = useState(0);
 
   useEffect(() => {
@@ -147,6 +152,8 @@ function BootScreenVisual({ state }: { state: BootState }) {
     >
       <div className="boot-mark">
         <span className="boot-ring" aria-hidden />
+        <ShiftDockMark className="graphite-boot-mark" />
+        {preset !== "graphite" && THEME_EFFECTS[preset] && <ThemeMark preset={preset} className="theme-boot-mark" />}
         <Image
           src={DEVHUB_BRAND_IMAGE}
           alt=""
@@ -173,6 +180,7 @@ function BootScreenVisual({ state }: { state: BootState }) {
         <span key={lineIdx} className="boot-line-text boot-line-default">
           {BOOT_LINES[lineIdx % BOOT_LINES.length]}
         </span>
+        <span className="boot-line-graphite">Warming up the workbench…</span>
         <span key={`hollow-${lineIdx}`} className="boot-line-hollow">
           {HOLLOW_BOOT_LINES[lineIdx % HOLLOW_BOOT_LINES.length]}
         </span>

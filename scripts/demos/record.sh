@@ -27,7 +27,7 @@ REF="${DEVHUB_DEMO_REF:-HEAD}"
 PORT="${DEVHUB_DEMO_PORT:-1350}"
 MODE="${1:-readme}"
 SERVER="${DEVHUB_DEMO_SERVER:-start}"
-case "$MODE" in readme | walkthroughs | all | serve) ;; *) echo "unknown mode: $MODE" >&2; exit 2 ;; esac
+case "$MODE" in readme | walkthroughs | overview | all | serve) ;; *) echo "unknown mode: $MODE" >&2; exit 2 ;; esac
 MARKER="$FIXTURE/.devhub-demo-fixture"
 APP="$FIXTURE/devhub"
 OUT="$REPO_ROOT/docs/assets/demos/dashboard.gif"
@@ -67,7 +67,8 @@ mkdir -p "$FIXTURE"/{home,notes/.config,tasks,collections,reps,upstarts,repos,op
 touch "$MARKER"
 # Marks 1Password as already consulted, so startup never calls `op`.
 touch "$FIXTURE/opcache/.env.op-synced"
-git -C "$REPO_ROOT" archive "$REF" -- . ':!notes' ':!tasks' ':!collections' ':!reps' ':!upstarts' ':!persona/identity.txt' |
+source "$REPO_ROOT/scripts/lib/public-paths.sh"
+git -C "$REPO_ROOT" archive "$REF" -- "${PUBLIC_PATHS[@]}" |
   tar -x -C "$APP"
 git -C "$APP" init -q
 git -C "$APP" add -A
@@ -129,7 +130,7 @@ for offset in 1 2 3; do
   for i in 0 1; do
     mcp tasks_create "{\"text\":\"${past_tasks[$(((offset - 1) * 2 + i))]}\",\"date\":\"$day\"}"
   done
-  for id in $(node -e 'for (const t of require(process.argv[1])) console.log(t.id)' "$FIXTURE/tasks/$day.json"); do
+  for id in $(node -e 'const fs = require("node:fs"), path = require("node:path"); for (const name of fs.readdirSync(process.argv[1])) { const task = JSON.parse(fs.readFileSync(path.join(process.argv[1], name), "utf8")); if (task.startDate === process.argv[2]) console.log(task.id); }' "$FIXTURE/tasks/items" "$day"); do
     mcp tasks_update "{\"id\":\"$id\",\"date\":\"$day\",\"done\":true}"
   done
 done
@@ -274,6 +275,12 @@ if [ "$MODE" = serve ]; then
   echo "Fixture dashboard: http://127.0.0.1:$PORT  (Ctrl-C to stop)"
   wait "$SERVER_PID"
   exit 0
+fi
+
+if [ "$MODE" = overview ]; then
+  (cd "$REPO_ROOT/dashboard" &&
+    DEMO_URL="http://127.0.0.1:$PORT" DEMO_OUT="$REPO_ROOT/docs/assets/demos/overview-2.1.0.gif" DEMO_FRAMES_DIR="$FIXTURE/frames" \
+      ./node_modules/.bin/tsx scripts/record-overview.ts)
 fi
 
 if [ "$MODE" = readme ] || [ "$MODE" = all ]; then

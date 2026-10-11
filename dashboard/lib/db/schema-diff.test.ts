@@ -172,11 +172,11 @@ describe("formatDiff", () => {
         ],
         identical: 3,
       },
-      "capi · dev",
-      "capi · prd",
+      "payments · dev",
+      "payments · prd",
     );
-    expect(text).toContain("table public.audit — missing from capi · prd");
-    expect(text).toContain("column public.posts.slug — missing from capi · prd");
+    expect(text).toContain("table public.audit — missing from payments · prd");
+    expect(text).toContain("column public.posts.slug — missing from payments · prd");
   });
 
   /** The reassuring half of the answer: "I checked, and they match." */

@@ -74,7 +74,7 @@ export function instrumentToolHistory(
   const register = server.registerTool.bind(server) as (name: string, config: unknown, cb: AnyToolCallback) => unknown;
 
   const patched = (name: string, config: { inputSchema?: unknown }, cb: AnyToolCallback) => {
-    if (UNRECORDED_TOOLS.has(name)) return register(name, config, cb);
+    if (UNRECORDED_TOOLS.has(name) || name.startsWith("browser_")) return register(name, config, cb);
     const toolset = opts.currentToolset();
     const wrapped: AnyToolCallback = async (...cbArgs) => {
       const ts = Date.now();

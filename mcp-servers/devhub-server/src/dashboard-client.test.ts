@@ -87,6 +87,26 @@ describe("DashboardClient.request", () => {
     expect(result.content[0]).toMatchObject({ text: expect.stringContaining("status_exec") });
   });
 
+  it("keeps the timeout active until a streaming response body finishes", async () => {
+    mockFetch((_url, init) => new Response(new ReadableStream({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('{"type":"output","text":"started"}\n'));
+        init?.signal?.addEventListener("abort", () => controller.error(new DOMException("aborted", "AbortError")));
+      },
+    }), { headers: { "content-type": "application/x-ndjson" } }));
+    const client = new DashboardClient("http://localhost:1337");
+    await expect(client.post("/api/plugins/runtime/team-tools", { token: "demo" }, 10)).rejects.toBeInstanceOf(DashboardTimeoutError);
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns a complete NDJSON body without retrying or decoding it as JSON", async () => {
+    const text = '{"type":"output","text":"done"}\n{"type":"result","result":{"ok":true}}\n';
+    mockFetch(() => new Response(text, { headers: { "content-type": "application/x-ndjson" } }));
+    const client = new DashboardClient("http://localhost:1337");
+    expect(await client.post("/api/plugins/runtime/team-tools", { token: "demo" })).toBe(text);
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+  });
+
   it("sends PATCH and DELETE bodies for Cursor note actions", async () => {
     const methods: string[] = [];
     mockFetch((_url, init) => {

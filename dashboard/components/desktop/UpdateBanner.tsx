@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Download, RefreshCw, X } from "lucide-react";
 import Link from "next/link";
+import { IncomingReleaseNotes } from "@/components/releases/ReleaseNotes";
 import { isDesktop, onDesktopEvent } from "@/lib/desktop/bridge";
 import { copyTextToClipboard } from "@/lib/clipboard";
 import {
@@ -113,29 +114,39 @@ export function UpdateBanner() {
     if (!isDesktop()) return;
     let cleanupAvailable: (() => void) | undefined;
     let cleanupProgress: (() => void) | undefined;
+    let cleanupCheck: (() => void) | undefined;
+    let cancelled = false;
 
     void onDesktopEvent("devhub://update-available", (payload) => {
       setUpdate(payload as UpdateInfo);
+      setNotice(null);
       setDismissed(false);
     }).then((off) => {
-      cleanupAvailable = off;
+      if (cancelled) off();
+      else cleanupAvailable = off;
     });
 
     void onDesktopEvent("devhub://update-progress", (payload) => {
       setProgress(payload as Progress);
     }).then((off) => {
-      cleanupProgress = off;
+      if (cancelled) off();
+      else cleanupProgress = off;
     });
 
     // The menu's "Check for Updates…" routes through the same banner, so
     // there is one place updates are presented rather than two.
     void onDesktopEvent("devhub://check-updates", () => {
       void runManualCheck();
+    }).then((off) => {
+      if (cancelled) off();
+      else cleanupCheck = off;
     });
 
     return () => {
+      cancelled = true;
       cleanupAvailable?.();
       cleanupProgress?.();
+      cleanupCheck?.();
     };
   }, [runManualCheck]);
 
@@ -200,6 +211,7 @@ export function UpdateBanner() {
             )}
           </div>
         </div>
+        {notice.actions.includes("install") && <IncomingReleaseNotes version={update?.version} notes={update?.notes} />}
         {showDetails && notice.details && (
           <div style={{ marginTop: "8px", display: "flex", gap: "8px", alignItems: "flex-start" }}>
             <pre style={{ flex: 1, margin: 0, whiteSpace: "pre-wrap", fontSize: "12px", color: "var(--text-subtle)" }}>{notice.details}</pre>
@@ -334,16 +346,14 @@ export function UpdateBanner() {
           </>
         ) : downloading || installing ? null : (
           <>
-            {update?.notes && (
-              <a
-                className="btn btn-ghost"
-                href={RELEASES_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                Release notes
-              </a>
-            )}
+            <a
+              className="btn btn-ghost"
+              href={RELEASES_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Open release page
+            </a>
             {!translocated && (
               <button
                 type="button"
@@ -368,6 +378,7 @@ export function UpdateBanner() {
           </button>
         )}
       </div>
+      {!failed && !done && !downloading && !installing && <IncomingReleaseNotes version={update?.version} notes={update?.notes} />}
     </div>
   );
 }

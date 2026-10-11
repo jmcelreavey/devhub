@@ -1,0 +1,28 @@
+.page { max-width: 1200px; }
+.header { margin-bottom: 2rem; }
+.header h1 { font-size: 1.8rem; font-weight: 650; }
+.header p, .section p { color: var(--text-subtle); max-width: 70ch; line-height: 1.6; }
+.header nav, .actions { display: flex; gap: .75rem; flex-wrap: wrap; align-items: center; margin-top: .75rem; }
+.section { padding: 1.5rem 0; border-top: 1px solid var(--border); min-width: 0; }
+.section h2 { font-size: 1.15rem; font-weight: 600; margin-bottom: .5rem; }
+.section h3 { font-weight: 600; }
+.form { display: grid; gap: 1rem; max-width: 640px; margin: 1rem 0; }
+.writeFields { display: grid; gap: 1rem; min-width: 0; }
+.form label { display: grid; gap: .4rem; min-width: 0; }
+.form input, .form select { min-width: 0; width: 100%; }
+.row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+.list { list-style: none; margin: 1rem 0; padding: 0; }
+.list > li { padding: 1rem 0; border-bottom: 1px solid var(--border); overflow-wrap: anywhere; }
+.item { display: flex; justify-content: space-between; gap: 1rem; align-items: start; }
+.meta { color: var(--text-subtle); font-size: .85rem; margin-top: .35rem; }
+.preview { white-space: pre-wrap; overflow-wrap: anywhere; font-family: inherit; line-height: 1.6; padding: 1rem; background: var(--bg-surface); border: 1px solid var(--border); border-radius: 8px; }
+.checks { display: grid; gap: .6rem; }
+.checks label, label.check { display: flex; align-items: start; gap: .6rem; line-height: 1.5; }
+.checks input, label.check input { width: 1rem; height: 1rem; flex: 0 0 auto; margin-top: .3rem; accent-color: var(--accent); }
+.section > h3 { margin-top: 1.5rem; }
+.section details { margin-top: 1rem; }
+.section summary { cursor: pointer; padding: .5rem 0; font-weight: 500; }
+.section a { text-underline-offset: .2em; }
+.section a.helpLink { color: var(--accent); text-decoration: underline; }
+.status { color: var(--text-subtle); }
+@media (max-width: 600px) { .row { grid-template-columns: 1fr; } .item { flex-direction: column; } .header h1 { font-size: 1.5rem; } }

@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
  *
  * Cheap by contract — providers must not shell out here — because the rail
  * refetches it. Provider failures come back in `errors` rather than as a 500:
- * the BI plugin being unable to reach GitHub should not hide the local SQLite
+ * the remote provider being unable to reach GitHub should not hide the local SQLite
  * files.
  */
 export const GET = withErrorHandler(async (req: NextRequest) => {

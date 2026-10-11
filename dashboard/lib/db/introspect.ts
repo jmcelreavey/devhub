@@ -25,7 +25,7 @@ async function engineOf(connectionId: string): Promise<{ engine: DbEngine; label
  * MongoDB's namespace is its database, which the URI already pins.
  *
  * Providers expose the bound database as safe connection metadata. Parsing the
- * connection id is wrong for named targets such as `bi:mongo:fantasy-stocks:dev`.
+ * connection id is wrong for named targets such as `team:mongo:sample-data:dev`.
  */
 export async function mongoDatabaseName(connectionId: string): Promise<string> {
   const connection = await findDbConnection(connectionId);

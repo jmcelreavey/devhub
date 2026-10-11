@@ -652,7 +652,7 @@ failed gate. A failed replacement is not an excuse to strand the working app.
 `electron-wrapper/`, `POST /api/setup/install-app` and `lib/install-app.ts` are
 gone. `InstallAppCard` now reports desktop status instead of building an app.
 `electronIcon` renamed to `desktopIcon` with a one-release deprecation warning,
-and the `devhub-bi` plugin updated in the same change. Docs rewritten.
+and the `example plugin` plugin updated in the same change. Docs rewritten.
 
 The local dogfood gate is `desktop/scripts/install-local.mjs` — nine steps,
 with automatic restore of the previous app if any check after the swap fails.

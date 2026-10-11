@@ -19,7 +19,7 @@ export const runtimeSchema = z.object({
   sha256: digest,
   lockfile: asset,
   pages: z.array(z.object({ path: route, label }).strict()).max(30),
-  routes: z.array(z.object({ path: route, method: z.enum(["GET", "POST", "PUT", "PATCH", "DELETE"]) }).strict()).max(100),
+  routes: z.array(z.object({ path: route, method: z.enum(["GET", "POST", "PUT", "PATCH", "DELETE"]), stream: z.boolean().optional(), timeoutSeconds: z.number().int().min(30).max(900).optional() }).strict()).max(100),
   mcp: z.array(z.object({ name: slug, description: label }).strict()).max(20),
   permissions: z.object({
     env: z.array(envName).max(40),
@@ -57,7 +57,7 @@ export function runtimeInventory(runtime: RuntimeContribution): { kind: string; 
   const group = (kind: string, entries: string[]) => ({ kind, entries: entries.length ? entries : ["None declared."], note: null, more: 0 });
   return [
     group("Pages", runtime.pages.map((p) => `${p.label}: ${p.path}`)),
-    group("API routes", runtime.routes.map((p) => `${p.method} ${p.path}`)),
+    group("API routes", runtime.routes.map((p) => `${p.method} ${p.path}${p.stream ? " · live output" : ""}${p.timeoutSeconds ? ` · ${p.timeoutSeconds}s limit` : ""}`)),
     group("MCP servers and commands", runtime.mcp.map((p) => `${p.name}: bundled Node ${runtime.entry} (request-worker)`)),
     group("Environment and secrets", runtime.permissions.env),
     group("Network access (declared, not enforced)", runtime.permissions.network),

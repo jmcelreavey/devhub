@@ -7,7 +7,7 @@ describe("parseCommitRefs", () => {
   });
 
   it("reads ticket ids", () => {
-    expect(parseCommitRefs("PTF-4381 - Move read-next cache policy to CAPI").tickets).toEqual([
+    expect(parseCommitRefs("PTF-4381 - Move read-next cache policy to Payments").tickets).toEqual([
       "PTF-4381",
     ]);
     expect(parseCommitRefs("DP-6144: Support Categorized Questions").tickets).toEqual(["DP-6144"]);

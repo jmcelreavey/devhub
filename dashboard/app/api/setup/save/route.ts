@@ -10,7 +10,7 @@ import {
   readDashboardEnvLocalFile,
   syncAgentProcessEnvFromOverrides,
   syncPaseoProcessEnvFromOverrides,
-  syncBiProcessEnvFromOverrides,
+  syncInfraProcessEnvFromOverrides,
   syncDatadogProcessEnvFromOverrides,
   syncGoogleProcessEnvFromOverrides,
   syncJiraProcessEnvFromOverrides,
@@ -46,7 +46,7 @@ function validateDirectory(p: string): string | null {
 export async function POST(req: NextRequest) {
   const parsed = await parseBody(req, SetupSaveSchema);
   if (!parsed.ok) return parsed.response;
-  const { calendar, jira, datadog, core, network, bi, agent } = parsed.data;
+  const { calendar, jira, datadog, core, network, infra, agent } = parsed.data;
 
   // Validate core paths up-front so we don't half-write the env file.
   if (core) {
@@ -79,11 +79,11 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  if (bi?.capiRepoPath !== undefined && bi.capiRepoPath.trim()) {
-    const err = validateDirectory(bi.capiRepoPath);
+  if (infra?.scriptsRepoPath !== undefined && infra.scriptsRepoPath.trim()) {
+    const err = validateDirectory(infra.scriptsRepoPath);
     if (err) {
       return NextResponse.json(
-        { ok: false, error: `CAPI_REPO_PATH: ${err}` },
+        { ok: false, error: `AUTOMATION_REPO_PATH: ${err}` },
         { status: 400 },
       );
     }
@@ -142,10 +142,10 @@ export async function POST(req: NextRequest) {
   if (datadog) {
     if (datadog.apiKey) overrides.set("DATADOG_API_KEY", datadog.apiKey);
     if (datadog.applicationKey) overrides.set("DATADOG_APPLICATION_KEY", datadog.applicationKey);
-    // Shared identity — also used by BI Ops. Empty string clears the schedule.
+    // Shared identity — also used by infrastructure plugins. Empty string clears the schedule.
     if (datadog.email !== undefined) {
       const v = datadog.email.trim();
-      if (v) overrides.set("BI_OPS_USER_EMAIL", v);
+      if (v) overrides.set("DATADOG_USER_EMAIL", v);
     }
     if (datadog.scheduleId !== undefined) {
       const v = datadog.scheduleId.trim();
@@ -179,11 +179,11 @@ export async function POST(req: NextRequest) {
     needsRestartNotice = true;
   }
 
-  if (bi) {
-    if (bi.capiRepoPath !== undefined) {
-      const v = bi.capiRepoPath.trim();
-      if (v) overrides.set("CAPI_REPO_PATH", resolveSetupPath(v));
-      else overrides.delete("CAPI_REPO_PATH");
+  if (infra) {
+    if (infra.scriptsRepoPath !== undefined) {
+      const v = infra.scriptsRepoPath.trim();
+      if (v) overrides.set("AUTOMATION_REPO_PATH", resolveSetupPath(v));
+      else overrides.delete("AUTOMATION_REPO_PATH");
     }
   }
 
@@ -232,7 +232,7 @@ export async function POST(req: NextRequest) {
   syncGoogleProcessEnvFromOverrides(overrides);
   syncJiraProcessEnvFromOverrides(overrides);
   syncDatadogProcessEnvFromOverrides(overrides);
-  syncBiProcessEnvFromOverrides(overrides);
+  syncInfraProcessEnvFromOverrides(overrides);
   syncPaseoProcessEnvFromOverrides(overrides);
   syncAgentProcessEnvFromOverrides(overrides);
 
@@ -250,9 +250,9 @@ export async function POST(req: NextRequest) {
   if (jira?.apiToken) saved.push(`JIRA_API_TOKEN=${mask(jira.apiToken)}`);
   if (datadog?.apiKey) saved.push(`DATADOG_API_KEY=${mask(datadog.apiKey)}`);
   if (datadog?.applicationKey) saved.push(`DATADOG_APPLICATION_KEY=${mask(datadog.applicationKey)}`);
-  if (datadog?.email?.trim()) saved.push(`BI_OPS_USER_EMAIL=${datadog.email.trim()}`);
+  if (datadog?.email?.trim()) saved.push(`DATADOG_USER_EMAIL=${datadog.email.trim()}`);
   if (datadog?.scheduleId?.trim()) saved.push(`DATADOG_ONCALL_SCHEDULE_ID=${datadog.scheduleId.trim()}`);
-  if (bi?.capiRepoPath && overrides.get("CAPI_REPO_PATH")) saved.push(`CAPI_REPO_PATH=${overrides.get("CAPI_REPO_PATH")}`);
+  if (infra?.scriptsRepoPath && overrides.get("AUTOMATION_REPO_PATH")) saved.push(`AUTOMATION_REPO_PATH=${overrides.get("AUTOMATION_REPO_PATH")}`);
   if (agent?.provider) saved.push(`DEVHUB_AI_PROVIDER=${normalizeAiProvider(agent.provider) ?? agent.provider}`);
   else if (agent?.cli !== undefined) saved.push(`DEVHUB_AGENT_CLI=${normalizeAgentCli(agent.cli)}`);
   if (agent?.opencodeModel?.trim()) saved.push(`DEVHUB_AGENT_OPENCODE_MODEL=${agent.opencodeModel.trim()}`);

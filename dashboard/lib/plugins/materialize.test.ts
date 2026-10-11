@@ -11,17 +11,17 @@ let pluginRoot: string;
 
 function mkPlugin(rootDir: string): RegisteredPlugin {
   return {
-    name: "bi",
+    name: "team-tools",
     path: rootDir,
     enabled: true,
     manifest: {
-      name: "bi",
+      name: "team-tools",
       version: "0.1.0",
       devhubApi: "1",
       contributes: {},
       dashboard: {
         root: "dashboard",
-        paths: ["app/ops", "lib/bi-ops.ts"],
+        paths: ["app/ops", "lib/team-ops.ts"],
       },
     },
   };
@@ -32,7 +32,7 @@ beforeEach(() => {
   fs.mkdirSync(path.join(pluginRoot, "dashboard", "app", "ops"), { recursive: true });
   fs.writeFileSync(path.join(pluginRoot, "dashboard", "app", "ops", "page.tsx"), "export default () => null;");
   fs.mkdirSync(path.join(pluginRoot, "dashboard", "lib"), { recursive: true });
-  fs.writeFileSync(path.join(pluginRoot, "dashboard", "lib", "bi-ops.ts"), "export const x = 1;");
+  fs.writeFileSync(path.join(pluginRoot, "dashboard", "lib", "team-ops.ts"), "export const x = 1;");
 });
 
 afterEach(() => {
@@ -43,7 +43,7 @@ describe("planDashboardMaterialization", () => {
   it("maps plugin dashboard paths to core dashboard paths + collects nav", () => {
     const plan = planDashboardMaterialization([mkPlugin(pluginRoot)], "/core/dashboard");
     expect(plan.errors).toEqual([]);
-    expect(plan.entries.map((e) => e.rel).sort()).toEqual(["app/ops", "lib/bi-ops.ts"]);
+    expect(plan.entries.map((e) => e.rel).sort()).toEqual(["app/ops", "lib/team-ops.ts"]);
     expect(plan.entries[0].to.startsWith("/core/dashboard")).toBe(true);
   });
 
@@ -82,16 +82,16 @@ describe("materializePlugins (executor)", () => {
     fs.writeFileSync(
       path.join(pluginRoot, "devhub-plugin.json"),
       JSON.stringify({
-        name: "bi",
+        name: "team-tools",
         version: "0.1.0",
         devhubApi: "1",
         contributes: {},
-        dashboard: { root: "dashboard", paths: ["app/ops", "lib/bi-ops.ts"] },
+        dashboard: { root: "dashboard", paths: ["app/ops", "lib/team-ops.ts"] },
       }),
     );
     const reg = pluginRegistryPath(home);
     fs.mkdirSync(path.dirname(reg), { recursive: true });
-    fs.writeFileSync(reg, JSON.stringify({ plugins: [{ name: "bi", path: pluginRoot, enabled: true }] }));
+    fs.writeFileSync(reg, JSON.stringify({ plugins: [{ name: "team-tools", path: pluginRoot, enabled: true }] }));
     process.env.HOME = home;
   });
 
@@ -104,24 +104,24 @@ describe("materializePlugins (executor)", () => {
     const code = materializePlugins({ repoRoot, emit: (l) => lines.push(l) });
     expect(code).toBe(0);
     expect(fs.existsSync(path.join(repoRoot, "dashboard", "app", "ops", "page.tsx"))).toBe(true);
-    expect(fs.existsSync(path.join(repoRoot, "dashboard", "lib", "bi-ops.ts"))).toBe(true);
+    expect(fs.existsSync(path.join(repoRoot, "dashboard", "lib", "team-ops.ts"))).toBe(true);
     const exclude = fs.readFileSync(path.join(repoRoot, ".git", "info", "exclude"), "utf-8");
     expect(exclude).toContain(EXCLUDE_BEGIN);
     expect(exclude).toContain("/dashboard/app/ops");
-    expect(exclude).toContain("/dashboard/lib/bi-ops.ts");
+    expect(exclude).toContain("/dashboard/lib/team-ops.ts");
   });
 
   it("refuses to clobber a git-tracked core path", () => {
-    // core already tracks dashboard/lib/bi-ops.ts
+    // core already tracks dashboard/lib/team-ops.ts
     const tracked = path.join(repoRoot, "dashboard", "lib");
     fs.mkdirSync(tracked, { recursive: true });
-    fs.writeFileSync(path.join(tracked, "bi-ops.ts"), "core owns this");
-    spawnSync("git", ["add", "dashboard/lib/bi-ops.ts"], { cwd: repoRoot });
+    fs.writeFileSync(path.join(tracked, "team-ops.ts"), "core owns this");
+    spawnSync("git", ["add", "dashboard/lib/team-ops.ts"], { cwd: repoRoot });
     spawnSync("git", ["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "core"], { cwd: repoRoot });
 
     const lines: string[] = [];
     materializePlugins({ repoRoot, emit: (l) => lines.push(l) });
-    expect(fs.readFileSync(path.join(tracked, "bi-ops.ts"), "utf-8")).toBe("core owns this");
+    expect(fs.readFileSync(path.join(tracked, "team-ops.ts"), "utf-8")).toBe("core owns this");
     expect(lines.some((l) => l.includes("git-tracked"))).toBe(true);
   });
 
@@ -139,7 +139,7 @@ describe("materializePlugins (executor)", () => {
     }
     // disable the plugin -> next run prunes
     const reg = pluginRegistryPath(home);
-    fs.writeFileSync(reg, JSON.stringify({ plugins: [{ name: "bi", path: pluginRoot, enabled: false }] }));
+    fs.writeFileSync(reg, JSON.stringify({ plugins: [{ name: "team-tools", path: pluginRoot, enabled: false }] }));
     materializePlugins({ repoRoot, emit: () => {} });
     expect(fs.existsSync(path.join(repoRoot, "dashboard", "app", "ops"))).toBe(false);
     for (const dir of nextDirs) {

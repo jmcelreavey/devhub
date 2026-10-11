@@ -4,9 +4,9 @@
  * appraisal) do NOT use this — they talk to disk directly and work headless.
  *
  * Everything stateful or action-oriented (scripts, status, briefing, calendar,
- * work, repos, and all BI ops) proxies through here so the dashboard process
+ * work, repos, and all plugin ops) proxies through here so the dashboard process
  * stays the single source of truth: it owns the run registry, the loaded
- * secrets, and (for BI) the active AWS profile.
+ * secrets, and (for plugin) the active AWS profile.
  *
  * The client now sends an `Origin` header and, when `DEVHUB_API_SECRET` is
  * set, an `X-DevHub-Secret` header so sensitive dashboard routes can enforce
@@ -103,6 +103,7 @@ export class DashboardClient {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     let res: Response;
+    let text: string;
     try {
       res = await fetch(url, {
         method,
@@ -113,6 +114,7 @@ export class DashboardClient {
         },
         body: body !== undefined ? JSON.stringify(body) : undefined,
       });
+      text = await res.text();
     } catch (err) {
       if (controller.signal.aborted) throw new DashboardTimeoutError(baseUrl, path, timeoutMs);
       throw new DashboardUnreachableError(baseUrl, err);
@@ -120,7 +122,6 @@ export class DashboardClient {
       clearTimeout(timer);
     }
 
-    const text = await res.text();
     let payload: unknown = text;
     if (text) {
       try {

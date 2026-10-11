@@ -72,9 +72,9 @@ describe("titles and summaries", () => {
         heading("Context", 2),
         paragraph("Jose flagged the ", link("https://example.com", "blur library"), " on iOS."),
       ],
-      "pr-reviews/acme-capi-673.json": [
+      "pr-reviews/acme-payments-673.json": [
         heading("Change story ids to postrefs"),
-        paragraph(link("https://github.com/acme/capi/pull/673", "capi#673")),
+        paragraph(link("https://github.com/acme/payments/pull/673", "payments#673")),
         paragraph("Verdict: Needs changes — the migration skips empty arrays."),
       ],
     });
@@ -84,7 +84,7 @@ describe("titles and summaries", () => {
       title: "PTF-4897 Analytics documentation",
       summary: "Jose flagged the blur library on iOS.",
     });
-    expect(bySlug.get("pr-reviews/acme-capi-673")?.summary).toBe(
+    expect(bySlug.get("pr-reviews/acme-payments-673")?.summary).toBe(
       "Verdict: Needs changes — the migration skips empty arrays.",
     );
   });
@@ -103,10 +103,10 @@ describe("titles and summaries", () => {
 describe("sections", () => {
   it("groups PR reviews by repo, newest PR first, keeping one-off repos", () => {
     vault({
-      "pr-reviews/acme-capi-600.json": [heading("Older capi PR"), paragraph("capi#600")],
-      "pr-reviews/acme-capi-673.json": [
-        heading("Newer capi PR"),
-        paragraph(link("https://github.com/acme/capi/pull/673", "capi#673")),
+      "pr-reviews/acme-payments-600.json": [heading("Older payments PR"), paragraph("payments#600")],
+      "pr-reviews/acme-payments-673.json": [
+        heading("Newer payments PR"),
+        paragraph(link("https://github.com/acme/payments/pull/673", "payments#673")),
       ],
       "pr-reviews/north-ptf-4788-bridge.json": [heading("Branch review"), paragraph("north@ptf-4788-bridge")],
       // No ref line and no PR link: filed by a repo another note already named.
@@ -116,9 +116,9 @@ describe("sections", () => {
     });
 
     expect(sectionsOf("pr-reviews")).toEqual([
-      ["capi", ["acme-capi-673", "acme-capi-600"]],
       ["edit-ops", ["acme-edit-ops-12"]],
       ["north", expect.arrayContaining(["north-ptf-4788-bridge", "north-ptf-4935-config"])],
+      ["payments", ["acme-payments-673", "acme-payments-600"]],
       [null, ["ptf-4484-feedback"]],
     ]);
   });
@@ -192,8 +192,8 @@ it("orders areas busiest first, with secondary areas last", () => {
     "archive/b.json": [heading("B")],
     "archive/c.json": [heading("C")],
     "daily/2026-09-24.json": [heading("Today")],
-    "pr-reviews/acme-capi-1.json": [heading("One")],
-    "pr-reviews/acme-capi-2.json": [heading("Two")],
+    "pr-reviews/acme-payments-1.json": [heading("One")],
+    "pr-reviews/acme-payments-2.json": [heading("Two")],
   });
 
   expect(getNoteIndex().areas.map((area) => area.meta.id)).toEqual(["pr-reviews", "daily", "archive"]);

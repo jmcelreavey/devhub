@@ -116,7 +116,7 @@ describe("parseGraphLog + layout", () => {
     const layout = layoutCommitGraph(commits);
     expect(layout[0]?.lane).toBe(0);
     expect(layout[0]?.parentLanes[0]?.lane).toBe(0);
-    expect(laneColor(0)).toMatch(/^#[0-9a-f]{6}$/);
+    expect(laneColor(0)).toBe("var(--chart-1, #4f9dff)");
   });
 });
 

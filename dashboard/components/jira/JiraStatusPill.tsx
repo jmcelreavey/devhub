@@ -1,4 +1,5 @@
 "use client";
+import { integrationFetch } from "@/lib/integrations/client-fetch";
 
 import { useState, useCallback } from "react";
 import { SeverityPill } from "@/components/ui/Severity";
@@ -22,11 +23,12 @@ export function JiraStatusPill({ ticketKey, status, onChanged }: JiraStatusPillP
     setOpen(false);
     if (!transitionId) return;
     try {
-      const res = await fetch(`/api/jira/ticket/${ticketKey}/transition`, {
+      const res = await integrationFetch(`/api/jira/ticket/${ticketKey}/transition`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ transitionId }),
       });
+      if (!res) return;
       if (!res.ok) throw new Error("Transition failed");
       toast.success(`Updated ${ticketKey}`);
       void mutate("/api/jira/tickets");

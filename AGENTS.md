@@ -54,13 +54,13 @@ All from the repo root:
 
 ### Plugin Architecture — CRITICAL FOR EDITING
 
-DevHub uses a **tier-2 plugin system**. Private modules (BI ops, CAPI scripts, etc.) live in **separate plugin repos**, not in this repo. On `npm run dev`, the `predev` → `sync_plugins` step **materializes** plugin files into the core dashboard tree via `fs.cpSync`.
+DevHub uses a **tier-2 plugin system**. Private modules (team operations, automation scripts, etc.) live in **separate plugin repos**, not in this repo. On `npm run dev`, the `predev` → `sync_plugins` step **materializes** plugin files into the core dashboard tree via `fs.cpSync`.
 
 **This means:**
-- Files like `dashboard/lib/bi-ops.ts`, `dashboard/components/CapiScriptsCard.tsx`, `dashboard/app/api/bi/**` are **copies** — they get overwritten on every server restart.
+- Files like `dashboard/lib/team-ops.ts`, `dashboard/components/TeamScriptsCard.tsx`, `dashboard/app/api/team-tools/**` are **copies** — they get overwritten on every server restart.
 - **Always edit the plugin source**, never the materialized copy. The materializer will silently destroy your changes.
 - Plugin registry: `~/.config/devhub/plugins.json` — lists plugin name + path.
-- Plugin `devhub-bi` source: `~/Developer/devhub-bi/dashboard/` — edit files there.
+- Plugin `team-tools` source: `~/Developer/team-tools/dashboard/` — edit files there.
 - New files that don't exist in the plugin should be created in the plugin repo, not in core.
 - Core-owned tracked files are protected unless the plugin manifest explicitly lists a tracked overlay. Check those overlays too; their materialised copies must not be edited.
 - After editing plugin source, restart the dev server (or the materializer will re-copy on next `predev`).

@@ -88,17 +88,27 @@ The Node/npm rows say **Included with DevHub** when the private toolchain is ava
 
 Progress: **Preparing bundled Node.js…**, **Checking bundled npm…**, **Installing Safe-Chain…**, **Installing Paseo…**, **Starting Paseo…**. Only display work actually taking place. A damaged or old package says **Bundled tools are unavailable** and “Update or reinstall DevHub, then try again.” Offer **Re-check**. Offline registry access says **Couldn’t download agent tools** and “Node.js is ready. Connect to the internet, then retry the installation.” **Try again**. Existing installed tools continue to work offline. Checkout users retain their system toolchain and existing setup instructions.
 
+### Built-in browser boundary · 10 October 2026
+
+The browser stays core-owned: it needs supervised Chrome, CDP input, response interception and a long-lived image stream. The request-worker transport is unsuitable. Dashboard endpoints use existing same-origin controls without exposing raw CDP or file paths to plugins or agents. The browser's pinned CONNECT proxy is separate from plugin network declarations, which remain disclosures and inherit no browser isolation guarantee.
+
 ## Migration and follow-ups
 
 Old manifests stay valid in checkout mode. Runtime declarations are optional and independently versioned; old packaged apps reject the unknown field rather than execute it. Legacy dashboard modules, overlays and providers remain build-time only. Runtime-capable manifests should keep checkout declarations only when the publisher supports both paths; the new runtime must cover its features explicitly.
 
-Initial portable workers do not support native addons, streaming, durable MCP sessions or core component overlays. Do not advertise an unchanged legacy plugin as compatible. Follow-ups: supervised HTTP-server artifacts per platform, authenticated release downloads with publisher signatures, atomic update/rollback, stronger OS sandboxing, a public database-provider RPC contract and platform desktop smoke tests. These require separate compatibility work rather than copying private code into core.
+Portable workers do not support native addons, durable MCP sessions or core component overlays. The request-worker action extension below adds bounded streaming to the initial single-response protocol. Do not advertise an unchanged legacy plugin as compatible. Follow-ups: supervised HTTP-server artifacts per platform, authenticated release downloads with publisher signatures, atomic update/rollback, stronger OS sandboxing, a public database-provider RPC contract and platform desktop smoke tests. These require separate compatibility work rather than copying private code into core.
 
-## Changes needed in the BI plugin
+## Request-worker actions
 
-Read-only inspection found a checkout-oriented dashboard, an MCP package that runs TypeScript through tsx, local branding assets, a core overlay and a database provider. No private implementation is copied here.
+A checkout plugin must ship a prebuilt runtime artifact before it can work in the packaged app. Its page, routes and dependencies belong in that artifact; do not copy its domain implementation or core overlays into public core.
 
-Its publisher needs to bundle the page/API code and dependencies into a portable runtime entry, adapt MCP to the stateless transport or wait for the supervised transport, declare environment/network/exec access, provide the lockfile and hashes, convert branding to the runtime data contract, and remove core-internal imports from that entry. The overlay and database-provider integration continue to require checkout mode until public runtime contracts exist. Streaming and long-running operations need the later server transport. Publish and test the runtime artifact from that private repository separately; this work does not change it.
+Request workers support an optional per-route `stream: true` and `timeoutSeconds` (30–900 seconds), included in install review and receipt identity. Streaming stdout is newline-delimited JSON: zero or more `{type:"output",text}` records, then exactly one `{type:"result",result}`. Existing routes still return one JSON value. The host bounds total output, validates records, preserves split UTF-8, and kills the local process group on disconnect, timeout or disable. This keeps the request-worker transport; no listener, daemon or detached local job is introduced.
+
+The neutral `team-tools` example in [Plugin actions](../guides/plugin-actions.md) separates list, review, execute and status. A plugin owns its validation, access policy, single-use expiring consent and code fingerprint. The generic host provides reviewed permissions, route dispatch, bounded output and cancellation; it does not interpret domain arguments or turn a dry-run flag into a write barrier.
+
+Persist remote command handles outside the immutable plugin tree. Closing a page or disabling a plugin stops local execution and observation, not an already submitted remote job. Check the provider after an ambiguous submission rather than retrying automatically. Credentials stay in the worker and must never cross the iframe bridge or appear in output.
+
+Core tests cover permission-constrained workers, changed-artifact receipts, streaming framing, output limits, split UTF-8, timeout and disconnect cleanup. Fixture UI captures demonstrate the generic browser, integrations and editor flows without provider writes. Domain-specific worker verification remains the plugin publisher's responsibility.
 
 ## Decisions for John
 

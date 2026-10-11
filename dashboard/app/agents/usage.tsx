@@ -84,7 +84,7 @@ function Meter({ meter }: { meter: UsageMeter }) {
       <span className="text-text-muted tabular-nums">{Math.round(meter.percent)}%{meter.resetsAt && <span className="text-text-subtle"> · resets {formatRelative(Date.parse(meter.resetsAt))}</span>}</span>
     </div>
     <div className="h-1.5 rounded-full overflow-hidden bg-bg" role="meter" aria-label={meter.label} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(percent)}>
-      <div className="h-full rounded-full" style={{ width: `${percent}%`, background: meterTone(meter.percent) }} />
+      <div key={percent} className="graphite-meter-fill h-full rounded-full" style={{ width: `${percent}%`, background: meterTone(meter.percent) }} />
     </div>
   </div>;
 }

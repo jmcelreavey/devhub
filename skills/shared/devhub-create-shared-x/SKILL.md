@@ -81,6 +81,13 @@ What this skill is for and the default outcome.
 - Keep frontmatter valid YAML.
 - Do not include secrets or private credentials.
 - Do not include AI attribution footers for commits, PRs, or published text.
+- The description is the trigger. Lead with the situation that should load the skill. One phrase per distinct case. Don't repeat the title.
+- Every step ends on a check you can tell is done.
+- Say what to do. Use a ban only when you can't phrase the positive, and then pair it with the positive.
+- Keep each rule in one place. Don't copy `package.json` scripts, the directory tree, or anything the agent can look up.
+- Detail that only some runs need goes in a sibling file the skill points at.
+
+Those last five are adapted from Matt Pocock's `writing-for-agents` skill (MIT). The same list is in `docs/guides/skills.md`.
 
 ## Persona Guidance
 

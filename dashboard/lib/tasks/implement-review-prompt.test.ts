@@ -14,6 +14,9 @@ describe("buildImplementReviewPrompt", () => {
   it("makes the reviewer read-only and points it at the plan and the note", () => {
     const prompt = buildImplementReviewPrompt({ ...base, repoName: "payments-api", jiraKey: "PAY-482" });
     expect(prompt).toContain("pr-explain-review skill in local pre-PR mode");
+    expect(prompt).toContain("code-review skill");
+    expect(prompt).toContain("## Standards");
+    expect(prompt).toContain("## Spec");
     expect(prompt).toContain("Cap webhook retries with jitter (PAY-482)");
     expect(prompt).toContain("http://127.0.0.1:1337/api/tasks/implement/plan?taskId=task-1&date=2026-10-07&repo=payments-api");
     expect(prompt).toContain(base.cwd);

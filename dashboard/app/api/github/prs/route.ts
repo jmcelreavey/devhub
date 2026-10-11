@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
+import { githubScreen } from "@/lib/integrations/screen-data";
+const { prs: fetchMyGithubPrs, recentlyReviewed: fetchRecentlyReviewedPrs, archived: isRepoArchived } = githubScreen;
 import {
-  fetchMyGithubPrs,
-  fetchRecentlyReviewedPrs,
-  isRepoArchived,
   readGithubPrsListCache,
   readStaleGithubPrsListCache,
   writeGithubPrsListCache,

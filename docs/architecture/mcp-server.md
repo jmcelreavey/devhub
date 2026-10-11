@@ -46,10 +46,10 @@ The server has three tool tiers:
 | Tier              | Source Of Truth                           | Dashboard Required | Tool Groups                                                                                                                                                                          |
 | ----------------- | ----------------------------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Filesystem-backed | Local files under configured content dirs | No                 | Notes, docs, tasks, diagrams, appraisal, DX audit, MCP call history                                                                                                                  |
-| Dashboard-backed  | DevHub HTTP routes on `DEVHUB_BASE_URL`   | Yes                | Status, briefing, calendar, work/PRs/Jira, assets, search, scripts, repos (list/open/reveal/clone/learn + full git workspace), capability, sessions, share, workspace reads, Datadog, terminal, agent dispatch (`agent_*`), **database client (`db_*`)** |
+| Dashboard-backed  | DevHub HTTP routes on `DEVHUB_BASE_URL`   | Yes                | Status, briefing, calendar, work/PRs/Jira, assets, search, scripts, repos (list/open/reveal/clone/learn + full git workspace), capability, sessions, share, workspace reads, Datadog, terminal, agent dispatch (`agent_*`), **database client (`db_*`)**, integration proposals, editor discussions, durable task evidence and reviewed plugin actions |
 | Script-backed     | Local shell scripts under `REPO_ROOT`     | No (runs detached) | `repo_ship`, `repo_ship_status`                                                                                                                                                      |
 
-Filesystem-backed tools call the vault/storage layer directly and work headless.
+Filesystem-backed tools call the vault/storage layer directly and work headless. The `tasks` toolset also carries dashboard-backed workflow/review tools; selecting that group does not make those particular tools headless.
 Dashboard-backed tools proxy through `DashboardClient`, defaulting to
 `http://localhost:1337`, because the dashboard owns runtime state such as service
 status, script run history, loaded integration secrets, and repo actions.
@@ -116,7 +116,8 @@ Client toolsets can narrow that list with `DEVHUB_MCP_TOOLSETS`; the registrars 
 | `repos`, `ownership` | Repo actions, Git workspace, conventions and owned-repo triage |
 | `db` | Database reads and confirmed writes through the dashboard |
 | `scripts`, `status`, `jobs`, `events` | Maintenance actions, diagnostics, scheduling and waits |
-| `work`, `calendar`, `datadog`, `briefing` | Integration and daily-work views |
+| `work`, `calendar`, `datadog`, `briefing` | Integration and daily-work views; `work` includes the approved browser tools |
+| `integrations`, `editor`, `plugins` | Integration proposals, captured-code discussions and reviewed plugin request-worker actions |
 | `recall`, `search`, `capability`, `sessions`, `dx-audit` | Retrieval, learning and saved reports |
 | `share`, `workspace`, `assets`, `ui` | Sharing, catalogue reads, voice training and opening pages |
 | `ship`, `history` | Shipping scripts and the MCP call trace |
@@ -127,7 +128,7 @@ files contain these words"; `recall` answers "what do I already know about
 this", returning ranked, budgeted, cited passages drawn from notes, docs, task
 history and the event spine together. See [Recall](recall.md).
 
-BI-specific MCP tools are contributed by the private BI plugin as a separate server; they are not part of the core DevHub server.
+The private plugin plugin contributes its broader plugin tools as a separate server. The core `plugins` toolset also provides a narrow bridge to that plugin's reviewed request-worker actions; it doesn't implement AWS operations or source-plugin routes itself.
 
 **Scope notes:** `notes_list` and `notes_search` cover the workspace slice only — `daily/` journals plus root-level `.json` scratch notes. Structured areas like `learnings/` need explicit paths via `notes_read`. `calendar_list` returns Google Calendar **calendars and selection state**, not events (use `calendar_week` for the week grid).
 
@@ -214,7 +215,7 @@ list, which is how Playwriter/`lean-ctx` looked "connected" while `execute` and
    process DevHub passes to Cursor agents in Paseo) to the Implement/Plan surface — notes, tasks, plans, work,
    agents, terminal, and a few others. Claude Code / Codex keep the full catalog.
 2. Rewrites Cursor `mcp.json` key order so `playwriter`, `lean-ctx`, `agentmemory`,
-   `figma`, and `devhub-bi` come before `devhub`. An overflow then drops DevHub
+   `figma` comes before `devhub`. An overflow then drops DevHub
    tail tools, not the small servers.
 3. Launches Playwriter through `dashboard/lib/mcp/playwriter-compact.ts`, which
    truncates `execute`'s ~53KB `prompt.md` description. The full API stays on
@@ -253,6 +254,12 @@ Clients that launch stdio servers (Claude Code, Cursor, Codex, OpenCode, AutoCla
 3. Use `docs_write` only after merging your intended change into the full current content.
 
 `docs_write` is a full-file replacement, not a patch API.
+
+`release_notes_read` lives in the `docs` toolset and reads repo-root
+`CHANGELOG.md` without the dashboard. Pass `version: "2.0.5"` (or `"v2.0.5"`)
+for one release, or `limit` (1–50, default 10) for recent releases.
+`includeUnreleased: true` includes planned changes; they're excluded by default.
+The tool is read-only and doesn't accept a file path.
 
 `notes_write_asset` accepts the same extensions as `GET /api/notes-assets/...`: `.jpg`, `.jpeg`, `.png`, `.gif`, `.webp`, and `.mp4`. Write the bytes first, then reference the notes-relative path in markdown (`![caption](path/to/asset.jpg)`).
 
@@ -459,6 +466,68 @@ Mutating tools take `confirm: true`. Agent jobs run with approvals off, so `jobs
 ### Ship everything to main
 
 `repo_ship` wraps `scripts/devhub-ship.sh`. It previews the actual public patch by default; pass `confirm: true` to allow commits and pushes. Pass `includeUpstream: false` to skip public-core reconciliation and the upstream push (`--no-upstream`). A confirmed run imports newer public-core changes first, commits personal data separately from code, pushes the private mirror, ports only the leak-scanned generic catalog patch to public `main` (no PR), and pushes enabled plugin repos. Confirmed runs start **detached** because pre-push verification takes several minutes; poll `repo_ship_status` until the log shows `SHIP DONE` or `SHIP FAILED`.
+
+### Integration proposals
+
+The `integrations` toolset uses the existing `/api/integrations` and `/api/integrations/writes` routes:
+
+| Tool | Input | Behaviour |
+| --- | --- | --- |
+| `integrations_list` | Optional `taskId` | Providers, advertised capabilities, account references and task links; no credentials. |
+| `integrations_proposals` | None | Recent proposals, outcomes and chat configuration for the active profile. |
+| `integrations_propose` | `input` action object | Creates a request for `issue.create`, `issue.transition`, `pr.create`, `pr.update` or `pr.publish`; no provider write. |
+| `integrations_review` | Proposal `id` | Fetches identity, destination and current remote evidence for the exact preview; no execution. |
+| `integrations_alert_destinations` | None | Active-profile destinations, consent revisions and recent deliveries; credential references only, never values. |
+| `integrations_alert_test` | Destination `id`, current `revision`, UUID `requestId` | One fixed test to an already enabled Slack/Telegram destination. Reuse the request ID after uncertain transport; no automatic retry or consent change. |
+| `integrations_chat_status` | None | Command enablement/configuration status, active-profile allowlist counts, webhook paths and variable names; no secrets, allowlist identities or enabling operation. |
+
+For example, `integrations_propose` accepts:
+
+```json
+{"input":{"action":"pr.create","provider":"github","account":"default","repo":"owner/repository","head":"feature/fix","base":"main","title":"Fix retry handling","body":"Describe the change and verification.","draft":true}}
+```
+
+Show the returned preview to the human, then open **Integrations → Recent actions**. There is deliberately **no confirm/execute tool**. The existing dashboard confirmation binds account/profile, remote revision and a 15-minute single-use proposal. Unknown outcomes aren't automatically retried. See [Integrations](../guides/integrations.md) for the other action fields, chat allowlists and alert consent.
+
+### Discuss an editor selection
+
+The `editor` toolset doesn't pair an editor or install code-server. It uses the existing dashboard selection/discussion path:
+
+| Tool | Input | Behaviour |
+| --- | --- | --- |
+| `editor_selection` | `target: {kind: "selection", id}` or `{kind: "workspace", workspace}` | Reads an expiring preview or the next pending preview in that workspace. |
+| `editor_discussions` | `selection` | Lists same-checkout conversation/task choices; no dispatch. |
+| `editor_discuss` | `selection`, `requestId`, `question`, `provider`; optional `runId`, `taskId`; `confirm: true` | Sends the reviewed snapshot or resumes an idle matching conversation. |
+
+A selection contains `workspaceId`, `relativePath`, `revision`, `ranges`, `selectedText`, `dirty`, `source` (`staged`, `unstaged` or `editor`) and optional `documentVersion`. The 12,000-character snapshot stays exact; it isn't replaced from disk. Questions are limited to 8,000 characters. Reuse the UUID `requestId` for a retry so dispatch stays deduplicated. The dashboard validates checkout ownership and retains the existing conversation's task.
+
+The user must review the code, provider and question before `confirm: true`. No new worktree is created, and a discussion doesn't replace implementation Resume. Explanation instructions aren't a permissions sandbox. Code may contain secrets or untrusted instructions. See [Editor](../guides/editor.md).
+
+### Durable task evidence
+
+These tools travel with the existing `tasks` toolset:
+
+| Tool | Input | Behaviour |
+| --- | --- | --- |
+| `tasks_workflow_get` | Optional `taskId` | Task evidence or workflow inbox. Per-task reads reconcile runs and invalidate stale evidence; they never rerun checks. |
+| `tasks_workflow_review` | `taskId`, current `revision`, completed reviewer `runId`, `verdict` (`pass`/`changes-requested`), `findings` | Records an independent review only with current passing checks and the unchanged reviewer/code fingerprint. |
+
+Human proposal decisions remain in Task workflows; neither tool approves or publishes. A revision/fingerprint conflict needs a fresh read, not a blind retry. Review records and checks survive a service restart in the workflow store. See [Task checks and review persistence](../guides/task-checks-and-reviews.md).
+
+### Reviewed plugin actions
+
+The `plugins` toolset requires an enabled, reviewed portable bundle and local plugin-management access. Calls go through `/api/plugins/runtime/<plugin>`; the host verifies the bundle hashes and declared routes. There is no source-route or arbitrary command fallback.
+
+| Tool | Input | Behaviour |
+| --- | --- | --- |
+| `plugins_action_list` | `plugin`, `kind: "actions"` or `"runs"` | Lists actions or recorded outcomes. |
+| `plugins_action_review` | `plugin`, plugin-defined `input` (at most 32 KiB) | Reviews the exact action; the plugin owns validation, policy and expiring single-use tokens. |
+| `plugins_action_run` | `plugin`, reviewed UUID `token`, `confirm: true` | Executes only after human approval of the exact action and warning. Returns output and final receipt. |
+| `plugins_action_status` | `plugin`, UUID `runId` | Reads the recorded outcome without starting, cancelling or retrying an action. |
+
+For example, `team-tools` can review a validation action for an allowlisted sample workspace. The plugin must enforce any release, environment, account or code-fingerprint policy itself. Dry-run labels do not enforce read-only execution.
+
+MCP returns streamed worker output **after completion**, not live events. After a timeout or uncertain receipt, inspect the recorded run and actual destination before considering another review. Never automatically retry a token. See [Plugin actions](../guides/plugin-actions.md).
 
 ## Plugin MCP Servers
 

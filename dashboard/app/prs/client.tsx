@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import Link from "next/link";
 import type { FormEvent } from "react";
 import { GitPullRequest, RefreshCw, RotateCcw, X } from "lucide-react";
 import { AutoReviewBar } from "./AutoReviewBar";
@@ -188,6 +189,7 @@ export default function PrsPage() {
       <div className="page-header">
         <h1 className="page-title">Pull Requests</h1>
         <div className="flex items-center gap-2">
+          <Link className="btn btn-ghost" href="/integrations?action=pr.create#actions">Create or update PR…</Link>
           <span className="badge badge-muted">{authored.length + reviews.length}</span>
           <button
             type="button"

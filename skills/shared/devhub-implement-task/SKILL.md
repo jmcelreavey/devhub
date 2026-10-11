@@ -103,7 +103,13 @@ On **Resume / Continue**, the prompt includes those Activity notes under `prior 
 
 1. Write/update handoff via `tasks_agent_handoff_set` (use `mode: "append"` only for additive checkpoints; prefer a full replace that stays current).
 2. Include at least: what changed, branch/PR/session if any, verify status, open questions, and the exact next action.
-3. Set the linked run to `paused` (EOD/pause) or `abandoned` (giving up) via `tasks_agent_runs`.
+3. Point at notes, the plan, the Jira ticket, commits, and diffs by path or URL. Do not paste them again.
+4. Name the skills the next session should load.
+5. If you know what that session is for, write the handoff for that job, not a diary of this one.
+6. Redact secrets, tokens, and customer data.
+7. Set the linked run to `paused` (EOD/pause) or `abandoned` (giving up) via `tasks_agent_runs`.
+
+Points 3 to 6 are adapted from Matt Pocock's `handoff` skill (MIT).
 
 Do not rely on chat scrollback alone — the handoff is what the next session reads first.
 
@@ -176,7 +182,7 @@ Investigation produces writing — a service contract you reverse-engineered,
 probe results, an ownership trail, a decision record. **That output is a DevHub
 note, never a file in the target repo.** Default to
 `discovery/<TICKET>-<short-slug>`, matching the vault's existing
-`discovery/PTF-xxxx-*` notes, with a `## Links` section carrying **Jira**,
+`discovery/APP-xxxx-*` notes, with a `## Links` section carrying **Jira**,
 **Repo**, and **Task** entries — otherwise the ticket
 and the task have no way to find it.
 
@@ -244,8 +250,19 @@ In the target repo:
 Run the repo's own checks (lint, typecheck, tests - check package.json /
 Makefile / CI config for what they are). **All must pass before you offer any
 post-implementation step.** If they fail, fix or report - do not offer a PR
-on a red baseline. Check the final diff for unrelated changes and record the
+on a red baseline. Run the single test file as you go, and the full suite
+once at this gate. Check the final diff for unrelated changes and record the
 exact verification commands/results in the task note summary.
+
+When the user asked for test-first, or you are locking a bug in with a
+regression test: red, then green. One failing test at the public seam the
+plan named, then the smallest code that makes it pass. One slice at a time.
+Do not write the whole suite before any implementation. Assert on behaviour
+a caller can see. Do not mock your own modules, and do not recompute the
+expected value the way the implementation does. Refactor after the slice is
+green, in the review, not inside the red-green loop. A bug with no seam that
+can see the real failure is a finding, not a fake unit test (`diagnosing-bugs`).
+The red-then-green loop is adapted from Matt Pocock's `tdd` skill (MIT).
 
 If the target is the DevHub dashboard UI, load `devhub-dashboard-verify` before
 opening a browser. **localhost:1337 is the packaged production app**, not
@@ -274,6 +291,10 @@ review either way. Include:
   line estimate or `Lean already. Ship.`;
 - tests checked, exact command results, and manual validation still pending;
 - verdict.
+- `## Standards` and `## Spec` from the `code-review` skill, on this same
+  diff. The spec is the task note and the Jira ticket. Leave those two
+  sections separate from the findings above. Fix must-fix items from both
+  axes before you offer commit/push.
 
 Fix every must-fix finding, rerun the relevant checks, and refresh the note
 before offering post-implementation actions. Once a PR exists (step 5.2),

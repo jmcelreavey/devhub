@@ -3,6 +3,7 @@ import { requireDashboardAuth, withErrorHandler } from "@/lib/api-utils";
 import {
   listTaskAgentRunTaskIds,
   listTaskAgentRuns,
+  latestImplementationRun,
   type TaskAgentRunSummaries,
 } from "@/lib/tasks/task-agent-runs";
 import { reconcileTaskAgentRunSidecar } from "@/lib/tasks/reconcile-task-agent-sidecar";
@@ -16,7 +17,7 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   const tasks: TaskAgentRunSummaries = {};
   for (const taskId of listTaskAgentRunTaskIds()) {
     const file = await reconcileTaskAgentRunSidecar(taskId);
-    tasks[taskId] = { handoff: file.handoff, latestRun: listTaskAgentRuns(taskId)[0] ?? null };
+    tasks[taskId] = { handoff: file.handoff, latestRun: latestImplementationRun(listTaskAgentRuns(taskId)) };
   }
   return NextResponse.json({ tasks });
 }, "tasks.agentRuns.summary.get");

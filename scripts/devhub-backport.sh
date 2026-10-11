@@ -9,6 +9,8 @@
 #   <source-ref>   Branch/commit holding your feature (e.g. feat/plugin-system).
 #   --execute      Actually commit, push to origin, and open the PR. Default: preview only.
 #   --title "..."  PR title (default: derived from source-ref).
+#   --snapshot     Backport the final source tree against public main (no commit replay).
+#   --patch-only   Print the scanned patch without switching branches or committing.
 #
 # The public core has an UNRELATED history (it was seeded from a clean tree so private
 # history never leaks), so this ports the feature's *hunks* onto upstream via `git apply`
@@ -29,12 +31,14 @@ SOURCE_REF=""
 BASE_REF=""
 EXECUTE=0
 PATCH_ONLY=0
+SNAPSHOT=0
 REQUIRE_SYNCED=0
 TITLE=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --execute) EXECUTE=1; shift ;;
     --patch-only) PATCH_ONLY=1; shift ;;
+    --snapshot) SNAPSHOT=1; shift ;;
     --require-synced) REQUIRE_SYNCED=1; shift ;;
     --title) TITLE="${2:-}"; shift 2 ;;
     --base) BASE_REF="${2:-}"; shift 2 ;;
@@ -42,7 +46,7 @@ while [[ $# -gt 0 ]]; do
     *) SOURCE_REF="$1"; shift ;;
   esac
 done
-[[ -n "$SOURCE_REF" ]] || fail "Provide a source ref. Usage: devhub-backport.sh <source-ref> [--base <ref>] [--execute]"
+[[ -n "$SOURCE_REF" ]] || fail "Provide a source ref. Usage: devhub-backport.sh <source-ref> [--base <ref>|--snapshot] [--patch-only|--execute]"
 # Base = the mirror commit already represented in public core. Defaults to the source's
 # parent (correct when backporting the tip commit after a fresh pull). For a multi-commit
 # feature, pass --base <branch-point>.
@@ -88,6 +92,7 @@ git fetch --quiet upstream
 UPSTREAM_BRANCH="$(git symbolic-ref --quiet --short refs/remotes/upstream/HEAD 2>/dev/null | sed 's@^upstream/@@' || true)"
 [[ -n "$UPSTREAM_BRANCH" ]] || UPSTREAM_BRANCH="main"
 UPSTREAM_REF="upstream/${UPSTREAM_BRANCH}"
+if [[ "$SNAPSHOT" == "1" ]]; then BASE_REF="$UPSTREAM_REF"; fi
 UPSTREAM_URL="$(git remote get-url upstream)"
 UPSTREAM_SLUG="$(echo "$UPSTREAM_URL" | sed -E 's#(git@github.com:|https://github.com/)##; s#\.git$##')"
 

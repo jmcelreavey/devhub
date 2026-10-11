@@ -1,6 +1,7 @@
 "use client";
 
 import { DependencyChecklist } from "@/components/setup/DependencyChecklist";
+import { ReleaseNotesAbout } from "@/components/releases/ReleaseNotes";
 import { PaseoConnection } from "@/app/agents/paseo-connection";
 import { PrivateRepoSetup } from "@/components/setup/PrivateRepoSetup";
 import { filterStepsByGoals } from "@/lib/setup/goals";
@@ -112,7 +113,7 @@ const STEPS: Step[] = [
     optional: true,
   },
   {
-    id: "bi",
+    id: "infra",
     title: "Infra",
     icon: <Cloud size={18} />,
     description: "AWS profile + infra tooling (optional)",
@@ -182,8 +183,8 @@ export default function SetupPage() {
   const githubPollRef = useRef(0);
   const [calendarConnectBusy, setCalendarConnectBusy] = useState(false);
   const [calendarBanner, setCalendarBanner] = useState("");
-  const [biChecking, setBiChecking] = useState(false);
-  const [biForm, setBiForm] = useState({ capiRepoPath: "" });
+  const [infraChecking, setInfraChecking] = useState(false);
+  const [infraForm, setInfraForm] = useState({ scriptsRepoPath: "" });
   const [agentForm, setAgentForm] = useState<{
     provider: "cursor-cli" | "chatgpt-cli" | "antigravity-cli" | "opencode" | "api" | null;
     opencodeModel: string;
@@ -250,8 +251,8 @@ export default function SetupPage() {
         email: data.datadogVars.email,
         scheduleId: data.datadogVars.scheduleId,
       }));
-      if (data.biVars.capiRepoPath) {
-        setBiForm({ capiRepoPath: data.biVars.capiRepoPath });
+      if (data.infraVars.scriptsRepoPath) {
+        setInfraForm({ scriptsRepoPath: data.infraVars.scriptsRepoPath });
       }
       if (data.agentVars) {
         setAgentForm({
@@ -393,7 +394,7 @@ export default function SetupPage() {
     if (s.id === "datadog" && status) return { ...s, configured: status.datadog };
     if (s.id === "calendar" && status) return { ...s, configured: status.calendar };
     if (s.id === "jira" && status) return { ...s, configured: status.jira };
-    if (s.id === "bi" && status) return { ...s, configured: status.bi };
+    if (s.id === "infra" && status) return { ...s, configured: status.infra };
     if (s.id === "agent" && status) return { ...s, configured: Boolean(status.agentVars?.provider) };
     return s;
   });
@@ -744,8 +745,8 @@ export default function SetupPage() {
         if (!payload.ok) throw new Error(payload.error);
         if (payload.jira) body.jira = payload.jira;
       }
-      if (step.id === "bi") {
-        body.bi = { capiRepoPath: biForm.capiRepoPath };
+      if (step.id === "infra") {
+        body.infra = { scriptsRepoPath: infraForm.scriptsRepoPath };
       }
       if (step.id === "agent" && agentForm.provider) {
         body.agent = agentForm;
@@ -768,7 +769,7 @@ export default function SetupPage() {
     } finally {
       setSaving(false);
     }
-  }, [currentStep, pathsForm, datadogForm, calendarForm, jiraForm, biForm.capiRepoPath, agentForm, status, steps, goNext, loadSetupStatus]);
+  }, [currentStep, pathsForm, datadogForm, calendarForm, jiraForm, infraForm.scriptsRepoPath, agentForm, status, steps, goNext, loadSetupStatus]);
 
   const goToStep = (i: number) => {
     if (i < 0 || i >= steps.length || i === currentStep) return;
@@ -799,6 +800,7 @@ export default function SetupPage() {
   if (!status || !progressState.ready) {
     return (
       <div className="page-wrapper">
+        <ReleaseNotesAbout />
         {error || progressState.error ? (
           <FetchError message={error || progressState.error} onRetry={() => {
             void loadSetupStatus();
@@ -841,6 +843,7 @@ export default function SetupPage() {
             Set up later
           </button>
         </div>
+        <ReleaseNotesAbout />
         {progressState.error && <FetchError message={progressState.error} onRetry={progressState.retry} />}
         {/* Progress bar */}
         <div
@@ -1036,22 +1039,22 @@ export default function SetupPage() {
               checkOk={checkOk}
             />
           )}
-          {step.id === "bi" && (
+          {step.id === "infra" && (
             <InfraStep
-              configured={status.bi}
-              awsProfile={status.biVars.awsProfile}
-              account={status.biVars.account}
-              checking={biChecking}
+              configured={status.infra}
+              awsProfile={status.infraVars.awsProfile}
+              account={status.infraVars.account}
+              checking={infraChecking}
               onCheckConnection={async () => {
-                setBiChecking(true);
+                setInfraChecking(true);
                 try {
                   await loadSetupStatus();
                 } finally {
-                  setBiChecking(false);
+                  setInfraChecking(false);
                 }
               }}
-              capiRepoPath={biForm.capiRepoPath}
-              onCapiRepoPathChange={(v) => setBiForm((prev) => ({ ...prev, capiRepoPath: v }))}
+              scriptsRepoPath={infraForm.scriptsRepoPath}
+              onScriptsRepoPathChange={(v) => setInfraForm((prev) => ({ ...prev, scriptsRepoPath: v }))}
             />
           )}
           {step.id === "agent" && (

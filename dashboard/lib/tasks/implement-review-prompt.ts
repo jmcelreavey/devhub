@@ -38,6 +38,7 @@ export function buildImplementReviewPrompt(input: ImplementReviewPromptInput): s
   if (input.base) lines.push(`Intended remote base: ${input.base}.`);
   lines.push(
     `Save the review as the DevHub note ${input.notePath} (create it, or replace its body if it exists). Its ## Links section must carry a **Repo:** backlink to the local clone folder and a **Task:** backlink for task id ${input.taskId} dated ${input.date}.`,
+    "Also follow the code-review skill on this same diff. The spec is this task and its Jira ticket. Put its reports in this same note under ## Standards and ## Spec, and leave those two sections separate from the other findings.",
     "Finish by replying with the verdict and a numbered list of must-fix findings, each with a file and line. If there are none, say so.",
   );
   return lines.join("\n");

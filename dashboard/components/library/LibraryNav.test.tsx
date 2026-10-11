@@ -14,8 +14,8 @@ const groups: LibraryNavGroup[] = [
     id: "pr-reviews",
     label: "PR reviews",
     items: [
-      { slug: "pr-reviews/acme-capi-2", title: "Postrefs migration", href: "/notes/pr-reviews/acme-capi-2", section: "capi" },
-      { slug: "pr-reviews/acme-capi-1", title: "Search endpoint", href: "/notes/pr-reviews/acme-capi-1", section: "capi" },
+      { slug: "pr-reviews/acme-payments-2", title: "Postrefs migration", href: "/notes/pr-reviews/acme-payments-2", section: "payments" },
+      { slug: "pr-reviews/acme-payments-1", title: "Search endpoint", href: "/notes/pr-reviews/acme-payments-1", section: "payments" },
       { slug: "pr-reviews/acme-atlas-9", title: "Bridge contract", href: "/notes/pr-reviews/acme-atlas-9", section: "atlas" },
       { slug: "pr-reviews/loose", title: "Unfiled review", href: "/notes/pr-reviews/loose" },
     ],
@@ -45,17 +45,17 @@ describe("LibraryNav sections", () => {
   it("opens the active group as a list of collapsed sections, loose items after", () => {
     renderNav();
 
-    expect(screen.getByRole("button", { name: /capi/ })).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByRole("button", { name: /payments/ })).toHaveAttribute("aria-expanded", "false");
     expect(screen.getByRole("button", { name: /atlas/ })).toHaveAttribute("aria-expanded", "false");
     expect(screen.queryByText("Postrefs migration")).toBeNull();
     expect(screen.getByText("Unfiled review")).toBeInTheDocument();
   });
 
   it("opens the section holding the note being read", () => {
-    route.pathname = "/notes/pr-reviews/acme-capi-1";
+    route.pathname = "/notes/pr-reviews/acme-payments-1";
     renderNav();
 
-    expect(screen.getByRole("button", { name: /capi/ })).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("button", { name: /payments/ })).toHaveAttribute("aria-expanded", "true");
     expect(screen.getByText("Search endpoint")).toHaveAttribute("data-active", "true");
     expect(screen.queryByText("Bridge contract")).toBeNull();
   });
@@ -72,7 +72,7 @@ describe("LibraryNav sections", () => {
 
   it("never hides search results behind a collapsed section, and matches section names", () => {
     route.pathname = "/notes";
-    renderNav("capi");
+    renderNav("payments");
 
     expect(screen.getByText("Postrefs migration")).toBeInTheDocument();
     expect(screen.getByText("Search endpoint")).toBeInTheDocument();

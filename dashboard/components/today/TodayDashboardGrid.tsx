@@ -13,6 +13,7 @@ import "react-grid-layout/css/styles.css";
 import type { LayoutItem } from "react-grid-layout";
 import "react-resizable/css/styles.css";
 import { ResizeHandle } from "@/components/shell/ResizeHandle";
+import { RESIZE_AXES } from "@/lib/drag-resize";
 import {
   applyCollapsedHeights,
   applyHeightPatchAndCompact,
@@ -370,22 +371,15 @@ function TodayDashboardGridBody({
       }}
       resizeConfig={{
         enabled: true,
-        handles: ["se", "s", "e"],
-        handleComponent: (axis, ref) => {
-          const style: React.CSSProperties =
-            axis === "e"
-              ? { position: "absolute", top: 0, right: 0, bottom: 0, width: 6, height: "100%" }
-              : axis === "s"
-                ? { position: "absolute", left: 0, right: 0, bottom: 0, height: 6, width: "100%" }
-                : { position: "absolute", bottom: 0, right: 0, width: 12, height: 12 };
-          return (
-            <ResizeHandle
-              axis={axis as "e" | "s" | "se"}
-              ref={ref as React.Ref<HTMLDivElement>}
-              style={style}
-            />
-          );
-        },
+        handles: [...RESIZE_AXES],
+        handleComponent: (axis, ref) => (
+          <ResizeHandle
+            axis={axis}
+            positioned
+            className="today-grid-drag-cancel"
+            ref={ref as React.Ref<HTMLDivElement>}
+          />
+        ),
       }}
     >
       {visible.has("welcome") ? (

@@ -20,7 +20,7 @@ const MAX_DISCOVERED_SCHEDULES = 100;
 
 /**
  * Ask Datadog who is on call for the configured schedule(s) and decide whether
- * the configured identity (`BI_OPS_USER_EMAIL`) is carrying the pager.
+ * the configured identity (`DATADOG_USER_EMAIL`) is carrying the pager.
  *
  * Fail-closed: any missing config or upstream error returns `ok: false` so
  * callers (briefing, Today strip) stay quiet rather than guessing.
@@ -45,7 +45,7 @@ export async function loadOncallStatus(): Promise<OncallStatus> {
 
   // Use the explicitly-configured identity only — the git fallback in
   // getDefaultUserEmail() could disagree with the Datadog account.
-  const email = pick("BI_OPS_USER_EMAIL");
+  const email = pick("DATADOG_USER_EMAIL");
   if (!email) {
     return {
       ok: false,

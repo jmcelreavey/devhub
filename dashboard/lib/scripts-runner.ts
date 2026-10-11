@@ -42,6 +42,7 @@ export interface RunScriptOptions {
   agents?: string[];
   /** sync_skills / sync_agents / sync_mcp_servers: true = delete entries missing from repo. Default false. */
   prune?: boolean;
+  dryRun?: boolean;
   /** collect_local_skills: copy only these slugs from ~/.…/skills (explicit picks). */
   importSkillNames?: string[];
   importAgentNames?: string[];
@@ -90,6 +91,19 @@ const ACTIONS: Record<string, ActionDef> = {
     run: async (emit) => {
       const { scanWorktrees } = await import("./repos/worktree-report");
       const report = await scanWorktrees(emit);
+      return report.errors.length ? 1 : 0;
+    },
+  },
+  worktree_cleanup: {
+    label: "Clean idle agent worktrees",
+    description: "Remove clean, integrated checkouts idle for 2 days; trim ignored builds in kept checkouts idle for 7 days. Keeps branches.",
+    timeoutMs: 900_000,
+    mutates: true,
+    effects: ["Checks tasks, runs, Paseo and process working directories", "Removes eligible .devhub/checkouts worktrees and prunes Git metadata; keeps branches", "Deletes only ignored node_modules, .next and Cargo target directories in kept idle worktrees"],
+    cmd: "dashboard: cleanupWorktrees (TypeScript; dryRun supported)",
+    run: async (emit, _repoRoot, options) => {
+      const { cleanupWorktrees } = await import("./repos/worktree-report");
+      const report = await cleanupWorktrees(emit, { dryRun: options?.dryRun });
       return report.errors.length ? 1 : 0;
     },
   },

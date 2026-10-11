@@ -19,7 +19,6 @@ and `docs/architecture/`.
 | ----------------------------------------------------------------- | ----------------------------------------------------------- |
 | [`agents-workspace-aionui-plan.md`](agents-workspace-aionui-plan.md) | Replaced by the Paseo integration (`/agents`)               |
 | [`capability-radar-plan.md`](capability-radar-plan.md)            | `dashboard/lib/capability/`, `/radar`                       |
-| [`devhub-mcp-split-plan.md`](devhub-mcp-split-plan.md)            | `mcp-servers/devhub-server/`                                |
 | [`onboarding-and-tauri-roadmap.md`](onboarding-and-tauri-roadmap.md) | Setup wizard and `desktop/` (hosted Google OAuth deferred)  |
 | [`repo-ownership-plan.md`](repo-ownership-plan.md)                | `/own`, `dashboard/lib/ownership/`                          |
 | [`self-appraisal-mcp-plan.md`](self-appraisal-mcp-plan.md)        | `dashboard/app/appraisal/`, `shared/appraisal/`             |

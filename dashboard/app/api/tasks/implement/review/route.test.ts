@@ -70,7 +70,7 @@ describe("POST /api/tasks/implement/review", () => {
       reviewRun: true,
       activity: { source: "interactive", action: "review", notePath: valid.notePath },
     });
-    expect(dispatched.activity).not.toHaveProperty("taskId");
+    expect(dispatched.activity).toMatchObject({ taskId: valid.taskId, taskDate: valid.date });
     expect(dispatched.prompt).toContain("Cap webhook retries with jitter (PAY-482)");
     expect(dispatched.prompt).toContain("Implementation branch: devhub/agent/pay-482.");
   });
@@ -82,7 +82,7 @@ describe("POST /api/tasks/implement/review", () => {
     expect(mocks.dispatchAgentRun.mock.calls[0][0].model).toBeUndefined();
   });
 
-  it("tells the agent to review its own diff when nobody is assigned", async () => {
+  it("blocks review until an independent reviewer is assigned", async () => {
     mocks.readImplementReviewPrefs.mockReturnValue({ provider: "", model: "" });
     const response = await POST(request(valid));
     expect(response.status).toBe(409);

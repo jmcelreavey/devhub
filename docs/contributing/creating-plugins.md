@@ -204,8 +204,8 @@ Rules to know:
 - The materialiser **refuses to overwrite a git-tracked core path** — pick paths core
   doesn't already own. (If you're extracting from core, `git rm` them from core first.)
 - A page needs a sidebar entry. Declare it under `dashboard.nav` in `devhub-plugin.json`
-  (e.g. `{ href: "/ops", label: "Ops", icon: "ops", group: "bi" }`). Core materialises
-  these into the sidebar / ⌘P. Prefer an existing group (`bi`, `library`, `system`) so
+  (e.g. `{ href: "/ops", label: "Ops", icon: "ops", group: "infra" }`). Core materialises
+  these into the sidebar / ⌘P. Prefer an existing group (`infra`, `library`, `system`) so
   the item lands under the right section header.
 - Database connections for `/db`: set `dashboard.connections` to a `lib/` module that
   default-exports a `DbConnectionProvider`, and include that file in `dashboard.paths`.
@@ -321,5 +321,4 @@ it next to their DevHub and add it to *their* `plugins.json`.
 - [ ] Registered in `~/.config/devhub/plugins.json` and appears in the Skills catalog.
 - [ ] (tier-2) `npm run build` succeeds with the plugin registered.
 
-See `devhub-bi` for a complete real-world example (tier-1 agents/skills **and** a tier-2
-`/ops` dashboard module).
+Start with the [portable example plugin](../../templates/runtime-plugin/README.md). For reviewed actions and streaming, follow [Plugin actions](../guides/plugin-actions.md); those routes must be implemented by your plugin.

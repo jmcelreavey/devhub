@@ -25,6 +25,7 @@ import { agentConsentFile, hasConsented, recordConsent } from "@/lib/agent-runs/
 import { getTerminalProposal, resolveTerminalProposal } from "@/lib/terminal-proposals";
 import { syncTaskAgentRunFromAgentState } from "@/lib/tasks/task-agent-runs";
 import { getNotesDir } from "@/lib/notes/dir";
+import { recordWorkflowRun } from "@/lib/workflows/store";
 import { recordRunSnapshot } from "@/lib/tasks/run-snapshot";
 
 /** Proposals expire after 15 minutes, so a run still queued past this never started. */
@@ -157,6 +158,7 @@ export function updateAgentRunStatus(run: AgentRun, patch: Partial<AgentRunStatu
   const current = readRunStatus(run.dir) ?? run.status;
   const status = writeRunStatus(run.dir, { ...current, ...patch });
   syncLinkedTaskAgentRun(run, status);
+  if (current.state !== status.state) void recordWorkflowRun(run.spec, status).catch((error: unknown) => console.error("[workflow] Could not record run transition", error));
   if (run.spec.runtime !== "generation" && isActiveAgentRunState(current.state) && !isActiveAgentRunState(status.state)) {
     // Finished here (MCP finish, cancel, closed tab): leave the next agent a handoff.
     void recordRunSnapshot(

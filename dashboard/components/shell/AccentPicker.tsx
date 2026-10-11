@@ -2,14 +2,13 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useTheme } from "@/components/shell/ThemeToggle";
-import { Monitor, Moon, Palette, Sun, type LucideIcon } from "lucide-react";
+import { Monitor, Moon, Palette, Sun, X, type LucideIcon } from "lucide-react";
 import {
   THEME_PRESETS,
   type ThemeModeSetting,
   applyThemeSelection,
 } from "@/lib/theme-presets";
-import { HOLLOW_PRESET_ID } from "@/lib/hollow-theme";
-import { HollowEffectToggles } from "@/components/hollow/HollowEffectToggles";
+import { ThemeEffectToggles } from "@/components/themes/ThemeEffectToggles";
 
 const MODES: { id: ThemeModeSetting; label: string; Icon: LucideIcon }[] = [
   { id: "system", label: "System", Icon: Monitor },
@@ -28,6 +27,7 @@ export function AccentPicker() {
   // *setting* (including "system") when they pick a different palette.
   const activeMode = selection.resolvedMode;
   const [open, setOpen] = useState(false);
+  const [view, setView] = useState<"themes" | "effects">("themes");
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -36,13 +36,17 @@ export function AccentPicker() {
       if (!ref.current?.contains(e.target as Node)) setOpen(false);
     };
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
+      if (e.key === "Escape") {
+        e.stopPropagation(); // Close this popover before the mobile drawer underneath it.
+        setOpen(false);
+        ref.current?.querySelector<HTMLButtonElement>(".hub-icon-btn")?.focus();
+      }
     };
     document.addEventListener("mousedown", onClick);
-    document.addEventListener("keydown", onKey);
+    document.addEventListener("keydown", onKey, true);
     return () => {
       document.removeEventListener("mousedown", onClick);
-      document.removeEventListener("keydown", onKey);
+      document.removeEventListener("keydown", onKey, true);
     };
   }, [open]);
 
@@ -59,20 +63,21 @@ export function AccentPicker() {
         onClick={() => setOpen((v) => !v)}
         title="Appearance"
         aria-label="Appearance"
-        aria-haspopup="menu"
+        aria-haspopup="dialog"
         aria-expanded={open}
       >
         <Palette size={14} aria-hidden />
       </button>
       {open && (
-        <div className="accent-picker-pop" role="menu" aria-label="Appearance">
+        <div className="accent-picker-pop theme-appearance-pop" role="dialog" aria-label="Appearance">
+          <div className="theme-appearance-header">
+          <div className="graphite-picker-title"><strong>Appearance</strong><button type="button" className="hub-icon-btn" aria-label="Close appearance" onClick={() => { setOpen(false); ref.current?.querySelector<HTMLButtonElement>(".hub-icon-btn")?.focus(); }}><X size={14} aria-hidden /></button></div>
           <div role="group" aria-label="Mode" className="accent-picker-modes">
             {MODES.map(({ id, label, Icon }) => (
               <button
                 key={id}
                 type="button"
-                role="menuitemradio"
-                aria-checked={selection.mode === id}
+                aria-pressed={selection.mode === id}
                 data-active={selection.mode === id || undefined}
                 className="accent-picker-mode"
                 onClick={() => applyThemeSelection({ mode: id, preset: selection.preset })}
@@ -82,11 +87,19 @@ export function AccentPicker() {
               </button>
             ))}
           </div>
-          {THEME_PRESETS.map((preset) => (
+          {(
+            <div className="graphite-picker-views" role="group" aria-label="Appearance section">
+              <button type="button" aria-pressed={view === "themes"} onClick={() => setView("themes")}>Themes</button>
+              <button type="button" aria-pressed={view === "effects"} onClick={() => setView("effects")}>Theme effects</button>
+            </div>
+          )}
+          </div>
+          <div className="theme-appearance-content" key={view}>
+          {view === "effects" ? <ThemeEffectToggles /> : THEME_PRESETS.map((preset) => (
             <button
               key={preset.id}
               type="button"
-              role="menuitem"
+              aria-pressed={selection.preset === preset.id}
               onClick={() => selectPreset(preset.id)}
               title={`${preset.label} (${activeMode})`}
               aria-label={`Use ${preset.label} theme`}
@@ -107,7 +120,6 @@ export function AccentPicker() {
                     ? "var(--accent-dim)"
                     : "var(--bg-surface)",
                 cursor: "pointer",
-                outline: "none",
                 padding: "6px 8px",
                 color: "var(--text)",
               }}
@@ -117,6 +129,7 @@ export function AccentPicker() {
                   display: "flex",
                   flexDirection: "column",
                   alignItems: "flex-start",
+                  textAlign: "left",
                   gap: "1px",
                   minWidth: 0,
                 }}
@@ -209,7 +222,7 @@ export function AccentPicker() {
               </span>
             </button>
           ))}
-          {selection.preset === HOLLOW_PRESET_ID ? <HollowEffectToggles /> : null}
+          </div>
         </div>
       )}
     </div>

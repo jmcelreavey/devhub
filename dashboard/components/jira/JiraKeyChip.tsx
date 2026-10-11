@@ -1,4 +1,5 @@
 "use client";
+import { integrationFetch } from "@/lib/integrations/client-fetch";
 
 import { useState } from "react";
 import { CornerLeftUp } from "lucide-react";
@@ -101,11 +102,12 @@ export function JiraKeyChip({ jiraKey, done = false, label, title, quiet = false
           setTransitionOpen(false);
           if (!transitionId) return;
           try {
-            const res = await fetch(`/api/jira/ticket/${jiraKey}/transition`, {
+            const res = await integrationFetch(`/api/jira/ticket/${jiraKey}/transition`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ transitionId }),
             });
+            if (!res) return;
             if (!res.ok) throw new Error("Transition failed");
             toast.success(`Updated ${jiraKey}`);
           } catch {

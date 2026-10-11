@@ -1,6 +1,6 @@
 /**
  * Materialization honesty — detect when plugin-owned dashboard copies diverge
- * from plugin source (the classic "I edited bi-ops.ts in core and restart ate it" footgun).
+ * from plugin source (the classic "I edited team-ops.ts in core and restart ate it" footgun).
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -9,7 +9,7 @@ import { gitExcludePath, EXCLUDE_BEGIN, EXCLUDE_END, planDashboardMaterializatio
 import { listEnabledPlugins } from "./registry";
 
 export interface MaterializedDriftEntry {
-  /** Repo-root-relative path, e.g. dashboard/lib/bi-ops.ts */
+  /** Repo-root-relative path, e.g. dashboard/lib/team-ops.ts */
   path: string;
   plugin: string;
   /** Absolute plugin source path */

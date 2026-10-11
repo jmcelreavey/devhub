@@ -34,6 +34,9 @@ jobs:
       - name: Setup dashboard
         uses: ./.github/actions/dashboard-setup
 
+      - name: Check documentation links
+        run: npm run docs:links
+
       # Vendored skills are third-party code that syncs to every machine and
       # runs with the agent's full permissions. This asserts the two properties
       # skills/vendor/NOTICE.md claims - complete provenance, and scripts that

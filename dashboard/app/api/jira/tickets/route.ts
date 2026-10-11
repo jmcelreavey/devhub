@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { getMyTickets } from "@/lib/jira/client";
+import { jiraScreen } from "@/lib/integrations/screen-data";
+const getMyTickets = jiraScreen.tickets;
 import { getResolvedJiraEnv } from "@/lib/jira/env";
 import {
   getJiraTicketsCache,

@@ -18,7 +18,7 @@ const basename = (p: string) => p.split("/").pop() || p;
  * "You usually also change X."
  *
  * Derived from this repo's own commit log: if the last N commits touching
- * `bi-ops.ts` almost always touched `bi-ops.test.ts`, changing one without the
+ * `team-ops.ts` almost always touched `team-ops.test.ts`, changing one without the
  * other is worth a nudge. It is a hint, never a block — the honest framing is
  * the historical ratio, not an assertion that you forgot something.
  */

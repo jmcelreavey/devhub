@@ -31,6 +31,17 @@ async function findReadyFrame() {
 }
 
 describe("persistent Agents", () => {
+  it("opens a side conversation without changing the route or following global chat requests", async () => {
+    route.pathname = "/repos"; route.query = "";
+    render(<PersistentAgents sideRun={{ id: "run-side", conversationId: "first" }} />);
+    const frame = await findReadyFrame();
+    await waitFor(() => expect(frame.getAttribute("src")).toContain("open=agent%3Afirst"));
+    const calls = vi.mocked(fetch).mock.calls.length;
+    act(() => requestAgentConversation("unrelated"));
+    expect(fetch).toHaveBeenCalledTimes(calls);
+    expect(frame.closest("section")).not.toHaveAttribute("hidden");
+    expect(router.replace).not.toHaveBeenCalled();
+  });
   it("does not connect to Paseo when opening Usage directly", () => {
     route.query = "view=usage";
     render(<PersistentAgents />);

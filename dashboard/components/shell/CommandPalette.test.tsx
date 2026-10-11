@@ -2,6 +2,7 @@
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CommandPalette } from "./CommandPalette";
+import { THEME_PRESETS } from "@/lib/theme-presets";
 
 const mocks = vi.hoisted(() => ({
   router: { push: vi.fn() },
@@ -82,6 +83,52 @@ afterEach(() => {
 });
 
 describe("CommandPalette", () => {
+  it.each(["", "theme", "Appearance"])("keeps the shared theme order for the '%s' action search", async (query) => {
+    setupFetch();
+    const { input } = await openPalette();
+    fireEvent.click(screen.getByRole("button", { name: "Actions" }));
+    await searchFor(input, query);
+    const options = screen.getAllByRole("option", { name: /^Use .+ theme/ });
+    expect(options).toHaveLength(THEME_PRESETS.length);
+    THEME_PRESETS.forEach((preset, index) => {
+      expect(options[index]).toHaveTextContent(`Use ${preset.label} theme`);
+    });
+  });
+
+  it.each([
+    ["default", "Use Graphite Neon (Default) theme", "DevHub's default: charcoal + lime", "graphite"],
+    ["halloween", "Use Hollow (Halloween) 🎃 theme", "Spooky Halloween theme, switches on automatically in October", "hollow"],
+  ])("finds the %s theme and saves its existing id without changing mode", async (query, label, description, preset) => {
+    setupFetch();
+    document.documentElement.setAttribute("data-theme-mode", "light");
+    document.documentElement.setAttribute("data-theme-preset", "tokyo");
+    const { input, onClose } = await openPalette();
+    await searchFor(input, query);
+    const option = screen.getByRole("option", { name: new RegExp(label.replace(/[()]/g, "\\$&")) });
+    expect(option).toHaveTextContent(description);
+    fireEvent.click(option);
+    expect(localStorage.getItem("devhub:theme-preset")).toBe(preset);
+    expect(localStorage.getItem("devhub:theme")).toBe("light");
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it("reopens What's new and navigates to the full changelog", async () => {
+    setupFetch();
+    const show = vi.fn();
+    window.addEventListener("devhub:whats-new", show);
+    try {
+      const { input, onClose } = await openPalette();
+      await searchFor(input, "What's new");
+      fireEvent.click(screen.getByRole("option", { name: /What's new/ }));
+      expect(show).toHaveBeenCalledOnce();
+      expect(onClose).toHaveBeenCalled();
+      await searchFor(input, "Full changelog");
+      fireEvent.click(screen.getByRole("option", { name: /Full changelog/ }));
+      expect(mocks.tabs.openHref).toHaveBeenCalledWith("/changelog", { newTab: false });
+    } finally {
+      window.removeEventListener("devhub:whats-new", show);
+    }
+  });
   it("ignores an older content response arriving after the newer search", async () => {
     const oldRequest = deferredResponse();
     const newRequest = deferredResponse();

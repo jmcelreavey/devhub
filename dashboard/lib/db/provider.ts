@@ -26,7 +26,7 @@ export interface DbPreflightOptions {
 }
 
 export interface DbConnectionProvider {
-  /** Namespace for this provider's connection ids, e.g. `bi`. */
+  /** Namespace for this provider's connection ids, e.g. `team-tools`. */
   id: string;
 
   /**

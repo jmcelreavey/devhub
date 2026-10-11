@@ -101,7 +101,7 @@ async function main(): Promise<void> {
     await run(["install", "--silent"], { cwd: devhubServer, label: "DevHub MCP server npm install" });
   }
 
-  // Plugin-contributed MCP servers (e.g. the BI plugin's devhub-bi-server) need their
+  // Plugin-contributed MCP servers (e.g. a plugin's team-tools-server) need their
   // own deps too.
   for (const { plugin, dir } of pluginMcpServerDirs()) {
     log(`Installing ${plugin} MCP server dependencies (${path.basename(dir)})...`);

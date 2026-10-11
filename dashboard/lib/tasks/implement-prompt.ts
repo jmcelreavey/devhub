@@ -27,6 +27,7 @@ export function buildTaskImplementPrompt(input: TaskImplementPromptInput): strin
     "The DevHub notes MCP is available for the task note, Jira (jira_ticket_get / jira_ticket_transition), and updating the task.",
     "Before writing any code: restate the goal in two or three lines, list the assumptions you are making, and ask anything that would change the approach — then wait for my answer. If the plan already covers it, say \"no questions\" and start.",
     "Work interactively: ask me before each post-implementation step (commit/push, PR, PR review note, Jira transition, completing the task). Never commit without asking.",
+    `Task workflow: ${input.origin.replace(/\/$/, "")}/workflow?taskId=${encodeURIComponent(input.taskId)}. GET /api/tasks/workflow?taskId=${input.taskId} for the current revision and evidence. POST /api/tasks/workflow with taskId, revision and action: verify to run npm run verify; review with the completed reviewer runId, verdict (pass or changes-requested), findings; propose with kind (commit-push, draft-pr, ticket-transition, task-completion), destination and exact content. Wait for the human decision in DevHub. Before executing an approved proposal, POST action: begin with proposalId to consume it; then record action: receipt with proposalId, succeeded and detail. A timeout stays outcome-unknown: check the destination before retrying. Code changes require fresh checks and review. This coordination does not restrict your local command access.`,
   );
   return lines.join("\n");
 }

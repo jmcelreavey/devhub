@@ -12,7 +12,7 @@ The `db_*` MCP tools proxy the local dashboard, which owns credentials, connecti
 ## Workflow
 
 1. If the exact connection ID is known, call `db_connections({ connectionId })`; otherwise filter by environment, engine, or service.
-2. For BI RDS access questions, call `bi_db_access_check` before broader IAM or connection discovery.
+2. For plugin-backed connections, use that plugin's scoped access check before broader credential discovery.
 3. Make an unavailable connection ready with `db_connect`:
    - reads: `accessMode:"read"`
    - explicitly requested writes: `accessMode:"write", fix:true`
@@ -35,10 +35,4 @@ Compact output is the default and MCP reads default to 100 rows. Increase `rowLi
 - A read-only refusal is an access decision, not a transient failure.
 - If dashboard routes return 404, the packaged DevHub runtime is older than the checkout; rebuild/sync it instead of retrying the same call.
 
-## BI service ownership shortcuts
-
-- Saved articles/bookmarks: Idun `Articles`; clearing a bookmark follows service behavior by setting `status = 'inactive'`, not deleting the row.
-- User identity by email: the identity service's `Users` table.
-- Subscriptions and access belong to the entitlements service, not alongside saved articles.
-
-Resolve other ownership from service documentation or code before exploring schemas at random.
+Resolve service ownership from its documentation or code before exploring schemas at random. Application behavior, including soft deletion and audit requirements, belongs to that service rather than this generic client.

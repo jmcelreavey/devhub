@@ -37,6 +37,25 @@ const dx: ToolHints = { readOnlyHint: false, destructiveHint: true, idempotentHi
 const dxx: ToolHints = { ...dx, openWorldHint: true };
 
 export const TOOL_ANNOTATIONS: Readonly<Record<string, ToolHints>> = {
+  integrations_list: rox,
+  integrations_alert_destinations: ro,
+  integrations_alert_test: { ...wrx, idempotentHint: true },
+  integrations_chat_status: ro,
+  integrations_proposals: ro,
+  integrations_propose: wr,
+  integrations_review: wrx,
+  editor_selection: ro,
+  editor_discussions: ro,
+  editor_discuss: wrx,
+  tasks_workflow_get: { ...wrx, idempotentHint: true },
+  tasks_workflow_review: wr,
+  plugins_action_list: rox,
+  plugins_action_review: wrx,
+  plugins_action_run: dxx,
+  plugins_action_status: rox,
+  browser_session: ro,
+  browser_observe: { ...rox, idempotentHint: false }, // refreshes opaque observation IDs
+  browser_request: wrx, // navigation or a single pending approval
   // ── notes ──────────────────────────────────────────────────────────────
   notes_list: ro,
   notes_read: ro,
@@ -58,6 +77,7 @@ export const TOOL_ANNOTATIONS: Readonly<Record<string, ToolHints>> = {
   // ── docs ───────────────────────────────────────────────────────────────
   docs_list: ro,
   docs_read: ro,
+  release_notes_read: { ...ro, openWorldHint: false },
   docs_search: ro,
   docs_write: { ...wr, idempotentHint: true },
   docs_append: wr,

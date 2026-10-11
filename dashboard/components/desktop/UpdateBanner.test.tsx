@@ -58,6 +58,28 @@ describe("the tray's Check for Updates always shows a result", () => {
     fireEvent.click(screen.getByRole("button", { name: /Install/ }));
     await waitFor(() => expect(invoke).toHaveBeenCalledWith("install_update"));
   });
+  it("shows incoming Markdown notes before installing a manually checked update", async () => {
+    outcome = { status: "available", currentVersion: "2.0.0", version: "2.1.0", notes: "- **Incoming highlight**" };
+    await checkFromTray();
+    expect(await screen.findByText("Incoming highlight")).toBeTruthy();
+    expect(screen.getByText(/What's new in v2.1.0/).closest("details")).toHaveAttribute("open");
+    expect(invoke).not.toHaveBeenCalledWith("install_update");
+  });
+  it("shows incoming notes for the automatic desktop event and an honest empty state", async () => {
+    render(<UpdateBanner />);
+    await waitFor(() => expect(handlers.has("devhub://update-available")).toBe(true));
+    await act(async () => { handlers.get("devhub://update-available")!({ available: true, currentVersion: "2.0.0", version: "2.1.0", notes: "- Automatic highlight" }); });
+    expect(screen.getByText(/Automatic highlight/)).toBeTruthy();
+    expect(invoke).not.toHaveBeenCalledWith("install_update");
+    await act(async () => { handlers.get("devhub://update-available")!({ available: true, currentVersion: "2.0.0", version: "2.1.0" }); });
+    expect(screen.getByText(/doesn't include notes/)).toBeTruthy();
+  });
+  it("cleans up all desktop event listeners", async () => {
+    const mounted = render(<UpdateBanner />);
+    await waitFor(() => expect(handlers.size).toBe(3));
+    mounted.unmount();
+    expect(handlers.size).toBe(0);
+  });
   it("shows a readable failure with the raw text behind Details, and can retry", async () => {
     outcome = { status: "failed", currentVersion: "2.0.0", message: "Couldn't reach the update server. Check your connection and try again.", details: "dns error: no such host" };
     await checkFromTray();

@@ -39,12 +39,12 @@ describe("identifier helpers", () => {
 });
 
 const connection = (over: Partial<DbConnectionRow> = {}): DbConnectionRow => ({
-  id: "bi:rds:capi:dev",
-  label: "CAPI · dev",
+  id: "team:rds:payments:dev",
+  label: "Payments · dev",
   engine: "postgres",
   accessMode: "read",
   dangerous: false,
-  source: "plugin:bi",
+  source: "plugin:team-tools",
   ...over,
 });
 
@@ -74,11 +74,11 @@ describe("connectionMenuGroups", () => {
   it("surfaces the provider's remedy when there is one", () => {
     const withRemedy = connection({
       unavailable: "Needs a prd profile.",
-      remedy: { id: "aws-profile", label: "Switch to prd-dad", endpoint: "/api/bi/aws-profile" },
+      remedy: { id: "aws-profile", label: "Switch to prd-team", endpoint: "/api/team-tools/aws-profile" },
     });
     const onRemedy = vi.fn();
     expect(byId(connectionMenuGroups(withRemedy, { ...actions, onRemedy }), "remedy")?.label).toBe(
-      "Switch to prd-dad",
+      "Switch to prd-team",
     );
   });
 

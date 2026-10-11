@@ -4,7 +4,7 @@
  * This is the join key between git history and the review notes in
  * `notes/pr-reviews`. Two shapes cover essentially everything in practice:
  *
- *   "PTF-4381 - Move read-next cache policy to CAPI (#554)"
+ *   "PTF-4381 - Move read-next cache policy to Payments (#554)"
  *    ^ ticket                                        ^ squash-merge PR number
  */
 

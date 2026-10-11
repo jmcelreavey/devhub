@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { createHash } from "node:crypto";
 import path from "node:path";
 import { NextResponse, type NextRequest } from "next/server";
 import { runGitRepoAsync } from "@/lib/git/repo-local";
@@ -137,6 +138,7 @@ export async function GET(req: NextRequest, { params }: RepoParams) {
     kind: "file" as const,
     raw,
     lines: parseUnifiedDiff(raw),
+    revision: createHash("sha256").update(raw).digest("hex"),
     empty: !raw.trim(),
     context,
   });

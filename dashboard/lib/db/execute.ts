@@ -60,7 +60,7 @@ export interface ExecuteOptions {
   /**
    * The connection's label, typed by the user, for a write against a dangerous
    * connection. Not a boolean: a checkbox is clicked by reflex, and typing
-   * "CAPI · prd" requires having read which connection this is.
+   * "Payments · prd" requires having read which connection this is.
    */
   confirm?: string;
 }

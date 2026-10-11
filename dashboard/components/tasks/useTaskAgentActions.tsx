@@ -2,6 +2,7 @@
 
 import { useState, type MouseEvent, type ReactNode } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { mutate } from "swr";
 import { Ban, Bot, CheckCircle2, ClipboardCopy, FilePen, Flag, Rocket, RotateCcw, Undo2, Wrench, X } from "lucide-react";
 import type { ContextMenuItem } from "@/components/shell/ContextMenu";
@@ -60,6 +61,7 @@ export function useTaskAgentActions({
   onAbandon: (reason?: string) => void;
 }): { chip: ReactNode; upstart: ReactNode; menuItems: ContextMenuItem[]; dialogs: ReactNode } {
   const toast = useToast();
+  const router = useRouter();
   const taskRepo = repoName || task.links?.find((link) => link.kind === "repo")?.id.split("/").at(-1);
   const upstart = useTaskUpstart(task.id, taskRepo);
   const { latestRun, handoff } = useTaskAgentRuns(task.id, enabled);
@@ -150,6 +152,7 @@ export function useTaskAgentActions({
     }
   }
   if (enabled) {
+    menuItems.push(item("workflow", "Workflow and evidence", <CheckCircle2 size={12} aria-hidden />, () => router.push("/workflow?taskId=" + encodeURIComponent(task.id))));
     menuItems.push(item("copy-plan", "Copy plan as markdown", <ClipboardCopy size={12} aria-hidden />, () => void copyPlan()));
   }
 

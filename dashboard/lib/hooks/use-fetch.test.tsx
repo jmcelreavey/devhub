@@ -70,13 +70,13 @@ describe("useLive panel pausing", () => {
 describe("defaultFetcher", () => {
   it("surfaces an API error without dumping the JSON envelope", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response(JSON.stringify({ error: "Switch to dev-dad to connect.", code: "unavailable" }), {
+      new Response(JSON.stringify({ error: "Switch to dev-team to connect.", code: "unavailable" }), {
         status: 409,
         statusText: "Conflict",
         headers: { "Content-Type": "application/json" },
       }),
     );
 
-    await expect(defaultFetcher("/api/db/test")).rejects.toThrow("Switch to dev-dad to connect.");
+    await expect(defaultFetcher("/api/db/test")).rejects.toThrow("Switch to dev-team to connect.");
   });
 });

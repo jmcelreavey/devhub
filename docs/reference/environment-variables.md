@@ -79,23 +79,23 @@ Most values live in the dashboard's local environment file and can be edited fro
 | `DATADOG_LINK_ONCALL`        | Custom on-call monitor link                                                                              |
 | `DATADOG_LINK_TEAM_ALERTS`   | Custom team alerts link                                                                                  |
 | `DATADOG_LINK_EVENTS_TODAY`  | Custom today's events link                                                                               |
-| `BI_OPS_USER_EMAIL`          | Work email matched against the Datadog on-call roster; also gates BI ops nav when set with other BI vars |
+| `DATADOG_USER_EMAIL`         | Work email matched against the Datadog on-call roster |
 | `DATADOG_ONCALL_SCHEDULE_ID` | Optional comma-separated on-call schedule IDs; when unset, DevHub auto-discovers schedules (up to 100)   |
 
 See [Datadog integration](../integrations/datadog.md) for on-call behavior and API routes.
 
 `DATADOG_APPLICATION_KEY` is the canonical name; `DD_APPLICATION_KEY` and `DATADOG_APP_KEY` are accepted aliases in code.
 
-## Infrastructure / BI presence (optional)
+## Infrastructure presence (optional)
 
-These vars gate the **Ops** tab and `GET /api/setup/status` → `bi`. They do not require the BI plugin to be installed — `lib/bi-presence.ts` detects generic AWS/CAPI signals. Rich ops data (`GET /api/bi`, `/ops`) comes from the `devhub-bi` plugin when materialized.
+`GET /api/setup/status` returns an `infra` gate from `lib/infrastructure-presence.ts`. Enabled plugins may declare `navGate: "infra"`; their own pages and routes remain plugin-owned.
 
-| Variable         | Purpose                                                                |
-| ---------------- | ---------------------------------------------------------------------- |
-| `AWS_PROFILE`    | Preferred AWS CLI profile for BI ops nav and plugin-backed infra views |
-| `CAPI_REPO_PATH` | Path to a local CAPI checkout; presence alone can enable the `bi` gate |
+| Variable | Purpose |
+| --- | --- |
+| `AWS_PROFILE` | Preferred AWS CLI profile for infrastructure views |
+| `AUTOMATION_REPO_PATH` | Optional local automation checkout |
 
-`BI_OPS_USER_EMAIL` (Datadog table above) also contributes to `bi` presence. When any of these (or a profile in `~/.aws/config`) is present, `bi: true` in setup status. Configure in `dashboard/.env.local` or via 1Password when `DEVHUB_OP_SYNC_LOCAL=1`.
+Either value, a profile in `~/.aws/config` or `~/.aws/credentials`, or an enabled plugin declaring the gate makes `infra: true`. Configure these in `dashboard/.env.local` or via 1Password when `DEVHUB_OP_SYNC_LOCAL=1`. Datadog identity is independent and uses `DATADOG_USER_EMAIL`.
 
 ## Sharing (one-time links)
 

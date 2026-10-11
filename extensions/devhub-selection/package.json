@@ -1,0 +1,56 @@
+{
+  "name": "selection",
+  "displayName": "DevHub Selection",
+  "description": "Preview code selections in DevHub before sending them to an assistant.",
+  "version": "0.1.0",
+  "publisher": "devhub",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.96.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "extensionKind": [
+    "workspace"
+  ],
+  "main": "./dist/extension.js",
+  "capabilities": {
+    "untrustedWorkspaces": { "supported": true },
+    "virtualWorkspaces": { "supported": false }
+  },
+  "contributes": {
+    "commands": [
+      {
+        "command": "devhub.pair",
+        "title": "DevHub: Pair this Workspace"
+      },
+      {
+        "command": "devhub.askSelection",
+        "title": "DevHub: Ask AI about Selection"
+      },
+      {
+        "command": "devhub.forgetPairing",
+        "title": "DevHub: Forget Pairing"
+      }
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "devhub.askSelection",
+          "when": "editorHasSelection && resourceScheme == file",
+          "group": "navigation@100"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "check": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/vscode": "1.96.0",
+    "typescript": "5.9.3"
+  }
+}

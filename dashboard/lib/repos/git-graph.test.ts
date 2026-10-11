@@ -131,10 +131,14 @@ describe("layoutCommitGraph", () => {
 });
 
 describe("laneColor", () => {
-  it("returns a concrete hex colour, not a theme variable", () => {
-    // Theme variables collided: --accent and --success are both green in
-    // several themes, which is why neighbouring lanes were indistinguishable.
-    expect(laneColor(0)).toMatch(/^#[0-9a-f]{6}$/);
+  it("keeps the original palette when a theme has no chart colours", () => {
+    const fallbacks = Array.from({ length: 8 }, (_, index) => laneColor(index));
+    expect(fallbacks).toEqual([
+      "var(--chart-1, #4f9dff)", "var(--chart-2, #f0883e)",
+      "var(--chart-3, #a371f7)", "var(--chart-4, #3fb950)",
+      "var(--chart-5, #e5657f)", "var(--chart-6, #2bc4c0)",
+      "var(--chart-7, #d2a336)", "var(--chart-8, #7c8cf8)",
+    ]);
   });
 
   it("gives neighbouring colour indices different colours", () => {
@@ -144,7 +148,8 @@ describe("laneColor", () => {
 
   it("wraps around instead of returning undefined", () => {
     expect(laneColor(64)).toBe(laneColor(0));
-    expect(laneColor(-1)).toMatch(/^#[0-9a-f]{6}$/);
+    expect(laneColor(-1)).toBe("var(--chart-8, #7c8cf8)");
+    expect(laneColor(0)).toBe("var(--chart-1, #4f9dff)");
   });
 });
 

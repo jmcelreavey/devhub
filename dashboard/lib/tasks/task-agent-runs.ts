@@ -34,8 +34,21 @@ export interface TaskPrAttention {
   key: string;
 }
 
+export type TaskRunRole = "plan" | "implement" | "verify" | "review" | "discuss";
+
+export function taskRunRole(action?: string): TaskRunRole {
+  return action === "plan" || action === "verify" || action === "review" || action === "discuss" ? action : "implement";
+}
+
+export function latestImplementationRun(runs: TaskAgentRunRecord[]): TaskAgentRunRecord | null {
+  return runs.find((run) => !run.role || run.role === "implement") ?? null;
+}
+
 export interface TaskAgentRunRecord {
   runId: string;
+  /** Missing on legacy records, which were implementation-only. */
+  role?: TaskRunRole;
+  codeFingerprint?: string;
   status: TaskAgentRunStatus;
   provider?: string;
   startedAt: string;
@@ -184,7 +197,7 @@ export function getTaskAgentHandoff(taskId: string, notesDir = getNotesDir()): {
   latestRun: TaskAgentRunRecord | null;
 } {
   const file = getTaskAgentRuns(taskId, notesDir);
-  const latestRun = listTaskAgentRuns(taskId, notesDir)[0] ?? null;
+  const latestRun = latestImplementationRun(listTaskAgentRuns(taskId, notesDir));
   return {
     taskId,
     handoff: file.handoff,
@@ -197,7 +210,7 @@ export function getTaskAgentHandoff(taskId: string, notesDir = getNotesDir()): {
 export type TaskAgentRunPatch = Partial<
   Pick<
     TaskAgentRunRecord,
-    "prUrl" | "branch" | "cwd" | "prState" | "prCheckedAt" | "prSeenAt" | "attention" | "attentionHandled"
+    "prUrl" | "branch" | "cwd" | "codeFingerprint" | "prState" | "prCheckedAt" | "prSeenAt" | "attention" | "attentionHandled"
   >
 >;
 
@@ -299,6 +312,7 @@ export async function setTaskAgentHandoff(
 }
 
 export interface UpsertTaskAgentRunInput {
+  role?: TaskRunRole;
   taskId: string;
   runId: string;
   status?: TaskAgentRunStatus;
@@ -348,6 +362,7 @@ export async function upsertTaskAgentRun(input: UpsertTaskAgentRunInput): Promis
     if (idx === -1) {
       const record: TaskAgentRunRecord = {
         runId,
+        role: input.role ?? "implement",
         status: input.status ?? "queued",
         startedAt: input.startedAt ?? stamp,
         updatedAt: stamp,
@@ -362,6 +377,7 @@ export async function upsertTaskAgentRun(input: UpsertTaskAgentRunInput): Promis
       const prev = current.runs[idx]!;
       const next: TaskAgentRunRecord = {
         ...prev,
+        role: input.role ?? prev.role,
         status: input.status ?? prev.status,
         startedAt: input.startedAt ?? prev.startedAt,
       };

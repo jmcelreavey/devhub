@@ -32,8 +32,8 @@ describe("redactArgs", () => {
         "mongodb+srv://AKIA123:sEcReT@www-pl-1.cwbkm.mongodb.net/insider?authMechanism=MONGODB-AWS",
       ]),
     ).toEqual(["mongodb+srv://‹redacted›@www-pl-1.cwbkm.mongodb.net/…"]);
-    expect(redactArgs(["postgresql://usr_capi_read:tok@prd-capi.rds.amazonaws.com:5432/capi"])).toEqual([
-      "postgresql://‹redacted›@prd-capi.rds.amazonaws.com:5432/…",
+    expect(redactArgs(["postgresql://usr_capi_read:tok@prd-payments.rds.amazonaws.com:5432/payments"])).toEqual([
+      "postgresql://‹redacted›@prd-payments.rds.amazonaws.com:5432/…",
     ]);
   });
 
@@ -55,6 +55,13 @@ describe("redactArgs", () => {
 });
 
 describe("exec registry", () => {
+  it("separates service lifetime from command latency while retaining timeout evidence", () => {
+    const id = beginExternalCall({ file: "node", args: [], timeoutMs: 1000, managedService: true });
+    expect(listInFlightCalls()).toEqual([]);
+    expect(listInFlightCalls(true)).toHaveLength(1);
+    endExternalCall(id, { ok: false, timedOut: true });
+    expect(listSlowCalls()[0].timedOut).toBe(true);
+  });
   it("reports a call as in flight until it ends", () => {
     const id = beginExternalCall({ file: "git", args: ["status"], timeoutMs: 1000 });
     expect(listInFlightCalls().map((c) => c.command)).toEqual(["git status"]);

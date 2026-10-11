@@ -1,4 +1,5 @@
 "use client";
+import { integrationFetch } from "@/lib/integrations/client-fetch";
 
 import { Fragment, useState, useEffect, useCallback, useRef, type ReactNode } from "react";
 import { isTaskOpen, type Task } from "@/lib/tasks/types";
@@ -23,6 +24,7 @@ import { JiraTransitionModal } from "@/components/jira/JiraTransitionModal";
 import { SortableList, type SortableRenderState } from "@/components/ui/SortableList";
 import { useGridSize } from "@/lib/hooks/use-grid-size";
 import { todayISO } from "@/lib/utils";
+import { celebrateGraphite } from "@/lib/graphite-theme";
 
 // Task now lives in lib/tasks/types.ts, shared with the server storage layer.
 // It was duplicated here and had drifted (missing rolledFromId/rolledFromDate).
@@ -165,6 +167,7 @@ export function TaskList({ inputId = "task-add-text", searchQuery, excludeIds }:
         });
         if (!res.ok) throw new Error(await res.text());
         const updated = (await res.json()) as Task;
+        if (updated.done && !original.done) celebrateGraphite("task");
         await mutate(
           (cur) => ({
             ...(cur ?? {}),
@@ -533,11 +536,12 @@ export function TaskList({ inputId = "task-add-text", searchQuery, excludeIds }:
       setTransitionPrompt(null);
       if (transitionId && prompt.task.jiraKey) {
         try {
-          const res = await fetch(`/api/jira/ticket/${prompt.task.jiraKey}/transition`, {
+          const res = await integrationFetch(`/api/jira/ticket/${prompt.task.jiraKey}/transition`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ transitionId }),
           });
+          if (!res) return;
           if (!res.ok) throw new Error(await res.text());
         } catch (e) {
           console.error("apply transition:", e);

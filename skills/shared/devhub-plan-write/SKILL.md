@@ -28,7 +28,8 @@ clearly what is still open. You do not write code, create branches or commit.
   (read-only), check recent merges and deploys (`git log`, `gh pr list
   --state merged`), and Datadog if it's an alert (`datadog_investigate`). Name
   the change that fixes it.
-- **A feature:** write the spec — behaviour, edge cases, what is out of scope.
+- **A feature:** write the spec — behaviour the user will see, edge cases, what is out of scope. Name the public seam the tests should hit. Prefer one existing seam, the highest that still sees the behaviour. Confirm that seam with the user before any test is written.
+- Follow a factual claim back to the doc, ticket, or code that owns it, and cite that source in the note. Adapted from Matt Pocock's `research` skill (MIT). The seam and the vertical slices below are adapted from his `to-spec` and `to-tickets` skills (MIT).
 - Link exactly one repo to the task (`tasks_update` links) if it isn't already.
 
 An investigation that ends without a change to make is still useful: write
@@ -41,7 +42,8 @@ Read the note first and keep what's there. Add or replace:
 ```markdown
 ## Plan
 - The change, in the files it touches (paths).
-- Steps in order; note anything that can run in parallel or depends on another task.
+- The public seam the tests hit.
+- Steps in order. Prefer a step someone can demo on its own, and name what it waits on. A wide mechanical change (a rename that breaks every caller) is three steps: add the new form, migrate callers in batches, then delete the old form.
 - The exact commands that prove it worked (tests, lint, a curl, a query).
 
 ## Acceptance

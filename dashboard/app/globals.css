@@ -1,5 +1,7 @@
 @import "tailwindcss";
 @import "./hollow.css";
+@import "./graphite.css";
+@import "./theme-effects.css";
 
 /* Hallmark · genre: modern-minimal · designed-as-app · theme: graphite-neon (user-selectable presets) · enrichment: none · nav: app-sidebar · footer: none · contrast: pass
  * quarantine: /api/briefing/canvas — iframe canvas emits local CSS constrained to --app-* tokens bridged from shell (lib/briefing-theme.ts). Not app chrome.
@@ -120,7 +122,11 @@
   --border-muted: #2a221a;
   --text: #f2e8dd;
   --text-muted: #bda88f;
-  --text-subtle: #96826c;
+  --text-subtle: #c4ae98;
+  --control-border: #b09a83;
+  --info: #9ac8e9;
+  --accent-text: #ffb477;
+  --accent-text-hover: #ffd2a6;
   --accent: #ff8f3f;
   --accent-hover: #ffa863;
   --accent-dim: rgba(255, 143, 63, 0.16);
@@ -143,16 +149,20 @@
   --border-muted: #eee0ce;
   --text: #2b2018;
   --text-muted: #6a5648;
-  --text-subtle: #857060;
-  --accent: #b85c14;
-  --accent-hover: #9a4b0e;
+  --text-subtle: #66503e;
+  --control-border: #947457;
+  --info: #264f78;
+  --accent-text: #94420c;
+  --accent-text-hover: #783409;
+  --accent: #94420c;
+  --accent-hover: #783409;
   --accent-dim: rgba(184, 92, 20, 0.11);
   --accent-fg: #ffffff;
-  --success: #5c7a26;
+  --success: #435f1d;
   --success-dim: rgba(92, 122, 38, 0.11);
-  --warning: #96701a;
+  --warning: #765210;
   --warning-dim: rgba(150, 112, 26, 0.14);
-  --danger: #bf4436;
+  --danger: #a33428;
   --danger-dim: rgba(191, 68, 54, 0.1);
 }
 
@@ -167,9 +177,13 @@
   --border-muted: #142743;
   --text: #e9f1ff;
   --text-muted: #94aed6;
-  --text-subtle: #6a84ad;
-  --accent: #2f80ff;
-  --accent-hover: #5b9bff;
+  --text-subtle: #adc5e8;
+  --control-border: #90acd4;
+  --info: #b4d8ff;
+  --accent-text: #93caff;
+  --accent-text-hover: #b7ddff;
+  --accent: #78b9ff;
+  --accent-hover: #9acdff;
   --accent-dim: rgba(47, 128, 255, 0.18);
   --accent-fg: #051029;
   --success: #2fd3aa;
@@ -189,63 +203,237 @@
   --border-muted: #d5e2f7;
   --text: #0c1a33;
   --text-muted: #3b5378;
-  --text-subtle: #566e96;
+  --text-subtle: #354c72;
+  --control-border: #617ca4;
+  --info: #264f78;
+  --accent-text: #1259d6;
+  --accent-text-hover: #0d45ad;
   --accent: #1259d6;
   --accent-hover: #0d45ad;
   --accent-dim: rgba(18, 89, 214, 0.11);
   --accent-fg: #ffffff;
-  --success: #0b7a62;
+  --success: #075d4a;
   --success-dim: rgba(11, 122, 98, 0.1);
-  --warning: #8a6218;
+  --warning: #6d4a10;
   --warning-dim: rgba(138, 98, 24, 0.14);
-  --danger: #c0392f;
+  --danger: #a62d25;
   --danger-dim: rgba(192, 57, 47, 0.1);
 }
 
-/* Graphite Neon */
+/* Graphite Neon — Shift Dock's charcoal, rounded rows and lime hub.
+   Keep the logo's base/accent colours; text ink has its own AA-safe token. */
 :root[data-theme="dark"][data-theme-preset="graphite"] {
   --bg: #111416;
-  --bg-sidebar: #0d1012;
-  --bg-surface: #1b2024;
-  --bg-elevated: #232a30;
-  --bg-overlay: #2c343c;
-  --border: #37414b;
-  --border-muted: #252d35;
-  --text: #ebeff3;
-  --text-muted: #a5b0ba;
-  --text-subtle: #7d8892;
+  --bg-sidebar: #0c1011;
+  --bg-surface: #1a1f21;
+  --bg-elevated: #242b2d;
+  --bg-overlay: #30383a;
+  --border: #495455;
+  --border-muted: #30393a;
+  --text: #f0f3ed;
+  --text-muted: #c2ccc5;
+  --text-subtle: #a9b5ae;
   --accent: #9ed84a;
   --accent-hover: #b8ec62;
-  --accent-dim: rgba(158, 216, 74, 0.15);
+  --accent-text: #b8ec62;
+  --accent-text-hover: #d1f59a;
+  --accent-dim: rgba(158, 216, 74, 0.12);
   --accent-fg: #121710;
-  --success: #67d690;
-  --success-dim: rgba(103, 214, 144, 0.13);
-  --warning: #e5c16d;
-  --warning-dim: rgba(229, 193, 109, 0.15);
-  --danger: #e68a8a;
-  --danger-dim: rgba(230, 138, 138, 0.14);
+  --success: #83dfad;
+  --success-dim: rgba(131, 223, 173, 0.1);
+  --warning: #f0cc80;
+  --warning-dim: rgba(240, 204, 128, 0.1);
+  --danger: #ffaaa5;
+  --danger-dim: rgba(255, 170, 165, 0.1);
+  --info: #94caff;
+  --info-dim: rgba(148, 202, 255, 0.1);
+  --graphite-control-border: #87958b;
+  --graphite-card-shadow: 0 4px 16px -8px rgba(0, 0, 0, 0.6);
+  --graphite-sheen: rgba(240, 243, 237, 0.04);
+  --graphite-shimmer: rgba(184, 236, 98, 0.09);
+  --chart-1: #9ed84a;
+  --chart-2: #94caff;
+  --chart-3: #f0b47d;
+  --chart-4: #c5afff;
+  --chart-5: #83dfce;
+  --chart-6: #ffaaa5;
+  --chart-7: #f0d580;
+  --chart-8: #c4ccd4;
 }
 :root[data-theme="light"][data-theme-preset="graphite"] {
   --bg: #f7f8f9;
-  --bg-sidebar: #edf1f4;
+  --bg-sidebar: #edf0e9;
   --bg-surface: #ffffff;
-  --bg-elevated: #f1f4f7;
-  --bg-overlay: #e2e9ef;
-  --border: #cfd8df;
-  --border-muted: #e1e8ee;
-  --text: #1f2a33;
-  --text-muted: #4f6171;
-  --text-subtle: #637281;
+  --bg-elevated: #f0f3ed;
+  --bg-overlay: #e5ebdf;
+  --border: #bec8b8;
+  --border-muted: #dde4d7;
+  --text: #202820;
+  --text-muted: #40503f;
+  --text-subtle: #4f604c;
   --accent: #4c840c;
   --accent-hover: #406f08;
-  --accent-dim: rgba(93, 158, 16, 0.12);
+  --accent-text: #356006;
+  --accent-text-hover: #294c04;
+  --accent-dim: rgba(76, 132, 12, 0.08);
   --accent-fg: #ffffff;
-  --success: #2f8b57;
-  --success-dim: rgba(47, 139, 87, 0.1);
-  --warning: #8f6a1f;
-  --warning-dim: rgba(143, 106, 31, 0.14);
-  --danger: #ba5c5c;
-  --danger-dim: rgba(186, 92, 92, 0.1);
+  --success: #17613f;
+  --success-dim: rgba(23, 97, 63, 0.08);
+  --warning: #77500c;
+  --warning-dim: rgba(119, 80, 12, 0.08);
+  --danger: #a23535;
+  --danger-dim: rgba(162, 53, 53, 0.08);
+  --info: #235e98;
+  --info-dim: rgba(35, 94, 152, 0.08);
+  --graphite-control-border: #73806c;
+  --graphite-card-shadow: 0 4px 16px -8px rgba(32, 40, 32, 0.2);
+  --graphite-sheen: rgba(76, 132, 12, 0.025);
+  --graphite-shimmer: rgba(76, 132, 12, 0.08);
+  --shadow-elevated: 0 8px 24px rgba(32, 40, 32, 0.12);
+  --shadow-elevated-strong: 0 18px 60px rgba(32, 40, 32, 0.18);
+  --shadow-panel: 0 -4px 24px rgba(32, 40, 32, 0.12);
+  --shadow-panel-side: -4px 0 24px rgba(32, 40, 32, 0.12);
+  --shadow-toast: 0 8px 24px rgba(32, 40, 32, 0.14);
+  --shadow-popover: 0 8px 32px rgba(32, 40, 32, 0.14);
+  --shadow-prompt: 0 4px 24px rgba(32, 40, 32, 0.12);
+  --chart-1: #4c840c;
+  --chart-2: #235e98;
+  --chart-3: #94500c;
+  --chart-4: #7750ab;
+  --chart-5: #176d66;
+  --chart-6: #a23555;
+  --chart-7: #775d0c;
+  --chart-8: #4b6073;
+}
+:root[data-theme-preset="graphite"] {
+  --radius: 12px;
+  --radius-sm: 8px;
+  --radius-lg: 16px;
+  --dur-quick: 150ms;
+  --dur-fast: 150ms;
+}
+:root[data-theme-preset="graphite"] :is(.card, .hub-card) {
+  border-color: var(--border-muted);
+  background-image: linear-gradient(var(--graphite-sheen), transparent 72px);
+  box-shadow: var(--graphite-card-shadow);
+}
+:root[data-theme-preset="graphite"] .card-header {
+  background: transparent;
+  color: var(--text);
+  padding-block: 12px;
+}
+:root[data-theme-preset="graphite"] :is(.page-title, .hub-hero-date) {
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  text-wrap: balance;
+}
+:root[data-theme-preset="graphite"] .page-title {
+  font-size: clamp(22px, 1vw + 16px, 28px);
+  line-height: 1.2;
+}
+:root[data-theme-preset="graphite"] .page-subtitle {
+  margin-top: 6px;
+  line-height: 1.6;
+}
+:root[data-theme-preset="graphite"] :is(.nav-item, .nav-item-collapsed)[data-active] {
+  color: var(--accent-text);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+:root[data-theme-preset="graphite"] .nav-rail {
+  /* The docked square echoes the logo without another decorative mark. */
+  width: 5px;
+  height: 5px;
+  top: calc(50% - 2.5px);
+  bottom: auto;
+  left: -2px;
+  border-radius: 2px;
+}
+:root[data-theme-preset="graphite"] :is(.input, .search-field, .btn-ghost) {
+  border-color: var(--graphite-control-border);
+}
+:root[data-theme-preset="graphite"] :is(input, textarea, [contenteditable="true"]) {
+  caret-color: var(--accent-text);
+}
+:root[data-theme-preset="graphite"] :focus-visible {
+  outline: 2px solid var(--accent-text);
+  outline-offset: 3px;
+}
+/* The appearance swatches clear their outline inline; restore keyboard focus. */
+:root[data-theme-preset="graphite"] [role="menuitem"]:focus-visible {
+  outline: 2px solid var(--accent-text) !important;
+  outline-offset: 3px;
+}
+:root[data-theme-preset="graphite"] ::selection {
+  color: var(--accent-fg);
+  background: var(--accent);
+}
+:root[data-theme-preset="graphite"] .empty-state .empty-pop {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+  border-radius: var(--radius);
+  color: var(--accent-text);
+  background: var(--accent-dim);
+}
+:root[data-theme-preset="graphite"] .empty-state p:first-child {
+  color: var(--text);
+  font-weight: 600;
+}
+:root[data-theme-preset="graphite"] .empty-state p {
+  max-width: 60ch;
+  line-height: 1.6;
+}
+:root[data-theme-preset="graphite"] .empty-pop {
+  animation-duration: var(--dur-slow);
+}
+:root[data-theme-preset="graphite"] :is(.repo-git-graph, table) {
+  font-variant-numeric: tabular-nums;
+}
+:root[data-theme-preset="graphite"] .btn {
+  transition: transform var(--dur-base) var(--ease-swift);
+}
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  :root[data-theme-preset="graphite"] body:not([data-motion="off"]) .btn-primary:not(:disabled):not([aria-disabled="true"]):hover:not(:active) {
+    transform: translateY(-1px);
+  }
+}
+:root[data-theme-preset="graphite"] .btn:not(:disabled):active {
+  transform: none;
+  scale: 1;
+  opacity: 1;
+}
+/* Content-shaped loading stays in place; only its light band travels. */
+:root[data-theme-preset="graphite"] .skeleton {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  background: var(--bg-elevated);
+  animation: none;
+}
+:root[data-theme-preset="graphite"] .skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, var(--graphite-shimmer), transparent);
+  transform: translateX(-100%);
+}
+@keyframes graphite-shimmer {
+  to { transform: translateX(100%); }
+}
+@media (prefers-reduced-motion: no-preference) {
+  :root[data-theme-preset="graphite"] body:not([data-motion="off"]) .skeleton::after {
+    animation: graphite-shimmer 1.6s var(--ease-swift) infinite;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  :root[data-theme-preset="graphite"] *,
+  :root[data-theme-preset="graphite"] *::before,
+  :root[data-theme-preset="graphite"] *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 /* Tokyo Night - neon-noir violet + magenta */
@@ -258,8 +446,12 @@
   --border: #473a6b;
   --border-muted: #2c2442;
   --text: #ece5ff;
-  --text-muted: #ac9fd4;
-  --text-subtle: #9186b4;
+  --text-muted: #d0c3ec;
+  --text-subtle: #c1b2dd;
+  --control-border: #b4a0d4;
+  --info: #bdb8ff;
+  --accent-text: #d4a6ff;
+  --accent-text-hover: #e7ceff;
   --accent: #c084fc;
   --accent-hover: #d4a6ff;
   --accent-dim: rgba(192, 132, 252, 0.18);
@@ -281,63 +473,74 @@
   --border-muted: #e8ddfa;
   --text: #221838;
   --text-muted: #574a75;
-  --text-subtle: #6f6191;
+  --text-subtle: #57446f;
+  --control-border: #886ba8;
+  --info: #264f78;
+  --accent-text: #6824b8;
+  --accent-text-hover: #511990;
   --accent: #7c35d6;
   --accent-hover: #6626b5;
   --accent-dim: rgba(124, 53, 214, 0.11);
   --accent-fg: #ffffff;
-  --success: #0e7a66;
+  --success: #095e4d;
   --success-dim: rgba(14, 122, 102, 0.1);
-  --warning: #8f5a12;
+  --warning: #75470b;
   --warning-dim: rgba(143, 90, 18, 0.14);
-  --danger: #c2306e;
+  --danger: #a12458;
   --danger-dim: rgba(194, 48, 110, 0.1);
 }
 
-/* Catppuccin - authentic Mocha / Latte, soft pastel mauve */
 :root[data-theme="dark"][data-theme-preset="catppuccin"] {
-  --bg: #1e1e2e;
-  --bg-sidebar: #181825;
-  --bg-surface: #262637;
-  --bg-elevated: #313244;
-  --bg-overlay: #45475a;
-  --border: #45475a;
-  --border-muted: #2c2c3e;
-  --text: #cdd6f4;
-  --text-muted: #a6adc8;
-  --text-subtle: #8b90a8;
-  --accent: #cba6f7;
-  --accent-hover: #dcc0ff;
-  --accent-dim: rgba(203, 166, 247, 0.16);
-  --accent-fg: #1e1e2e;
-  --success: #a6e3a1;
-  --success-dim: rgba(166, 227, 161, 0.14);
-  --warning: #f9e2af;
-  --warning-dim: rgba(249, 226, 175, 0.15);
-  --danger: #f38ba8;
-  --danger-dim: rgba(243, 139, 168, 0.15);
+  --bg: #101b19;
+  --bg-sidebar: #0b1412;
+  --bg-surface: #182824;
+  --bg-elevated: #22352f;
+  --bg-overlay: #2a4037;
+  --border: #516d5e;
+  --border-muted: #304a3e;
+  --control-border: #9fbdaa;
+  --info: #afd7e5;
+  --text: #f0f3e7;
+  --text-muted: #c4d7c8;
+  --text-subtle: #b2c9b8;
+  --accent: #96d6bd;
+  --accent-hover: #bce8d2;
+  --accent-text: #bce8d2;
+  --accent-text-hover: #daf5e3;
+  --accent-dim: rgba(150, 214, 189, 0.12);
+  --accent-fg: #10221a;
+  --success: #b0dfa6;
+  --success-dim: rgba(176, 223, 166, 0.1);
+  --warning: #f2d4a0;
+  --warning-dim: rgba(242, 212, 160, 0.1);
+  --danger: #f3b6ae;
+  --danger-dim: rgba(243, 182, 174, 0.1);
 }
 :root[data-theme="light"][data-theme-preset="catppuccin"] {
-  --bg: #eff1f5;
-  --bg-sidebar: #e6e9ef;
-  --bg-surface: #ffffff;
-  --bg-elevated: #f2f4f8;
-  --bg-overlay: #dce0e8;
-  --border: #ccd0da;
-  --border-muted: #e0e3ea;
-  --text: #4c4f69;
-  --text-muted: #64677e;
-  --text-subtle: #6c6f85; /* Latte subtext0 — 4.94:1 on surface */
-  --accent: #8839ef;
-  --accent-hover: #7127c9;
-  --accent-dim: rgba(136, 57, 239, 0.1);
+  --bg: #f7f6f0;
+  --bg-sidebar: #e8eee5;
+  --bg-surface: #fdfdf8;
+  --bg-elevated: #eff3e9;
+  --bg-overlay: #dce7d9;
+  --border: #afc4b3;
+  --border-muted: #d1ddcb;
+  --control-border: #607b67;
+  --info: #264f78;
+  --text: #203329;
+  --text-muted: #3f5745;
+  --text-subtle: #485f4b;
+  --accent: #216b53;
+  --accent-hover: #15523e;
+  --accent-text: #18563f;
+  --accent-text-hover: #10422f;
+  --accent-dim: rgba(33, 107, 83, 0.1);
   --accent-fg: #ffffff;
-  --success: #40a02b;
-  --success-dim: rgba(64, 160, 43, 0.1);
-  --warning: #c77e14; /* Latte yellow, darkened to clear 3:1 on surface */
-  --warning-dim: rgba(223, 142, 29, 0.14);
-  --danger: #d20f39;
-  --danger-dim: rgba(210, 15, 57, 0.1);
+  --success: #32672b;
+  --success-dim: rgba(50, 103, 43, 0.1);
+  --warning: #79520f;
+  --warning-dim: rgba(121, 82, 15, 0.1);
+  --danger: #aa342c;
+  --danger-dim: rgba(170, 52, 44, 0.1);
 }
 
 /* Hollow — bruised black / dried blood, and stained paper in the light variant */
@@ -352,6 +555,8 @@
   --text: #e5e2d8;
   --text-muted: #c4c4b6;
   --text-subtle: #b8b9aa;
+  --control-border: #b8b9aa;
+  --info: #b4ccd3;
   --accent: #a3201c;
   --accent-hover: #aa2521;
   --accent-text: #fa9998;
@@ -376,6 +581,8 @@
   --text: #161310;
   --text-muted: #322a24;
   --text-subtle: #3a322b;
+  --control-border: #706455;
+  --info: #264f78;
   --accent: #710f19;
   --accent-hover: #5b0a13;
   --accent-text: #650d17;

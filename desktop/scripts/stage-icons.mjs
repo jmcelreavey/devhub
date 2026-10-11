@@ -4,8 +4,8 @@
  *
  * The *bundled* Dock / Finder icon is always the core DevHub Shift Dock mark
  * (`dashboard/public/icon-master.png`). Plugin branding used to win this race
- * whenever `plugin-desktop-icon.png` existed, so a BI-branded machine shipped
- * a BI `.icns` and macOS's persistent Dock tile ignored every runtime reset.
+ * whenever `plugin-desktop-icon.png` existed, so a plugin-branded machine shipped
+ * a plugin `.icns` and macOS's persistent Dock tile ignored every runtime reset.
  *
  * Plugin icons still exist — they land next to the Shift Dock mark as `plugin.png` and
  * the shell overlays them at runtime when the in-app logo is the plugin brand.

@@ -115,7 +115,7 @@ export async function reconcilePaseoRun(input: AgentRun): Promise<AgentRun> {
         let fetched = await session.daemon.fetchAgent(agentId);
         if (!fetched) return { state: "needs-attention", error: "The agent is no longer available in Paseo." } satisfies Partial<AgentRunStatus>;
         const entries = await turnEntries(session.daemon, agentId, run.status.messageId!);
-        if (ownsLatestTurn(run, entries) && await autoConfirm(session, fetched.agent) > 0) fetched = (await session.daemon.fetchAgent(agentId)) ?? fetched;
+        if (!run.spec.activity?.taskId && ownsLatestTurn(run, entries) && await autoConfirm(session, fetched.agent) > 0) fetched = (await session.daemon.fetchAgent(agentId)) ?? fetched;
         return paseoTurnOutcome(run, fetched.agent, entries);
       });
       const updated = withAgentAdmission(() => {

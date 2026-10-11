@@ -1,6 +1,9 @@
 "use client";
 
-import { useConfirm,usePrompt } from "@/components/shell/ConfirmDialog";
+import Link from "next/link";
+import { SelectionPanel } from "@/components/editor/SelectionPanel";
+import type { EditorSelection } from "@/lib/editor/selection";
+import { useConfirm } from "@/components/shell/ConfirmDialog";
 import { ContextMenu,useContextMenu,type ContextMenuGroup } from "@/components/shell/ContextMenu";
 import { SimpleMarkdown } from "@/components/ui/SimpleMarkdown";
 import { SkeletonRows } from "@/components/ui/SkeletonRows";
@@ -13,8 +16,7 @@ import { useToast } from "@/lib/hooks/use-toast";
 import { openRepoFileInCursor } from "@/lib/open-in-cursor-client";
 import { isGitNoisePath,isUnmergedFile,looksLikeDirectoryPath,type DiffLine } from "@/lib/repos/git-parsers";
 import {
-agentCommitMessagePrompt,
-agentDiffSelectionPrompt
+agentCommitMessagePrompt
 } from "@/lib/terminal-launch";
 import {
 Bot,
@@ -237,7 +239,8 @@ export function ChangesPanel({
 }) {
   const toast = useToast();
   const confirm = useConfirm();
-  const prompt = usePrompt();
+  const [aiSelection, setAiSelection] = useState<EditorSelection>();
+  const [diffRevision, setDiffRevision] = useState("");
   const [status, setStatus] = useState<StatusPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<{ path: string; staged: boolean } | null>(null);
@@ -356,6 +359,7 @@ export function ChangesPanel({
           kind?: "file" | "directory";
           lines?: DiffLine[];
           raw?: string;
+          revision?: string;
           entries?: DiffDirEntry[];
           message?: string;
         }>(repoApi(repoName, `/git/diff?${qs}`));
@@ -371,6 +375,7 @@ export function ChangesPanel({
           setDirPreview(null);
           setDiffLines(json.lines ?? []);
           setRawDiff(json.raw ?? "");
+          setDiffRevision(json.revision ?? "captured diff");
         }
       } catch (err) {
         if (!cancelled) {
@@ -504,37 +509,10 @@ export function ChangesPanel({
     }
   }
 
-  async function sendSelectionToAi(snippet: string, lineHint: string) {
+  function sendSelectionToAi(snippet: string, lineHint: string) {
     if (!selected) return;
-    const context = await prompt({
-      title: "Send selection to AI",
-      message: `Add context for the agent about ${selected.path} (${lineHint}). Leave blank to continue.`,
-      input: { placeholder: "What should the agent do with this?" },
-      confirmLabel: "Open agent",
-    });
-    if (context === null) return;
-    const opts = {
-      repoName,
-      filePath: selected.path,
-      snippet,
-      lineHint,
-      context: context.trim() || undefined,
-      staged: selected.staged,
-    };
-    // Interactive selection handoff — dedicated Agent tab via confirm/inject.
-    // OpenCode HTTP oneshot is a poor fit for "discuss this hunk".
-    await launchAgentJob({
-      title: `diff · ${repoName}`,
-      kind: "agent",
-      cwd: repoPath,
-      repoName,
-      promptText: agentDiffSelectionPrompt(opts),
-      mode: "interactive",
-      forceTerminal: true,
-      reason: `Diff selection in ${selected.path}`,
-      alreadyConfirmed: true,
-    });
-    toast.info("Agent tab ready — chat in the terminal.");
+    setAiSelection({ workspaceId: repoName, relativePath: selected.path, selectedText: snippet,
+      ranges: lineHint, revision: diffRevision, source: selected.staged ? "staged" : "unstaged", dirty: true });
   }
 
   /**
@@ -796,7 +774,9 @@ export function ChangesPanel({
 
   return (
     <div className="repo-git-changes">
+      {aiSelection && <SelectionPanel selection={aiSelection} close={() => setAiSelection(undefined)} />}
       <div className="repo-git-changes-toolbar">
+        <Link className="btn btn-ghost" href={"/editor?workspace=" + encodeURIComponent(repoName)}>Open editor</Link>
         <button type="button" className="btn btn-ghost" disabled={acting !== null} onClick={() => void refresh()}>
           <RefreshCw size={11} className={loading ? "animate-spin" : undefined} /> Refresh
         </button>

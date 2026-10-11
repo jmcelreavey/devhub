@@ -24,7 +24,7 @@ const CLIENT_ID = process.env.DEVHUB_GITHUB_OAUTH_CLIENT_ID ?? "178c6fc778ccc68e
 
 /**
  * `gh auth login --web` defaults plus `read:packages`. Without packages, Setup
- * re-auth overwrites a working gh token and BI `npm install` 403s on GitHub Packages.
+ * re-auth overwrites a working gh token and private-package `npm install` 403s on GitHub Packages.
  */
 const SCOPES = "repo,read:org,gist,workflow,read:packages";
 

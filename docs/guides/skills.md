@@ -19,7 +19,7 @@ Skills are reusable instructions for AI agents. They capture repeatable workflow
 
 Shared skills live in the DevHub repo under `skills/shared/` and can be synced into local AI tools. Retired skills live under `skills/parked/` — they stay in git for reference, and sync **uninstalls** matching copies from tool directories (see [Retiring a skill](#retiring-a-skill)). Vendored third-party skills live under `skills/vendor/` ([Vendored skills](vendored-skills.md)).
 
-Optional shared/team skills can live in an **ai-tools** checkout under `skills/`. DevHub merges them at sync time from a local clone and exposes them with a `bi-` catalog prefix unless they already have one. They appear on the Skills page with an **ai-tools** badge and are read-only in DevHub (edit them in ai-tools, then **Refresh** or run sync).
+Optional shared/team skills can live in an **ai-tools** checkout under `skills/`. DevHub merges them at sync time from a local clone and exposes them with a `upstream-` catalog prefix unless they already have one. They appear on the Skills page with an **ai-tools** badge and are read-only in DevHub (edit them in ai-tools, then **Refresh** or run sync).
 
 Each skill should have a clear name and a `SKILL.md` file that explains when and how to use it.
 
@@ -47,7 +47,7 @@ AI_TOOLS_BRANCH=main
 Constraints:
 
 - DevHub never edits the ai-tools checkout; those rows are read-only in the UI.
-- DevHub skills win on name collision. If `skills/shared/bi-foo` exists, it replaces ai-tools `foo` or `bi-foo`.
+- DevHub skills win on name collision. If `skills/shared/upstream-foo` exists, it replaces ai-tools `foo` or `upstream-foo`.
 - Upstream refresh writes a cache under `~/.cache/devhub/ai-tools-upstream/` and leaves the working tree untouched.
 
 Excluded skills (eye icon on the Skills page) are not synced or pruned; old copies remain in tool directories until you remove them manually.
@@ -61,6 +61,27 @@ A good skill is:
 - Written as a workflow, not an essay.
 - Free of secrets and machine-local paths.
 - Easy to review in Git.
+
+A few rules for the writing itself, adapted from Matt Pocock's `writing-for-agents` skill (MIT, Copyright (c) 2026 Matt Pocock):
+
+- The description is the trigger. Lead with the situation that should load the skill. One phrase per distinct case. Don't repeat the title.
+- Every step ends on a check you can tell is done.
+- Say what to do. Use a ban only when you can't phrase the positive, and then pair it with the positive.
+- Keep each rule in one place. Don't copy `package.json` scripts, the directory tree, or anything the agent can look up.
+- Detail that only some runs need goes in a sibling file the skill points at.
+
+## Matt Pocock adaptations
+
+These are **shared DevHub skills**, adapted from Matt Pocock's MIT-licensed skills, not read-only vendor entries. They follow the same catalogue, sync and review rules as the other folders in `skills/shared/`.
+
+| Skill | Use it for |
+| ----- | ---------- |
+| `grill-with-docs` | Interview a plan until assumptions and domain terms are explicit, then save the agreed decisions. |
+| `diagnosing-bugs` | Reproduce and minimise a failure before testing hypotheses and fixing the cause. |
+| `code-review` | Review both repo standards and the ticket/spec; lead with broken, risky or missing behaviour. |
+| `improve-codebase-architecture` | Identify shallow modules, present deeper boundaries and let the user choose a focused change. |
+
+`devhub-implement-task` also uses the red-then-green testing guidance adapted from `tdd`; `devhub-create-shared-x` uses the agent-writing rules listed above. There isn't a separate synced skill for every upstream name. Attribution stays in each adapted skill; nothing installs or updates directly from Matt's repo during sync.
 
 ## Creating A Skill
 
@@ -129,7 +150,7 @@ Some dashboard actions preload a skill. Review-with-agent starts an Agents (Pase
 
 | Skill | Triggered from | Purpose |
 | ----- | -------------- | ------- |
-| `pr-explain-review` | `/prs` **Review with agent** | Explain a GitHub PR and save a review note under `notes/pr-reviews/…`. Starts a Paseo agent, not a PTY inject. See [GitHub integration](../integrations/github.md#row-actions). |
+| `pr-explain-review` | `/prs` **Review with agent** | Explain a GitHub PR and save a review note under `notes/pr-reviews/…`. Starts a Paseo agent, not a PTY inject. Ticket-to-PR review also follows `code-review` and writes `## Standards` and `## Spec` into that note. See [GitHub integration](../integrations/github.md#row-actions). |
 | `git-hook-fix` | Repo Git **GitHookFailureDialog** | Diagnose and fix pre-commit/pre-push hook failures after a `422 hook_failed` response. |
 | `git-conflict-resolve` | Repo Git stash conflicts | Walk through resolving conflict markers after a failed stash apply/pop (`409 stash_conflict`). |
 | `taste-skill` | Briefing canvas generation (house aesthetic) | Anti-slop frontend rules distilled into briefing prompts via `lib/briefing-taste.ts`. Install under `skills/shared/` (or sync to tool paths) for stricter default palettes; **fresh look** / custom aesthetics bypass house rules until reset. |

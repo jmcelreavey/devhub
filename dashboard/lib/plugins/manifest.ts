@@ -24,11 +24,11 @@ const pluginNavItemSchema = z
     href: z.string().min(1),
     label: z.string().min(1),
     icon: z.string().min(1),
-    group: z.enum(["workspace", "library", "bi", "system"]),
+    group: z.enum(["workspace", "library", "infra", "system"]),
     gate: z.string().min(1).optional(),
     desktopOnly: z.boolean().optional(),
     shortcut: z.string().min(1).optional(),
-    section: z.enum(["library", "system", "bi"]).optional(),
+    section: z.enum(["library", "system", "infra"]).optional(),
   })
   .strict();
 
@@ -39,6 +39,7 @@ const dashboardSchema = z
     overlays: z.array(z.string().min(1)).optional(),
     nav: z.array(pluginNavItemSchema).optional(),
     connections: z.string().min(1).optional(),
+    providers: z.string().regex(/^lib\/(?:[a-zA-Z0-9_-]+\/)*[a-zA-Z0-9_-]+\.tsx?$/).optional(),
   })
   .strict();
 

@@ -31,13 +31,13 @@ export interface PluginNavItem {
   href: string;
   label: string;
   icon: string;
-  group: "workspace" | "library" | "bi" | "system";
+  group: "workspace" | "library" | "infra" | "system";
   /** Defaults to the plugin's top-level `navGate` when omitted. */
   gate?: string;
   desktopOnly?: boolean;
   shortcut?: string;
-  /** When set, also appears in that section's top-bar tabs (Library / System / BI). */
-  section?: "library" | "system" | "bi";
+  /** When set, also appears in that section's top-bar tabs (Library / System / Infrastructure). */
+  section?: "library" | "system" | "infra";
 }
 
 /**
@@ -51,7 +51,7 @@ export interface PluginNavItem {
 export interface DashboardContribution {
   /** Plugin-root-relative dir holding the dashboard subtree (e.g. "dashboard"). */
   root: string;
-  /** Dashboard-relative paths the plugin owns (files or dirs), e.g. "app/ops", "lib/bi-ops.ts". */
+  /** Dashboard-relative paths the plugin owns (files or dirs), e.g. "app/ops", "lib/team-ops.ts". */
   paths: string[];
   /**
    * Dashboard-relative FILES whose core version is a committed empty baseline the plugin
@@ -79,6 +79,8 @@ export interface DashboardContribution {
    * before anything can import it.
    */
   connections?: string;
+  /** Source module with a default IntegrationProvider[] export; requires rebuild. */
+  providers?: string;
 }
 
 /**
@@ -139,7 +141,7 @@ export interface BrandingContribution {
 
 /**
  * A CLI tool a plugin needs present on this machine. Checked in `preinstall` (see
- * `scripts/check-plugin-requirements.mjs`) so a plugin can mandate a tool (e.g. the BI
+ * `scripts/check-plugin-requirements.mjs`) so a plugin can mandate a tool (e.g. the Infrastructure
  * plugin requires `safe-chain`) without the core template forcing it on every forker.
  */
 export interface PluginRequiredCommand {
@@ -175,7 +177,7 @@ export interface PluginManifest {
   name: string;
   version: string;
   devhubApi: DevhubApiVersion;
-  /** Optional nav gate (reuses the dashboard NavGate values, e.g. "bi"). */
+  /** Optional nav gate (reuses the dashboard NavGate values, e.g. "infra"). */
   navGate?: string;
   /** Map of asset kind -> path relative to the plugin root (e.g. { agents: "agents/" }). */
   contributes: Partial<Record<ContributeKind, string>>;

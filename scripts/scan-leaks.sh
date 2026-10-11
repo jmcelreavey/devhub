@@ -10,12 +10,15 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$ROOT/scripts/lib/public-paths.sh"
 
 # Internal service codenames that must never appear in public/shared content.
 DENY='sigyn|gefjon|bifrost|fenrir|svapi|heimdall|forseti|skadi'
 # Employer names and branding that belong in plugins or personal data, never core.
 # Bracketed letters keep this line from matching itself when a diff adding it is scanned.
 DENY="${DENY}|busines[s] ?insider|garnet[t]|@inside[r][.]com"
+DENY="${DENY}|devhu[b]-b[i]|b[i]-(presence|actions|plugin-actions|rds|db-provider)|plugins_b[i]_|plugin:b[i]([^[:alnum:]_-]|$)|B[I]_OPS_USER_EMAIL|CAP[I]_REPO_PATH"
+DENY="${DENY}|(^|[^[:alnum:]_])ca[p]i([^[:alnum:]_]|$)"
 # High-signal secret patterns.
 SECRET='AKIA[0-9A-Z]{16}|-----BEGIN[ A-Z]*PRIVATE KEY-----|xox[baprs]-[0-9A-Za-z-]{10,}|ghp_[0-9A-Za-z]{36}'
 PATTERN="${DENY}|${SECRET}"
@@ -32,8 +35,7 @@ case "$mode" in
     # Generated plugin files are skip-worktree and hold the local plugin's output on disk;
     # their committed content is covered by the backport's added-line scan instead.
     hits="$(cd "$ROOT" && git ls-files -- \
-              ':!notes' ':!tasks' ':!reps' ':!collections' ':!upstarts' ':!TEMPLATE_AND_PLUGIN_PLAN.md' \
-              ':!skills/shared/my-voice/writing-style.md' ':!skills/shared/my-voice/learned-voice.md' \
+              "${PUBLIC_PATHS[@]}" \
               ':!scripts/scan-leaks.sh' ':!scripts/devhub-backport.sh' ':!scripts/make-public-seed.sh' \
               ':(exclude,glob)dashboard/**/*.generated.*' \
               ':(exclude,glob)docs/codebase-review-*.md' \

@@ -120,8 +120,8 @@ describe("buildCoworkPlugin", () => {
     const bundle = coworkBundlePath(repo);
     await buildCoworkPlugin({ repoRoot: repo, emit: () => {} });
 
-    const upstream = readEntry(bundle, "skills/bi-upstream-skill/SKILL.md");
-    expect(upstream).toContain("name: bi-upstream-skill");
+    const upstream = readEntry(bundle, "skills/upstream-skill/SKILL.md");
+    expect(upstream).toContain("name: upstream-skill");
     expect(upstream).toContain("body upstream");
   });
 

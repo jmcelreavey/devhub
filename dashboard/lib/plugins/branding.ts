@@ -17,7 +17,7 @@
  *
  * Design goals: KISS (a plugin authors its own palette CSS — we just relocate + concatenate),
  * DRY (one source of truth: the plugin's `branding` block), and reusable (any plugin can
- * whitelabel; nothing here is BI-specific).
+ * whitelabel; nothing here is Team-specific).
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -54,7 +54,7 @@ import type { ThemePresetMeta } from "./theme-presets-types";
 export interface PluginBrandLogo {
   /** Public URL of the brand image, e.g. "/plugin-brand-logo.svg?v=1". */
   src: string;
-  /** Accessible label, e.g. "BI". */
+  /** Accessible label, e.g. "Team". */
   label: string;
 }
 

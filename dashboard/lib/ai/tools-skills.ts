@@ -14,7 +14,7 @@ import {
 } from "@/lib/upstream-skills-cache";
 
 const SKILLS_SUBDIR = "skills";
-const BI_SKILL_PREFIX = "bi-";
+const UPSTREAM_SKILL_PREFIX = "upstream-";
 
 export interface RefreshAiToolsResult {
   ok: boolean;
@@ -66,19 +66,19 @@ export function isAiToolsAvailable(): boolean {
 }
 
 export function listAiToolsSkillNames(root?: string): string[] {
-  return listSkillDirNames(aiToolsSkillsDir(root)).map(aiToolsSkillCatalogName);
+  return listSkillDirNames(aiToolsSkillsDir(root)).map(aiToolsSkillCatalogName).sort((left, right) => left.localeCompare(right));
 }
 
 export function resolveAiToolsSkillDir(name: string, root?: string): string | null {
   const skillsDir = aiToolsSkillsDir(root);
   const exact = resolveSkillDirUnder(skillsDir, name);
   if (exact) return exact;
-  if (!name.startsWith(BI_SKILL_PREFIX)) return null;
-  return resolveSkillDirUnder(skillsDir, name.slice(BI_SKILL_PREFIX.length));
+  if (!name.startsWith(UPSTREAM_SKILL_PREFIX)) return null;
+  return resolveSkillDirUnder(skillsDir, name.slice(UPSTREAM_SKILL_PREFIX.length));
 }
 
 export function aiToolsSkillCatalogName(sourceName: string): string {
-  return sourceName.startsWith(BI_SKILL_PREFIX) ? sourceName : `${BI_SKILL_PREFIX}${sourceName}`;
+  return sourceName.startsWith(UPSTREAM_SKILL_PREFIX) ? sourceName : `${UPSTREAM_SKILL_PREFIX}${sourceName}`;
 }
 
 export function rewriteAiToolsSkillFrontmatterName(content: string, catalogName: string): string {

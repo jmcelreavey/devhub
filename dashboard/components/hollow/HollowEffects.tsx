@@ -144,7 +144,7 @@ export function HollowEffects({ plan, preview, faceShot }: {
   }, []);
 
   useEffect(() => {
-    if (!plan.creatures && !plan.cursorTrail) return;
+    if (!plan.creatures && !plan.cursorTrail && !(plan.grainMotion && plan.cracks)) return;
     let raf = 0;
     const mouse = { x: -9999, y: -9999, text: true };
     function frame() {
@@ -162,7 +162,7 @@ export function HollowEffects({ plan, preview, faceShot }: {
           if (iris) iris.style.transform = `translate(${dx * reach}px, ${dy * reach}px)`;
         }
       });
-      if (plan.grainMotion && plan.cursorTrail) {
+      if (plan.grainMotion && plan.cracks) {
         const room = rootRef.current?.querySelector<HTMLElement>(".hollow-room");
         if (room) {
           const left = parseFloat(room.style.getPropertyValue("--room-left"));
@@ -183,10 +183,11 @@ export function HollowEffects({ plan, preview, faceShot }: {
       }
     }
     function move(event: PointerEvent) {
+      if (event.pointerType && event.pointerType !== "mouse") { hide(); return; }
       mouse.x = event.clientX; mouse.y = event.clientY;
       // Keep the cursor tint out of the contrast budget for text and controls.
       mouse.text = event.target instanceof Element && (
-        Boolean(event.target.closest(`${TEXT_TARGET}, ${HOLLOW_BLOCKED}`))
+        Boolean(event.target.closest(`${TEXT_TARGET}, ${HOLLOW_BLOCKED}, iframe, .terminal-dock`))
         || [...event.target.childNodes].some((node) => node.nodeType === 3 && node.textContent?.trim())
       );
       if (!raf && !document.hidden) raf = requestAnimationFrame(frame);
@@ -198,13 +199,21 @@ export function HollowEffects({ plan, preview, faceShot }: {
     window.addEventListener("pointermove", move, { passive: true });
     document.addEventListener("visibilitychange", hide);
     document.addEventListener("pointerleave", hide);
+    window.addEventListener("blur", hide);
+    window.addEventListener("dragstart", hide);
+    window.addEventListener("scroll", hide, true);
+    window.addEventListener("keydown", hide);
     return () => {
       hide();
       window.removeEventListener("pointermove", move);
       document.removeEventListener("visibilitychange", hide);
       document.removeEventListener("pointerleave", hide);
+      window.removeEventListener("blur", hide);
+      window.removeEventListener("dragstart", hide);
+      window.removeEventListener("scroll", hide, true);
+      window.removeEventListener("keydown", hide);
     };
-  }, [plan.creatures, plan.cursorTrail, plan.grainMotion]);
+  }, [plan.creatures, plan.cursorTrail, plan.grainMotion, plan.cracks]);
 
   useEffect(() => {
     if (!plan.creatures) return;

@@ -52,7 +52,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   const reviewer = readImplementReviewPrefs();
   if (!reviewer.provider) {
     return NextResponse.json(
-      { error: "No review assistant is assigned, so review your own diff.", code: "no_reviewer" },
+      { error: "No review assistant is assigned. Choose one in review settings before continuing.", code: "no_reviewer" },
       { status: 409 },
     );
   }
@@ -87,8 +87,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
       worktree: false,
       depth: body.depth,
       reviewRun: true,
-      // No taskId: the task chip and Resume follow the implementation run, not its reviewer.
-      activity: { source: "interactive", action: "review", notePath: body.notePath },
+      activity: { source: "interactive", action: "review", taskId: task.id, taskDate: body.date, notePath: body.notePath },
     });
     return NextResponse.json(
       { run: toAgentRunSummary(run), reviewer: { provider: reviewer.provider, model: reviewer.model || null }, notePath: body.notePath },

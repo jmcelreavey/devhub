@@ -51,6 +51,21 @@ describe("portable runtime plugins", () => {
     expect(() => loadRuntime(ctx, "sample-tools")).toThrow(/not enabled/);
   });
 
+  it("streams real worker progress before completion and uses the reviewed deadline", async () => {
+    const { ctx, source, manifest, runtime } = fixture();
+    runtime.routes = [{ path: "/run", method: "POST", stream: true, timeoutSeconds: 45 }];
+    fs.writeFileSync(path.join(source, runtime.entry), 'process.stdout.write(JSON.stringify({type:"output",text:"running"})+"\\n"); setTimeout(()=>process.stdout.write(JSON.stringify({type:"result",result:{ok:true}})+"\\n"), 50);');
+    runtime.sha256 = hashFile(path.join(source, runtime.entry));
+    fs.writeFileSync(path.join(source, "devhub-plugin.json"), JSON.stringify(manifest));
+    const review = await prepareLocal(ctx, source);
+    await confirmOperation(ctx, review.id, consent(review));
+    const externalCall = vi.spyOn(external, "execExternal");
+    const events: unknown[] = [];
+    expect(await invokeRuntime(ctx, "sample-tools", { kind: "api", path: "/run", method: "POST" }, undefined, event => events.push(event))).toEqual({ ok: true });
+    expect(events).toEqual([{ type: "output", text: "running" }]);
+    expect(externalCall.mock.calls.at(-1)?.[2]?.timeoutMs).toBe(45000);
+  });
+
   it("rejects changed bytes both before consent and on later execution", async () => {
     const { ctx, source } = fixture();
     const review = await prepareLocal(ctx, source);

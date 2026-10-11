@@ -10,8 +10,7 @@ dashboard is discovered per request from `~/.config/devhub/dashboard.json` (writ
 the primary dashboard, never a `DEVHUB_SCHEDULER=0` dev server beside it), falling back
 to `http://localhost:1337`; `DEVHUB_BASE_URL` pins it instead.
 
-BI-specific tools (AWS profile, CAPI, jumpbox, RDS/Mongo/EKS, IAM) live in a **separate**
-server contributed by the `bi` plugin — see the `devhub-bi-mcp` skill.
+Domain-specific tools live in separate plugin-contributed servers. Read the installed plugin's skill for its access policy; core does not inherit or weaken those controls.
 
 ## Two tiers of tools
 

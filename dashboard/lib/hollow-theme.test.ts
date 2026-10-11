@@ -66,6 +66,9 @@ describe("hollow effects state", () => {
       rareEvents: true,
       jumpScares: false,
       sound: false,
+      cursor: true,
+      loader: true,
+      celebrations: true,
     });
     expect(parseHollowEffects(null)).toEqual(HOLLOW_EFFECT_DEFAULTS);
     expect(parseHollowEffects("not json")).toEqual(HOLLOW_EFFECT_DEFAULTS);

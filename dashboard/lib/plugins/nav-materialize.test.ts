@@ -4,14 +4,14 @@ import type { RegisteredPlugin } from "./types";
 
 function mkPlugin(nav: RegisteredPlugin["manifest"]["dashboard"]): RegisteredPlugin {
   return {
-    name: "bi",
-    path: "/tmp/bi",
+    name: "infra",
+    path: "/tmp/team-tools",
     enabled: true,
     manifest: {
-      name: "bi",
+      name: "infra",
       version: "0.1.0",
       devhubApi: "1",
-      navGate: "bi",
+      navGate: "infra",
       contributes: {},
       dashboard: nav,
     },
@@ -29,7 +29,7 @@ describe("collectPluginNav", () => {
             href: "/ops",
             label: "Ops",
             icon: "ops",
-            group: "bi",
+            group: "infra",
           },
         ],
       }),
@@ -40,8 +40,8 @@ describe("collectPluginNav", () => {
         href: "/ops",
         label: "Ops",
         icon: "ops",
-        group: "bi",
-        gate: "bi",
+        group: "infra",
+        gate: "infra",
       },
     ]);
   });
@@ -50,7 +50,7 @@ describe("collectPluginNav", () => {
     const a = mkPlugin({
       root: "dashboard",
       paths: ["app/ops"],
-      nav: [{ href: "/ops", label: "Ops", icon: "ops", group: "bi" }],
+      nav: [{ href: "/ops", label: "Ops", icon: "ops", group: "infra" }],
     });
     const b: RegisteredPlugin = {
       ...a,
@@ -61,7 +61,7 @@ describe("collectPluginNav", () => {
         dashboard: {
           root: "dashboard",
           paths: ["app/other"],
-          nav: [{ href: "/ops", label: "Other", icon: "ops", group: "bi" }],
+          nav: [{ href: "/ops", label: "Other", icon: "ops", group: "infra" }],
         },
       },
     };

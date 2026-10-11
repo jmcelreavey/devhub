@@ -15,9 +15,11 @@ let cached: HollowEffects = HOLLOW_EFFECT_DEFAULTS;
 let cachedKey = "";
 const subscribers = new Set<() => void>();
 
-function effectsSnapshot(): HollowEffects {
+export function getHollowEffectsSnapshot(): HollowEffects {
   if (typeof window === "undefined") return HOLLOW_EFFECT_DEFAULTS;
-  const next = readHollowEffects(localStorage);
+  let next: HollowEffects;
+  try { next = readHollowEffects(localStorage); }
+  catch { return cached; }
   const key = JSON.stringify(next);
   if (key === cachedKey) return cached;
   cached = next;
@@ -27,7 +29,10 @@ function effectsSnapshot(): HollowEffects {
 
 function subscribeEffects(onChange: () => void): () => void {
   subscribers.add(onChange);
-  return () => { subscribers.delete(onChange); };
+  window.addEventListener(HOLLOW_EFFECTS_EVENT, onChange);
+  const stored = (event: StorageEvent) => { if (event.key === null || event.key === "devhub:hollow-effects") onChange(); };
+  window.addEventListener("storage", stored);
+  return () => { subscribers.delete(onChange); window.removeEventListener(HOLLOW_EFFECTS_EVENT, onChange); window.removeEventListener("storage", stored); };
 }
 
 export function refreshHollowEffects(): void {
@@ -35,14 +40,14 @@ export function refreshHollowEffects(): void {
 }
 
 export function useHollowEffects(): HollowEffects {
-  return useSyncExternalStore(subscribeEffects, effectsSnapshot, () => HOLLOW_EFFECT_DEFAULTS);
+  return useSyncExternalStore(subscribeEffects, getHollowEffectsSnapshot, () => HOLLOW_EFFECT_DEFAULTS);
 }
 
 export function updateHollowEffects(patch: Partial<HollowEffects>): HollowEffects {
-  const next = { ...readHollowEffects(localStorage), ...patch };
-  writeHollowEffects(localStorage, next);
+  const next = { ...getHollowEffectsSnapshot(), ...patch };
+  try { writeHollowEffects(localStorage, next); cachedKey = JSON.stringify(next); }
+  catch { cached = next; }
   cached = next;
-  cachedKey = JSON.stringify(next);
   refreshHollowEffects();
   window.dispatchEvent(new Event(HOLLOW_EFFECTS_EVENT));
   if (next.master && next.sound && (patch.sound === true || patch.master === true)) {

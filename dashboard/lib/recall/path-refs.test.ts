@@ -12,7 +12,7 @@ describe("refsFromSourcePath", () => {
   });
 
   it("does not guess a repo from an unmatched PR slug", () => {
-    expect(refsFromSourcePath("pr-reviews/example-org-affiliate-service-286", ["capi"]))
+    expect(refsFromSourcePath("pr-reviews/example-org-affiliate-service-286", ["payments"]))
       .toEqual([]);
   });
 

@@ -95,6 +95,9 @@ If push fails, explain auth/permissions—do not retry blindly.
 - Match merged PR punctuation (e.g. `ABC-123: ...` vs `[ABC-123] ...`).
 - Body: minimal prose—why this change is needed, what decision/approach was taken if not obvious, and verification. Link tickets that are in scope only.
 - Prefer short blurbs over paragraphs. Omit implementation detail the diff already makes obvious.
+- **Evidence**, when a before/after exists: the failing test, command output, or screenshot, then the same thing passing. Skip it when verification is already one line and nothing visual changed.
+- Use the repo's `GLOSSARY.md` terms in the body when the repo has one.
+- **Merge danger**, when it would change the review: two-way door (cheap to roll back) or one-way door (destructive, or hard to reverse), plus the blast radius in a few words (one layout, one consumer, a migration). Skip it when the door is obviously two-way and the radius is the module you changed. Adapted from Matt Pocock's `pr` skill, which credits Dex Horthy's show-me skill (Humanlayer, https://github.com/humanlayer/skills/blob/main/plugins/show-me/skills/show-me/SKILL.md).
 - Strip or omit any default “Made with Cursor” (or similar) footer; those must not appear in published PR text.
 
 ### 6a) Compose the Slack review message
@@ -102,10 +105,10 @@ If push fails, explain auth/permissions—do not retry blindly.
 - Provide a copy-paste-ready Slack message whenever a PR URL exists or is about to exist.
 - Present it in a dedicated section labeled exactly `Slack message:` followed by a fenced `text` block so it is easy to copy.
 - Default to a Slack-safe plain-text format that survives copy-paste through chat UIs: use bare URLs, not Slack mrkdwn links.
-- Use the repo name in inline code formatting as the review target, for example `` `capi-serverless` ``.
+- Use the repo name in inline code formatting as the review target, for example `` `payments-api` ``.
 - When both links are known, format it like:
 
-  `PR ready for `capi-serverless` - DAD-3948 validate MSN related slideshow posts`
+  `PR ready for `payments-api` - APP-3948 reject duplicate webhook events`
   `PR: PR_URL`
   `Jira: JIRA_URL`
 
@@ -120,7 +123,7 @@ Example output:
 Slack message:
 
 ```text
-PR ready for `capi-serverless` - DAD-3948 validate MSN related slideshow posts
+PR ready for `payments-api` - APP-3948 reject duplicate webhook events
 PR: PR_URL
 Jira: JIRA_URL
 ```
@@ -173,7 +176,7 @@ If no exact task exists, skip this section without creating a new task.
 - No Jira key: follow repo style or ask user.
 - No template: short sections—Summary, Changes, Verification.
 - No `jc`/MCP: continue without ticket enrichment.
-- Non-BI repos: skip Jira-specific behavior.
+- Repos without Jira integration: skip Jira-specific behavior.
 
 ## Examples
 

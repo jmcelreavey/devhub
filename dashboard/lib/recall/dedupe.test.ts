@@ -45,7 +45,7 @@ describe("jaccard", () => {
 
 describe("isNearDuplicate", () => {
   const rolled = (date: string) =>
-    sig(`# Tasks ${date}\n- (open) Address BI Jobs Feedback [PTF-4484]`, ["jira:PTF-4484"]);
+    sig(`# Tasks ${date}\n- (open) Address sample Feedback [PTF-4484]`, ["jira:PTF-4484"]);
 
   it("catches the same rolled-over task on different days", () => {
     // The exact case that motivated this module.
@@ -53,8 +53,8 @@ describe("isNearDuplicate", () => {
   });
 
   it("does not collapse the same wording under different tickets", () => {
-    const a = sig("- (open) Address BI Jobs Feedback [PTF-4484]", ["jira:PTF-4484"]);
-    const b = sig("- (open) Address BI Jobs Feedback [PTF-9999]", ["jira:PTF-9999"]);
+    const a = sig("- (open) Address sample Feedback [PTF-4484]", ["jira:PTF-4484"]);
+    const b = sig("- (open) Address sample Feedback [PTF-9999]", ["jira:PTF-9999"]);
     // Identical vocabulary, different entity. Two tickets, not one duplicated.
     expect(isNearDuplicate(a, b)).toBe(false);
   });

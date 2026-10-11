@@ -6,7 +6,7 @@ export interface SetupStatus {
   datadog: boolean;
   calendar: boolean;
   jira: boolean;
-  bi: boolean;
+  infra: boolean;
   /** When false, dashboard binds to localhost only. */
   allowLanNetwork: boolean;
   /** Whether the Agents (Paseo) daemon password is configured (value never echoed). */
@@ -39,7 +39,7 @@ export interface SetupStatus {
     domain: string;
     email: string;
   };
-  biVars: { awsProfile: string | null; account: string | null; capiRepoPath: string | null };
+  infraVars: { awsProfile: string | null; account: string | null; scriptsRepoPath: string | null };
   agentVars: {
     cli: "opencode" | "cursor" | "chatgpt" | "antigravity";
     provider?: "cursor-cli" | "chatgpt-cli" | "antigravity-cli" | "opencode" | "api" | null;

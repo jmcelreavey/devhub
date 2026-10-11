@@ -90,7 +90,7 @@ describe("format + build + parse round-trip", () => {
       "## Links",
       "",
       "::task-ref abc-1 2026-07-28 Ship it",
-      "**PR:** [bi/svc#9](https://github.com/bi/svc/pull/9)",
+      "**PR:** [example-org/service#9](https://github.com/example-org/service/pull/9)",
       "**Event:** [Open in Calendar](https://cal.example/e)",
       "",
       "## Notes",

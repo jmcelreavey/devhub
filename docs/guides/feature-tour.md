@@ -71,6 +71,32 @@ No approval queue: a model accepts or rejects each candidate and records why. Yo
 
 Docs: [Repo conventions](repo-conventions.md)
 
+## Checks and decisions that survive a restart
+
+A task workflow keeps its verification command, code fingerprint, independent review and exact publication proposals on disk. A passing check isn't permission to publish: you approve each destination and content separately. Changed code makes old evidence stale; interrupted commands aren't silently rerun. The inbox retains unread updates when the app was closed.
+
+Docs: [Task checks and review persistence](task-checks-and-reviews.md)
+
+## Code discussions beside the diff
+
+Select lines in **Repos → Changes → Send to AI** and review the captured snapshot before sending it. Continue an idle same-checkout conversation or start an explanation without another worktree. An optional Cursor/VS Code add-on sends unsaved selections; the separately installed code-server editor is there if you want editing inside DevHub.
+
+![Reviewing captured code before choosing an assistant](../assets/demos/editor-ask-ai.gif)
+
+*Real panel with invented assistant choices; no model request is sent.*
+
+Docs: [Editor and selection chat](editor.md)
+
+## A browser the task doesn't own
+
+Browse in DevHub's live view or native Chrome with a separate task profile. Sign in under human control, approve exact HTTPS sites, then lease reading to one linked conversation. Each agent click, typed value and file transfer has its own human approval. Take control revokes agent access; it can't undo a request already sent.
+
+![Task browser controls and a simulated file approval](../assets/demos/browser.gif)
+
+*Real controls with a simulated Chrome stream and file request; no live account or transfer.*
+
+Docs: [Managed browser](managed-browser.md)
+
 ## Notes, in a real editor
 
 A block editor over plain files in git. Daily notes, meetings, projects and learnings, with links between them, tags, and cross-links to tasks, PRs, tickets and repos. Share a note as a secret Gist or a one-time link. Link a note to a repo and open it in Cursor beside the checkout; **Apply Cursor changes** brings your edits back. Optional in-editor AI uses any OpenAI-compatible provider.
@@ -192,6 +218,14 @@ Create a separate private mirror using the fork workflow, and keep notes, tasks,
 
 Docs: [Fork workflow](../contributing/fork-workflow.md)
 
+## Resize from any edge
+
+Today's cards and floating agent, terminal, learning and note panels can be resized from all four edges and corners, not just the bottom-right grip. Corners resize diagonally. Minimum sizes keep controls usable; Today snaps to its grid and saves the layout. Narrow Today layouts keep cards full-width, so collapse the sidebar or widen the window before shrinking them horizontally. Drag a panel's header to move it, and its edge to resize it.
+
+![Resizing a Today card from its left, top and corner handles](../assets/demos/resize.gif)
+
+*Recorded on the real Today grid with disposable tasks. The same edge/corner model is used by floating panels.*
+
 ## Honourable mentions
 
 The bits that didn't get their own section but earn their keep.
@@ -200,7 +234,7 @@ The bits that didn't get their own section but earn their keep.
 
 | | What it does | Docs |
 | --- | --- | --- |
-| **Themes** | Ember Dusk, Abyss, Graphite Neon, Tokyo Night, Catppuccin and the seasonal Hollow, each in light, dark or system. Plugins can add their own. | [Theming](theming.md) |
+| **Themes** | Six core palettes, light/dark/system, seasonal Hollow and plugin presets. Graphite Neon's workshop effects and soft mouse follower are on by default, with individual switches. | [Theming](theming.md) |
 | **Focus** | One timer per day. Starting a task stops the last one. | [Dashboard](../architecture/dashboard.md#focus-timer) |
 | **Profiles** | Separate task lists for home and work in one repo, switched per machine. | [Task profiles](task-profiles.md) |
 | **Capture** | `⇧↵` turns a thought, a Slack message or a Datadog alert into a draft task with related notes, PRs and alerts attached. | [Plan loop](plan-loop.md#1-capture-a-draft) |
@@ -264,7 +298,6 @@ The bits that didn't get their own section but earn their keep.
 | **Safer installs** | The full bootstrap requires Aikido Safe-Chain, and secrets can come from 1Password instead of `.env` files. | [Installation](../getting-started/installation.md) |
 | **Calm motion** | Shimmer for content that's arriving, a spinner only for something you just clicked, and one switch (⌘P, *Toggle animations*) that turns it all off. | [Motion](../contributing/motion.md) |
 | **Tests** | Unit tests, Playwright journeys and evals for the vendored skills. | [Contributing](../../CONTRIBUTING.md) |
-| **A Konami code** | The Konami code loads a hidden Pong game. | |
 
 The three vendored-skill demos below are terminal recordings against a synthetic repo.
 

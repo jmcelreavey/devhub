@@ -26,6 +26,9 @@ export interface HollowEffects {
   rareEvents: boolean;
   jumpScares: boolean;
   sound: boolean;
+  cursor: boolean;
+  loader: boolean;
+  celebrations: boolean;
 }
 
 export const HOLLOW_EFFECT_DEFAULTS: HollowEffects = {
@@ -36,6 +39,9 @@ export const HOLLOW_EFFECT_DEFAULTS: HollowEffects = {
   rareEvents: true,
   jumpScares: false,
   sound: false,
+  cursor: true,
+  loader: true,
+  celebrations: true,
 };
 
 const HOLLOW_ATTRS = [
@@ -66,6 +72,9 @@ export function parseHollowEffects(raw: string | null | undefined): HollowEffect
       rareEvents: bool(parsed.rareEvents, HOLLOW_EFFECT_DEFAULTS.rareEvents),
       jumpScares: bool(parsed.jumpScares, HOLLOW_EFFECT_DEFAULTS.jumpScares),
       sound: bool(parsed.sound, HOLLOW_EFFECT_DEFAULTS.sound),
+      cursor: bool(parsed.cursor, bool(parsed.interaction, HOLLOW_EFFECT_DEFAULTS.cursor)),
+      loader: bool(parsed.loader, HOLLOW_EFFECT_DEFAULTS.loader),
+      celebrations: bool(parsed.celebrations, HOLLOW_EFFECT_DEFAULTS.celebrations),
     };
   } catch {
     return { ...HOLLOW_EFFECT_DEFAULTS };
@@ -126,14 +135,14 @@ export function hollowRuntimePlan(effects: HollowEffects, motion: boolean): Holl
   const jumpScares = master && effects.jumpScares && motion;
   const sound = master && effects.sound;
   return {
-    mount: atmosphere || creatures || interaction || jumpScares || sound,
+    mount: atmosphere || creatures || interaction || (master && effects.cursor && motion) || jumpScares || sound,
     grain: atmosphere,
     grainMotion: atmosphere && motion,
     creatures,
     cracks: interaction,
     glitch: interaction && motion,
     buttonGlow: interaction && motion,
-    cursorTrail: interaction && motion,
+    cursorTrail: master && effects.cursor && motion,
     rareEvents: atmosphere && creatures && effects.rareEvents,
     jumpScares,
     sound,

@@ -81,7 +81,7 @@ const nextConfig: NextConfig = {
     ignoreBuildErrors: process.env.DEVHUB_SKIP_NEXT_TYPECHECK === "true",
   },
   /** @blocknote/xl-ai/server is tagged "use client"; keep it out of the App Route bundle. */
-  serverExternalPackages: ["@blocknote/xl-ai", "@blocknote/core", "adm-zip", "@getpaseo/client", "@getpaseo/protocol", "@getpaseo/relay"],
+  serverExternalPackages: ["playwright-core", "@blocknote/xl-ai", "@blocknote/core", "adm-zip", "@getpaseo/client", "@getpaseo/protocol", "@getpaseo/relay"],
   allowedDevOrigins: [...DEFAULT_ALLOWED_DEV_ORIGINS, ...extraAllowedDevOriginsFromEnv()],
   outputFileTracingExcludes: {
     // Runtime content comes from the linked checkout. Tracing directory scans
@@ -90,8 +90,8 @@ const nextConfig: NextConfig = {
     "/api/skills/\\[name\\]": ["./next.config.ts"],
   },
   outputFileTracingRoot: repoRoot,
-  /** Empty turbopack block keeps Next 16 happy with the webpack config below. Do NOT set turbopack.root
-   *  to repoRoot — Turbopack would watch notes/, docs/, tasks/, etc. and can fork workers until RAM is gone. */
+  /** Do NOT set turbopack.root to repoRoot — Turbopack would watch notes/, docs/, tasks/, etc.
+   *  and can fork workers until RAM is gone. */
   /**
    * React Compiler — auto-memoisation for the whole tree.
    *
@@ -117,9 +117,12 @@ const nextConfig: NextConfig = {
   // dev and prod and replayed the boot screen mid-session. React 19.2.4 stable
   // exports no ViewTransition component, so the React half was a no-op anyway.
 
-  turbopack: {},
+  turbopack: {
+    rules: { "*.md": { condition: { query: "?raw" }, loaders: [path.join(repoRoot, "shared/release-notes/markdown-loader.cjs")], as: "*.js" } },
+  },
   // Don't watch notes/ — large dir unrelated to app code (webpack / `next dev --webpack`)
   webpack: (config, { isServer, dev }) => {
+    config.module.rules.push({ test: /\.md$/, resourceQuery: /raw/, type: "asset/source" });
     /**
      * Disk cache, version-keyed to app/globals.css content. Webpack's
      * persistent cache repeatedly pinned stale PostCSS/Tailwind output for

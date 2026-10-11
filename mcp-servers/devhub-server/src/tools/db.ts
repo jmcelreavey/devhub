@@ -9,7 +9,7 @@ import { explainMissingFeature } from "../discover-dashboard.ts";
  *
  * These reach parity with the `/db` UI, writes included: whatever the
  * connection's access mode allows, these allow. That access mode is not theirs
- * to choose — it comes from the AWS profile for BI connections and from the
+ * to choose — it comes from the AWS profile for plugin connections and from the
  * saved connection for local ones, and the dashboard enforces it again at the
  * engine (`BEGIN READ ONLY`, a Mongo command allowlist, a read-only SQLite
  * handle). An agent cannot talk its way past it.
@@ -276,7 +276,7 @@ export function registerDbTools(server: McpServer, ctx: Context): void {
   const connectionId = z
     .string()
     .describe(
-      "Connection id from db_connections, e.g. bi:rds:capi:dev or local:app-cache",
+      "Connection id from db_connections, e.g. team:rds:payments:dev or local:app-cache",
     );
 
   const dbPath = (id: string, sub = "") =>
@@ -291,7 +291,7 @@ export function registerDbTools(server: McpServer, ctx: Context): void {
     "db_connections",
     {
       description:
-        "List every database connection this machine can open (PostgreSQL, MongoDB, SQLite), with engine, environment, read/write access mode and availability. BI connections are derived from your IAM access and the active AWS profile. Requires the dashboard running.",
+        "List every database connection this machine can open (PostgreSQL, MongoDB, SQLite), with engine, environment, read/write access mode and availability. plugin connections are derived from your IAM access and the active AWS profile. Requires the dashboard running.",
       inputSchema: {
         refresh: z
           .boolean()
@@ -418,7 +418,7 @@ export function registerDbTools(server: McpServer, ctx: Context): void {
           .enum(["read", "write"])
           .optional()
           .describe(
-            "Access needed after connecting. Defaults to read; use write before db_execute so BI signs into the team writer profile (for example dev-dad+).",
+            "Access needed after connecting. Defaults to read; use write before db_execute so plugin signs into the team writer profile (for example dev-team+).",
           ),
         fix: z
           .boolean()
@@ -491,7 +491,7 @@ export function registerDbTools(server: McpServer, ctx: Context): void {
         for (const check of fixable) {
           const remedy = check.remedy!;
           try {
-            // Generous: signing in to Okta and bringing a tailnet up are both
+            // Generous: signing in through SSO and bringing a tailnet up are both
             // slow, and timing out halfway through is worse than waiting.
             await dashboard.post(remedy.endpoint, remedy.body ?? {}, 300_000);
             applied.push(remedy.label);
@@ -702,7 +702,7 @@ export function registerDbTools(server: McpServer, ctx: Context): void {
     "db_execute",
     {
       description:
-        "Run a statement that modifies data or schema (INSERT/UPDATE/DELETE/DDL, or a Mongo write). Requires confirm:true. Refused outright on a read-only connection; first use db_connect with accessMode:'write' and fix:true when BI credentials need elevating. On a production connection with write access, `confirmLabel` must exactly match the connection's label. Requires the dashboard running.",
+        "Run a statement that modifies data or schema (INSERT/UPDATE/DELETE/DDL, or a Mongo write). Requires confirm:true. Refused outright on a read-only connection; first use db_connect with accessMode:'write' and fix:true when plugin credentials need elevating. On a production connection with write access, `confirmLabel` must exactly match the connection's label. Requires the dashboard running.",
       inputSchema: {
         connectionId,
         statement: z.string().describe("The statement to run"),
@@ -823,10 +823,10 @@ export function registerDbTools(server: McpServer, ctx: Context): void {
       inputSchema: {
         left: z
           .string()
-          .describe("Connection id for the left side, e.g. bi:rds:capi:dev"),
+          .describe("Connection id for the left side, e.g. team:rds:payments:dev"),
         right: z
           .string()
-          .describe("Connection id for the right side, e.g. bi:rds:capi:prd"),
+          .describe("Connection id for the right side, e.g. team:rds:payments:prd"),
         namespace: z.string().optional().describe("Restrict to one schema"),
         tables: z
           .array(z.string())

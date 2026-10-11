@@ -3,6 +3,8 @@ import { act, cleanup, renderHook } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { useTaskAgentActions } from "./useTaskAgentActions";
 
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
+
 const mocks = vi.hoisted(() => ({ start: vi.fn(), fetch: vi.fn(), error: vi.fn() }));
 vi.mock("@/app/repos/useReposActions", () => ({ useReposActions: () => ({ openUpstart: mocks.start }) }));
 vi.mock("@/lib/hooks/use-toast", () => ({ useToast: () => ({ error: mocks.error }) }));

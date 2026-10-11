@@ -12,9 +12,9 @@ Status: **shipped** (2026-08-11). Sibling of [Notes and learnings](../plans/note
 
 Archived after shipping the ownership workspace.
 
-Trigger: taking ownership of CAPI. The problem is general — "I am accountable
+Trigger: taking ownership of Payments. The problem is general — "I am accountable
 for a repo I did not write, that several teams change without telling me" — and
-this ships as a general surface. CAPI is the first repo marked owned, not a
+this ships as a general surface. Payments is the first repo marked owned, not a
 special case in the code.
 
 ---
@@ -28,7 +28,7 @@ _ownership_.
 | ----------------------- | ------------------------------------- | -------------------- |
 | `/prs`                  | PRs I authored or was asked to review | mine, pull-based     |
 | `/repos/learn/[name]`   | What is this codebase, in general     | snapshot, whole-repo |
-| `RepoRadarSection` (bi) | Which technologies appear here        | snapshot, taxonomy   |
+| `RepoRadarSection` (plugin) | Which technologies appear here        | snapshot, taxonomy   |
 
 The owner's questions are none of these:
 
@@ -110,7 +110,7 @@ scratch.
 | AI summarisation            | `lib/repos/learn-ai.ts`                                                  | Complete, reuse the same model plumbing                |
 | Learn pack + cache          | `lib/repos/learn-service.ts`, `learn-cache.ts`                           | Complete, keyed on gitHead                             |
 | Nav registration            | `lib/nav.ts`                                                             | Add one entry                                          |
-| MCP proxy pattern           | bi: `mcp-servers/devhub-bi-server/`                                      | Reference only — pattern to copy, not a dependency     |
+| MCP proxy pattern           | plugin: `mcp-servers/team-tools-server/`                                      | Reference only — pattern to copy, not a dependency     |
 
 Roughly **60% of the data layer already exists**. The new work is (a) a
 repo-scoped PR query, (b) blast-radius scoring, (c) the gap ledger, and (d) the
@@ -146,7 +146,7 @@ devhub/
 
 ### Domains, without a hand-maintained table
 
-The BI-specific domain map is gone. Domains are derived per repo, in order of
+The hand-written domain map is gone. Domains are derived per repo, in order of
 evidence quality:
 
 1. **Workspace definitions** — `package.json` workspaces, `nx.json`, `turbo.json`,
@@ -264,7 +264,7 @@ The `/own` index shows this strip **per owned repo**, so the index alone answers
 
 Page first, then MCP — but design the libs so MCP is a thin second consumer, not
 a rewrite. Every panel's logic lives in `lib/ownership/*`, every route is a thin
-handler, and MCP tools proxy the routes the way `devhub-bi-server` does.
+handler, and MCP tools proxy the routes the way `team-tools-server` does.
 
 A **core** DevHub MCP server, generic over repo:
 
@@ -299,7 +299,7 @@ Then:
 | 5     | `digest.ts` + Panel 4, then `gap-ledger.ts` + Panel 3                              | Digest is the easy AI win; the ledger needs familiarity tracking |
 | 6     | MCP tools, `repo-owner` agent, `repo-ownership` skill, scheduled brief             | Data model must be stable first                                  |
 
-Mark CAPI owned at the end of phase 1 and use it as the test repo throughout.
+Mark Payments owned at the end of phase 1 and use it as the test repo throughout.
 Mark a second repo owned before phase 3 ships — multi-repo assumptions rot fast
 when only one row exists.
 

@@ -50,18 +50,18 @@ function setSkipWorktree(repoRoot: string, rel: string, skip: boolean): boolean 
 
 export interface CollectedProvider {
   plugin: string;
-  /** Dashboard-relative module path, e.g. "lib/bi-db-provider.ts". */
+  /** Dashboard-relative module path, e.g. "lib/team-db-provider.ts". */
   modulePath: string;
-  /** Import specifier used in the generated file, e.g. "./bi-db-provider". */
+  /** Import specifier used in the generated file, e.g. "./team-db-provider". */
   specifier: string;
   /** Local binding, unique per plugin. */
   binding: string;
 }
 
-/** `lib/bi-db-provider.ts` → `./bi-db-provider`, relative to `lib/`. */
+/** `lib/team-db-provider.ts` → `./team-db-provider`, relative to `lib/`. */
 function toSpecifier(modulePath: string): string | null {
   const normalized = modulePath.replace(/\\/g, "/").replace(/\.tsx?$/, "");
-  if (!normalized.startsWith("lib/")) return null;
+  if (!/^lib\/(?:[a-zA-Z0-9_-]+\/)*[a-zA-Z0-9_-]+$/.test(normalized)) return null;
   return `./${normalized.slice("lib/".length)}`;
 }
 
@@ -70,7 +70,7 @@ function toBinding(pluginName: string): string {
   return `${camel.replace(/[^a-zA-Z0-9]/g, "")}DbProvider`;
 }
 
-export function collectPluginDbProviders(plugins: RegisteredPlugin[]): {
+export function collectPluginDbProviders(plugins: RegisteredPlugin[], field: "connections" | "providers" = "connections"): {
   providers: CollectedProvider[];
   errors: string[];
 } {
@@ -78,7 +78,8 @@ export function collectPluginDbProviders(plugins: RegisteredPlugin[]): {
   const errors: string[] = [];
 
   for (const plugin of plugins) {
-    const modulePath = plugin.manifest.dashboard?.connections;
+    if (!plugin.enabled) continue;
+    const modulePath = plugin.manifest.dashboard?.[field];
     if (!modulePath) continue;
 
     const root = plugin.manifest.dashboard?.root;
@@ -115,7 +116,12 @@ export function collectPluginDbProviders(plugins: RegisteredPlugin[]): {
       continue;
     }
 
-    providers.push({ plugin: plugin.name, modulePath, specifier, binding: toBinding(plugin.name) });
+    const relative = path.relative(fs.realpathSync(path.join(plugin.path, root)), fs.realpathSync(source));
+    if (relative.startsWith("..") || path.isAbsolute(relative)) {
+      errors.push(`[${plugin.name}] provider module escapes dashboard.root`);
+      continue;
+    }
+    providers.push({ plugin: plugin.name, modulePath, specifier, binding: field === "providers" ? "IntegrationModule" + providers.length : toBinding(plugin.name) });
   }
 
   return { providers, errors };

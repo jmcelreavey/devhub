@@ -1,6 +1,6 @@
 ---
 name: devhub-plugin-workflow
-description: Develop, edit, or review a DevHub Tier-2 dashboard plugin. Use when editing devhub-bi or another plugin repo, adding plugin pages/routes, or debugging materialized plugin files in the dashboard.
+description: Develop, edit, or review a DevHub Tier-2 dashboard plugin. Use when editing team-tools or another plugin repo, adding plugin pages/routes, or debugging materialized plugin files in the dashboard.
 metadata:
   short-description: Develop a DevHub dashboard plugin
 ---
@@ -9,7 +9,7 @@ metadata:
 
 ## Overview
 
-A Tier-2 plugin (e.g. `devhub-bi`) is a **separate repo** that ships Next.js dashboard
+A Tier-2 plugin (e.g. `team-tools`) is a **separate repo** that ships Next.js dashboard
 code — pages, API routes, libs, components — into the core DevHub dashboard. The plugin
 has **no standalone build**: its files are _materialized_ (copied) into core at the same
 relative path, and core compiles them as if they were its own.
@@ -27,7 +27,7 @@ This skill is the day-to-day dev loop. For the design/reference see
 
 ## The golden rule: edit source, never the copy
 
-- **Source of truth** is the plugin repo (`~/Developer/devhub-bi/...`).
+- **Source of truth** is the plugin repo (`~/Developer/team-tools/...`).
 - The copies under core (`~/Developer/devhub/dashboard/...`) are **materialized
   artifacts**. They are git-ignored in core and **overwritten on every `sync_plugins`**
   (wired into `predev`/`prebuild`/`prestart`, so a server restart re-materializes).
@@ -36,7 +36,7 @@ This skill is the day-to-day dev loop. For the design/reference see
 
 ## Workflow
 
-1. **Edit the plugin source** in the plugin repo (e.g. `devhub-bi/dashboard/...`).
+1. **Edit the plugin source** in the plugin repo (e.g. `team-tools/dashboard/...`).
 
 2. **Register new files.** Any _new_ file must be listed in `devhub-plugin.json`
    under `dashboard.paths` (paths are relative to the plugin's `dashboard.root`).
@@ -75,7 +75,7 @@ This skill is the day-to-day dev loop. For the design/reference see
 - **Core wins collisions.** Don't try to shadow a core file from a plugin — the
   materializer refuses to overwrite git-tracked core paths.
 - **State-changing API routes** must guard with `isSameOrigin(req)` (see existing
-  `app/api/bi/*` routes), especially anything that shells out.
+  `app/api/team-tools/*` routes), especially anything that shells out.
 - Keep secrets/private hostnames out of committed plugin code.
 
 ## Verification

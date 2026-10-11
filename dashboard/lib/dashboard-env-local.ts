@@ -57,8 +57,8 @@ export const DASHBOARD_MANAGED_ENV_KEYS = [
   // Ops integration keys (used by the optional ops plugin: AWS/SSO + repo path)
   "AWS_PROFILE",
   "OKTA_PASSWORD",
-  "BI_OPS_USER_EMAIL",
-  "CAPI_REPO_PATH",
+  "DATADOG_USER_EMAIL",
+  "AUTOMATION_REPO_PATH",
   // AI provider + agent CLI handoff
   "DEVHUB_AI_PROVIDER",
   "DEVHUB_AGENT_CLI",
@@ -84,7 +84,7 @@ const GOOGLE_PROCESS_KEYS = [
 const JIRA_PROCESS_KEYS = ["JIRA_DOMAIN", "JIRA_EMAIL", "JIRA_API_TOKEN"] as const;
 const DATADOG_PROCESS_KEYS = ["DATADOG_API_KEY", "DATADOG_APPLICATION_KEY", "DATADOG_APP_KEY", "DD_APPLICATION_KEY", "DATADOG_ONCALL_SCHEDULE_ID"] as const;
 
-const BI_PROCESS_KEYS = ["AWS_PROFILE", "OKTA_PASSWORD", "BI_OPS_USER_EMAIL", "CAPI_REPO_PATH"] as const;
+const INFRA_PROCESS_KEYS = ["AWS_PROFILE", "OKTA_PASSWORD", "DATADOG_USER_EMAIL", "AUTOMATION_REPO_PATH"] as const;
 
 const PASEO_PROCESS_KEYS = ["DEVHUB_PASEO_PASSWORD", "OPENCHAMBER_UI_PASSWORD"] as const;
 
@@ -119,8 +119,8 @@ export function syncDatadogProcessEnvFromOverrides(overrides: Map<string, string
   syncProcessEnvFromOverrides(DATADOG_PROCESS_KEYS, overrides);
 }
 
-export function syncBiProcessEnvFromOverrides(overrides: Map<string, string>): void {
-  syncProcessEnvFromOverrides(BI_PROCESS_KEYS, overrides);
+export function syncInfraProcessEnvFromOverrides(overrides: Map<string, string>): void {
+  syncProcessEnvFromOverrides(INFRA_PROCESS_KEYS, overrides);
 }
 
 /**

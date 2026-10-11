@@ -26,7 +26,7 @@ import { openAgentHandoff } from "@/lib/agent-handoff";
 import { openInteractiveAgentSession } from "@/lib/agent-job";
 import { copyTextToClipboard,readTextFromClipboard } from "@/lib/clipboard";
 import { notify,notifyPermission,requestNotifyPermission } from "@/lib/desktop/bridge";
-import { clampSize,startDragResize } from "@/lib/drag-resize";
+import { RESIZE_AXES, RESIZE_CURSORS, resizeRect, startDragResize, type ResizeAxis } from "@/lib/drag-resize";
 import { useToast } from "@/lib/hooks/use-toast";
 import { useControlShortcutLabel } from "@/lib/hooks/use-modifier-key";
 import {
@@ -1497,6 +1497,7 @@ export function TerminalDock() {
 
   /** Drag the floating window by its title bar, like a real window. */
   const startPopoutMove = (event: React.MouseEvent) => {
+    if (event.button !== 0) return;
     // Buttons and tab chips stay interactive; drag starts from bare bar space.
     if ((event.target as HTMLElement).closest("button, [role='tab'], .terminal-dock-new-wrap"))
       return;
@@ -1525,27 +1526,35 @@ export function TerminalDock() {
     });
   };
 
-  /**
-   * Drag a popout edge. The window is pinned to the top-right, so the left
-   * edge grows it leftwards and the bottom edge grows it down — the same
-   * shield-based drag the dashboard side panels use.
-   */
-  const startPopoutResize = (axis: "w" | "s") => (event: React.MouseEvent) => {
+  const startPopoutResize = (axis: ResizeAxis) => (event: React.MouseEvent) => {
+    if (event.button !== 0) return;
     event.preventDefault();
     event.stopPropagation();
     const rect = event.currentTarget.parentElement?.getBoundingClientRect();
     if (!rect) return;
-    let next = { w: Math.round(rect.width), h: Math.round(rect.height) };
+    const start = { x: rect.left, y: rect.top, w: rect.width, h: rect.height };
+    const pointer = { x: event.clientX, y: event.clientY };
+    let next = start;
+    setResizing(true);
     startDragResize({
-      cursor: axis === "w" ? "col-resize" : "row-resize",
+      cursor: RESIZE_CURSORS[axis],
       onMove: (move) => {
-        next =
-          axis === "w"
-            ? { ...next, w: clampSize(rect.right - move.clientX, 360, window.innerWidth - 32) }
-            : { ...next, h: clampSize(move.clientY - rect.top, 280, window.innerHeight - rect.top - 16) };
-        setPopoutSize(next);
+        next = resizeRect(
+          start,
+          axis,
+          { x: move.clientX - pointer.x, y: move.clientY - pointer.y },
+          { x: 0, y: 0, w: window.innerWidth, h: window.innerHeight },
+          { w: 360, h: 280 },
+          { w: window.innerWidth - 32, h: window.innerHeight - 68 },
+        );
+        setPopoutSize({ w: next.w, h: next.h });
+        setPopoutPos({ x: next.x, y: next.y });
       },
-      onDone: () => writeTerminalPopoutSize(next),
+      onDone: () => {
+        setResizing(false);
+        writeTerminalPopoutSize({ w: next.w, h: next.h });
+        writePopoutPos({ x: next.x, y: next.y });
+      },
     });
   };
   const menuTab = termMenu.target != null ? tabs.find((t) => t.id === termMenu.target) : undefined;
@@ -1632,18 +1641,14 @@ export function TerminalDock() {
       aria-label="Terminal"
     >
       {windowed ? (
-        <>
+        RESIZE_AXES.map((axis) => (
           <ResizeHandle
-            axis="w"
-            className="dock-popout-resize-w"
-            onMouseDown={startPopoutResize("w")}
+            key={axis}
+            axis={axis}
+            positioned
+            onMouseDown={startPopoutResize(axis)}
           />
-          <ResizeHandle
-            axis="s"
-            className="dock-popout-resize-s"
-            onMouseDown={startPopoutResize("s")}
-          />
-        </>
+        ))
       ) : dockFrame === "dock" ? (
         <ResizeHandle
           axis="s"

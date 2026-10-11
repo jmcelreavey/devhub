@@ -11,6 +11,7 @@ import { isTaskOpen, type Task } from "@/lib/tasks/types";
 import {
   isActiveTaskAgentRunStatus,
   listTaskAgentRuns,
+  latestImplementationRun,
   type TaskAgentRunRecord,
 } from "@/lib/tasks/task-agent-runs";
 import { canResumeTaskAgentRun } from "@/lib/tasks/task-agent-resume";
@@ -49,7 +50,7 @@ export function buildPlanStatus(date = todayISO()): PlanStatus {
   const status = { date } as PlanStatus;
   for (const bucket of PLAN_STATUS_BUCKETS) status[bucket] = [];
   for (const task of getTasks(date).filter(isTaskOpen)) {
-    const latest = listTaskAgentRuns(task.id)[0] ?? null;
+    const latest = latestImplementationRun(listTaskAgentRuns(task.id));
     // Only pay for the prerequisite scan when nothing more specific applies.
     const blockers = latest ? 0 : collectOpenPrerequisiteBlockers(task.id, task.links).length;
     const { bucket, detail } = planStatusBucket(task, latest, blockers);

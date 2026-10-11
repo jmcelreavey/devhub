@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { getJiraMeta } from "@/lib/jira/client";
+import { jiraScreen } from "@/lib/integrations/screen-data";
+const getJiraMeta = jiraScreen.meta;
 import { withErrorHandler } from "@/lib/api-utils";
 
 const DEFAULT_PROJECT = process.env.JIRA_DEFAULT_PROJECT?.trim() || "PTF";

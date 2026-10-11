@@ -22,6 +22,7 @@ export interface InFlightCall {
   /** Caller-supplied origin, e.g. "gh" or "git:status". */
   label?: string;
   timeoutMs: number;
+  managedService?: boolean;
 }
 
 export interface CompletedCall {
@@ -81,6 +82,7 @@ export function beginExternalCall(input: {
   cwd?: string;
   label?: string;
   timeoutMs: number;
+  managedService?: boolean;
 }): number {
   const id = nextId++;
   inFlight.set(id, {
@@ -90,6 +92,7 @@ export function beginExternalCall(input: {
     startedAt: Date.now(),
     label: input.label,
     timeoutMs: input.timeoutMs,
+    managedService: input.managedService,
   });
   return id;
 }
@@ -99,6 +102,8 @@ export function endExternalCall(id: number, outcome: { ok: boolean; timedOut: bo
   if (!call) return;
   inFlight.delete(id);
   const durationMs = Date.now() - call.startedAt;
+  // Service lifetime is not command latency. Their owner reports health separately.
+  if (call.managedService && !outcome.timedOut) return;
   // A timeout is always worth recording, however short the ceiling was.
   if (durationMs < SLOW_CALL_THRESHOLD_MS && !outcome.timedOut) return;
   slowCalls.unshift({
@@ -114,8 +119,8 @@ export function endExternalCall(id: number, outcome: { ok: boolean; timedOut: bo
 }
 
 /** Oldest first — a wedged call is the one that has been running longest. */
-export function listInFlightCalls(): InFlightCall[] {
-  return [...inFlight.values()].sort((a, b) => a.startedAt - b.startedAt);
+export function listInFlightCalls(managedServices = false): InFlightCall[] {
+  return [...inFlight.values()].filter((call) => Boolean(call.managedService) === managedServices).sort((a, b) => a.startedAt - b.startedAt);
 }
 
 /** Slowest first. */

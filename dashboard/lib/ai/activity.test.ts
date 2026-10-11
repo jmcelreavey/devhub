@@ -94,10 +94,14 @@ describe("AI activity", () => {
       middleware: aiActivityMiddleware({ action: "Draft Jira ticket" }),
     });
     await model.doGenerate({ prompt, providerOptions: { openai: { reasoningEffort: "low" } } });
-    expect(listAgentRuns()[0]?.spec).toMatchObject({ provider: "api", model: "gpt-6-luna", reasoningEffort: "low" });
+    const firstRun = listAgentRuns()[0]?.spec;
+    expect(firstRun).toMatchObject({ provider: "api", model: "gpt-6-luna", reasoningEffort: "low" });
 
     await model.doGenerate({ prompt });
-    const plain = listAgentRuns()[0]?.spec;
+    const runs = listAgentRuns();
+    expect(runs).toHaveLength(2);
+    // Calls can share a millisecond, so creation order is not a unique identity.
+    const plain = runs.find((run) => run.spec.id !== firstRun?.id)?.spec;
     expect(plain).toMatchObject({ provider: "api", model: "gpt-6-luna" });
     expect(plain).not.toHaveProperty("reasoningEffort");
   });

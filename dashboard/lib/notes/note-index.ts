@@ -175,7 +175,7 @@ function prLinkIn(content: unknown): { repo: string; prNumber: number } | undefi
 }
 
 /**
- * The line review notes put under their title: `capi#673`, `owner/repo#73`,
+ * The line review notes put under their title: `payments#673`, `owner/repo#73`,
  * `PR: owner/repo#38`, or `atlas@branch-name` for a pre-PR branch review.
  */
 const REF_LINE_RE = /^(?:PR:\s*)?(?:[\w.-]+\/)?([\w.-]+)(?:#(\d+)|@[\w./-]+)$/i;
@@ -371,7 +371,7 @@ const ALWAYS_KEPT = new Set<SectionKind>(["period", "repo"]);
 
 /**
  * Branch reviews without a PR link are still named after their repo
- * (`atlas-ptf-4788-…`, `acme-capi-525`). Only repos other notes
+ * (`atlas-ptf-4788-…`, `acme-payments-525`). Only repos other notes
  * already named are tried — splitting hyphenated names blind is guesswork.
  */
 function inferReposFromFilenames(entries: IndexedNote[]): void {

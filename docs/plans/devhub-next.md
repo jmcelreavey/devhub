@@ -1,6 +1,6 @@
 ---
 title: DevHub next
-description: Decision-focused plan for editor integration, the Paseo work flow, a built-in browser and generic integrations. Not implemented.
+description: Implementation plan and recorded decisions for the Paseo workflow, editor integration, generic integrations and a managed browser.
 order: 3
 icon: Compass
 tags: [plans, editor, paseo, browser, integrations]
@@ -8,7 +8,7 @@ tags: [plans, editor, paseo, browser, integrations]
 
 # DevHub next: decisions and implementation plan
 
-Decision draft · 9 October 2026. Static investigation; no runtime benchmarks. Paths are repo-relative; new modules and behaviour are proposals.
+Implementation in progress · 9 October 2026. Paths are repo-relative. Each section records its decisions and verification as it lands in private main.
 
 ## Executive summary
 
@@ -19,15 +19,15 @@ Keep DevHub as the place where work is tracked, discussed and approved. Reuse an
 | Better Paseo integration | **Feasible; extend the existing system.** Add a durable workflow around task-linked planning, implementation, verification, review and approvals. Keep Paseo chat embedded. | **L**; stronger isolation is **XL** | Full-auto agents can bypass app approvals; stale review evidence; session/state drift | **1.** Gives every later feature a task, session and decision to attach to. |
 | Editor and AI-on-selection | **Feasible without building an IDE.** Reuse the diff viewer first; add on-demand code-server plus a small selection extension. Keep a connected Cursor/VS Code extension optional. | **L**; first selection slice **M** | Webview/iframe compatibility; extension licensing; editor memory and update burden | **2.** Replaces the Cursor review hand-off inside the workflow. |
 | Generic integrations and chat | **Feasible incrementally.** Capability-based adapters around existing Jira/GitHub code, then opt-in Slack/Telegram notifications. Defer WhatsApp pending demand and pricing checks. | **L** overall; notifications **M** | Provider-specific semantics; plugin installer limitations; unintended disclosure | **3.** Generalises a working flow and reuses its events. |
-| Built-in browser | **Feasible as a managed side window.** Dedicated DevHub Chrome profile, visible automation, explicit human takeover; embedded streaming later. | **L**; native Chromium embedding **XL** | Authenticated-session access; Windows/WSL boundary; takeover races and browser updates | **4.** Highest security/platform cost; can ship independently once run ownership exists. |
+| Built-in browser | **Managed Chrome with an in-app live view.** Dedicated profile, explicit human takeover, approved file transfers and a native window option on macOS/Linux; Windows/WSL disabled. | **L**; native Chromium embedding **XL** | Authenticated-session access; Windows/WSL boundary; takeover races and browser updates | **4.** Highest security/platform cost; can ship independently once run ownership exists. |
 
 Effort: **S** bounded change; **M** several components; **L** multi-phase/platform work; **XL** substantial runtime/security work. Relative sizes, not delivery promises.
 
-**Scope:** retain local files; no theme refresh, custom IDE, cookie extraction or replacement agent runtime. External facts are linked; compatibility, licences and prices need rechecking before distribution.
+**Scope:** retain local files; no custom IDE, cookie extraction or replacement agent runtime. The separately requested Graphite Neon refresh is recorded in section 5. External facts are linked; compatibility, licences and prices need rechecking before distribution.
 
 ## 1. Editor and AI-on-selection
 
-### Current state in the code (with file paths)
+### Baseline before implementation (with file paths)
 
 - `dashboard/components/repo-git/GitDiffView.tsx` already exposes selection-to-AI. `ChangesPanel.tsx:507` builds the snippet prompt; `dashboard/lib/agent-job.ts` routes it into the Paseo handoff sheet. Its `forceTerminal` option and terminal toast are stale.
 - `dashboard/lib/cursor-open.ts`, `dashboard/app/api/repos/[name]/open/route.ts` and `dashboard/lib/notes/cursor-draft.ts` open a worktree and editable Markdown note in Cursor, with an apply-back step.
@@ -54,7 +54,7 @@ Keep code, review note and Paseo together. Default to **Review in DevHub**; exte
 
 ### Architecture (Tauri desktop on macOS; Windows where the service runs in WSL2; Linux)
 
-Proposed `dashboard/lib/editor/` owns editor lifecycle and selections. The extension sends `workspaceId, taskId?, runId?, relativePath, revision, ranges, selectedText, documentVersion, dirty`; the server validates the workspace and previews the exact context before sending it to Paseo. Unsaved text must be labelled, not silently replaced with disk contents.
+`dashboard/lib/editor/` owns editor lifecycle and selections. The extension sends `workspaceId, relativePath, revision, ranges, selectedText, documentVersion, dirty, source`; the server validates the workspace and previews the exact context before sending it to Paseo. Unsaved text must be labelled, not silently replaced with disk contents.
 
 | Platform | Placement |
 | --- | --- |
@@ -62,7 +62,7 @@ Proposed `dashboard/lib/editor/` owns editor lifecycle and selections. The exten
 | Windows/WSL2 | Editor server and extension host run in the selected distro, beside the repo on ext4. WebView2 connects through Windows→WSL localhost forwarding. Never treat a Windows path as a WSL path implicitly. |
 | Linux | Same service-side editor, rendered by WebKitGTK; test distro webview versions and clipboard separately. |
 
-Use `desktop/sidecar/supervisor.mjs` ownership patterns and `desktop/src-tauri/src/wsl.rs` path handling. Allocate an ephemeral loopback port, avoiding dashboard 1337, terminal 1339 and Paseo 6767. Start one editor lazily; check unsaved buffers before idle shutdown. Coder recommends at least [1 GB RAM and two CPU cores](https://coder.com/docs/code-server/requirements); this is a host recommendation, not measured incremental usage. Measure RSS/CPU for idle, indexing and two worktrees.
+Use `desktop/sidecar/supervisor.mjs` ownership patterns and `desktop/src-tauri/src/wsl.rs` path handling. Allocate an ephemeral loopback port, avoiding dashboard 1337, terminal 1339 and Paseo 6767. Start one editor lazily; require saved-buffer confirmation before explicit shutdown. There is no idle shutdown. Coder recommends at least [1 GB RAM and two CPU cores](https://coder.com/docs/code-server/requirements); this is a host recommendation, not measured incremental usage. Measure RSS/CPU for idle, indexing and two worktrees.
 
 For installed VS Code on Windows, place the extension in the appropriate [remote extension host](https://code.visualstudio.com/api/advanced-topics/remote-extensions). Test Cursor's WSL support separately. URI handlers navigate/pair; an authenticated local API carries context.
 
@@ -82,9 +82,18 @@ Resolve real paths beneath approved roots, reject symlink escapes, bound selecti
 
 ### Open questions for John
 
-- Is reviewing and discussing code enough initially, or must the first release edit files?
-- Which extensions/languages are essential, and is an optional editor download acceptable?
-- Should a selection default to the implementing assistant or a separate explanation-only conversation?
+**Decisions · 9 October 2026**
+
+- Ship selection discussion first. Default to a separate explanation conversation in the current checkout, with an explicit task and existing-session choice. Do not create a duplicate worktree or navigate away from the diff.
+- Make editing an optional download. Pin code-server 4.141.0 and verify the official asset digest before activation. Keep versioned installs and a previous-version rollback; no background updates.
+- Start with built-in language support plus DevHub Selection. Disable telemetry and extension auto-updates; initialise an allowlist for that add-on. Additional extensions require a deliberate settings change and licence review.
+- Use one editor process and workspace at a time. Keep recovery data outside Git, require saved-buffer confirmation before stopping, and avoid idle shutdown. An owned supervisor stops descendants if DevHub dies.
+- Pair Cursor, VS Code and code-server through the same selection API. Use 30-minute workspace credentials and a 10-minute in-memory preview inbox; the add-on cannot dispatch an assistant. Label unsaved buffers, bound text size and reject secret filenames and symlink escapes.
+- Keep the editor on a separate authenticated loopback origin. Windows runs it in WSL; no implicit Windows-path conversion. Native webview parity remains unverified on this Mac and is not claimed.
+
+**Implemented:** Changes selection preview and embedded Paseo conversation; discussion task roles; optional editor install/start/stop/remove/update/rollback controls; scoped pairing and revocation; TypeScript selection add-on; packaged resource staging and setup guide at `docs/guides/editor.md`.
+
+**Verification:** focused tests cover selection boundaries, Unicode/deleted lines, pairing scope/expiry/revocation, version activation/rollback, and preserving the implementation Resume target. A crash test verifies owned-child cleanup. The pinned macOS runtime installs and starts. `npm run verify`, the extension typecheck and the owned-process crash test pass. Browser checks cover desktop/mobile selection preview, busy-session errors, one dispatch on double-click, localhost iframe login, real add-on pairing, two successive code-server selections after a URL-loaded preview, and password recovery after reopening `/editor`; no page errors or horizontal overflow were observed. A startup sample for the owned editor group measured five processes, 870 MiB RSS and 25.9% CPU; this is not an idle/indexing budget. Actual desktop webviews, WSL, IME, packaged upgrades, large-workspace indexing and recovery under forced shutdown remain platform acceptance work. The optional runtime is available for local use; parity across those platforms is not claimed.
 
 ## 2. Better Paseo integration
 
@@ -145,9 +154,17 @@ Reviews should use immutable snapshots/restricted execution where supported. A m
 
 ### Open questions for John
 
-- Is a second assistant mandatory, and should it re-review every must-fix resolution?
-- Should commit and push share one approval, as in the demo, or be separate?
-- Is strict isolation required for the first release, and should notifications continue after fully quitting DevHub?
+**Decisions · 9 October 2026**
+
+- Require an assigned second assistant and a fresh review after code changes. Missing reviewers block progression; self-review does not count.
+- Keep commit and push in one proposal, with the repository, branch and exact message visible. Draft PR, ticket transition and completion each need their own proposal.
+- Ship coordination first. Managed task turns no longer auto-confirm provider permission requests. Strict isolation is deferred: local assistants still have command access, and the UI says so.
+- Keep an unread attention list on disk and reconcile it on reopening. Notifications are delivered while DevHub runs; fully quitting does not create another daemon.
+- Reuse the existing cross-process lock for workflow files so the dashboard and command-line clients cannot lose each other’s decisions. Verification records command exits; assistant prose alone never passes a check.
+
+**Implemented:** `/workflow` provides the attention inbox; task menus open the task’s checks, reviewer conversations, findings, proposals and update history. Run recovery preserves the implementation Resume target. Code changes invalidate evidence, approvals expire after 15 minutes, and each approval and check execution is consumed once. PR attention uses the same history. Review verdicts are explicitly recorded after reading the assigned reviewer; they are not extracted from chat prose.
+
+**Verification:** workflow persistence, concurrent updates, fingerprints, failed checks, stale/expired/wrong-task approvals, duplicate execution and uncertain publication have automated coverage. Desktop and phone-width browser captures use a synthetic task; no live publication or external notification is sent during verification. Native Windows/WSL and Linux webviews have not been exercised on this Mac.
 
 ## 3. Built-in browser
 
@@ -212,21 +229,65 @@ Pause automation for login/MFA; disable capture then. Define screenshot/download
 | **2 · Platforms and boundaries (L)** | macOS/Linux and native Windows helper work; CDP is never LAN-exposed; access is scoped to the intended run | Port/interface scan, invalid/replayed credentials, wrong run, WSL NAT/mirrored modes, sleep/wake, file transfer, login capture suppression |
 | **3 · In-app viewing (M)** | Optional live stream and click-to-take-control; native window remains available | DPI/resize, scrolling, IME, popups, downloads, reduced motion, latency and measured resource budget |
 
-### Open questions for John
+### Resolved browser questions
 
-- Is a managed side window sufficient initially, or must browsing appear inside DevHub?
-- Which work sites need persistent login, and should work/personal profiles always be separate?
-- Must browser tasks survive fully quitting DevHub, and what screenshot/download retention is acceptable?
+- Show the live page inside DevHub and retain native Chrome for private sign-in and native interactions.
+- Default to a temporary profile. Make saved work sign-ins opt-in and keep everyday Chrome separate; no cookie or session import.
+- Stop owned Chrome with the DevHub service. Keep streamed images and transfer bytes in memory; approved downloads use the viewing browser’s save controls.
+
+### Decisions · 9 October 2026
+
+The proposal and acceptance criteria above remain the reference. These decisions resolve the browser questions for the local implementation; they do not mark all three phases complete.
+
+- Use a visible Chrome side window. Add an optional screenshot preview at roughly two-second intervals while the panel is visible and agent access is enabled; keep interaction in Chrome or through explicit action approval.
+- Default to a temporary profile. Persistent sign-ins are opt-in, with one separate profile per DevHub work profile. Never import everyday Chrome profiles or cookies. Sign in manually with human control and capture paused.
+- Bind one session and one tab to an active task and linked conversation. Grant agent access for 15 minutes at a time. Navigation stays within approved sites; every agent click and typed value needs human approval, valid for one minute.
+- Expose observation and bounded action requests, without raw CDP, cookie export, arbitrary evaluation or upload tools. Deny downloads and close extra tabs. Takeover waits for an in-flight command; it cannot undo a request already sent.
+- Stop owned Chrome when DevHub's service quits. Keep persistent profiles outside Git and content sync; remove temporary profiles during normal session cleanup. There is no browsing after quit.
+- Implement macOS and local Linux desktop support first. Windows/WSL is explicitly unavailable pending a native Windows helper. This does not satisfy phase 2 platform parity.
+
+### Implementation
+
+`dashboard/lib/browser/runtime.ts` owns an installed Chrome/Chromium process through `scripts/owned-runtime.mjs`, a separate profile and a loopback debugging connection. It checks the runtime version, limits the context to one tab, denies downloads and applies the approved-origin policy in `policy.ts`. Persistent profiles are scoped to the active work profile; starting and resetting are explicit dashboard actions.
+
+`lease.ts` manages expiring access and waits for the running command before acknowledging takeover. `commands.ts` returns bounded page observations and opaque element IDs, binds approvals to captured elements, and records uncertain action outcomes without replaying them. Human mode suppresses observation and capture. Login/MFA detection also pauses access, but users still need to take control before entering credentials.
+
+`/browser` offers task/run selection, site consent, temporary or saved profiles, Watch in Chrome, Take control, Resume agent, single-action approval, Stop and saved-profile reset. `BrowserPreview.tsx` keeps optional snapshots in memory and pauses polling when hidden or outside agent mode. It reuses the dashboard's existing tokens, controls, status panels and loading/error components.
+
+The DevHub MCP tools in `mcp-servers/devhub-server/src/tools/browser.ts` expose `browser_session`, `browser_observe` and `browser_request`. They cannot start a session, grant access or approve actions. Requests can navigate within approved sites or propose a click/typed value for dashboard approval. Existing Playwriter remains available for explicit work in an existing browser.
+
+### Privacy and remaining limits
+
+The broker is not an OS or network sandbox. Approved-origin checks, public-address validation and loopback CDP reduce the exposed surface; they do not provide complete network isolation. Unrestricted local agents can bypass the broker. Agent access can expose signed-in page content, so site and profile consent remains consequential.
+
+Observed page text enters AI context and must be treated as untrusted data. Screenshots are held in memory, with no DevHub image archive. `browser_*` tools are omitted from DevHub's MCP history; the AI client may still retain their results and page context in its own transcripts. Human control pauses further capture, not information already returned.
+
+The first implementation supports macOS and Linux with a local display and a recognised installed Chrome/Chromium binary. Native Windows, WSL forwarding, file transfer and phase 2 parity remain unimplemented. The preview is a periodic monitor, not phase 3's full embedded interaction surface. Extra-tab sign-in flows and sites requiring unapproved content hosts may not work. The setup and control guide is `docs/guides/managed-browser.md`.
+
+**Verification:** `npm run verify` passes. Automated tests cover expired/replayed leases, competing commands, takeover before and during operations, a takeover racing with resume, stale/expired action approval, wrong task/run, uncertain outcomes and privileged/private URL rejection. A native macOS Chrome smoke test uses an isolated fixture profile: a test cookie survives restart, approved typing runs once, old access is rejected, human/login capture is suppressed, and the debugging listener is IPv4 loopback only. A startup sample measured nine owned Chrome processes, 1,197 MiB RSS and 146.8% aggregate CPU; this is not an idle benchmark. Desktop/mobile UI fixtures show no page errors or horizontal overflow, one start on double-click, explicit consent, one approval, and no preview control in human mode. Independent finish review marked ship; the contrast check passes all 12 themes. Native Linux, Windows/WSL, sleep/wake, packaged lifecycle and sustained resource budgets remain unverified; the original platform acceptance criteria are not marked complete.
+
+### Embedded browser decisions · 10 October 2026
+
+These decisions supersede the side-window-only restrictions above. Windows/WSL remains disabled; there is no native Windows helper or cookie/session import.
+
+- Use CDP screencast over a same-origin dashboard POST stream. Keep one viewer, acknowledge frames, bound queued images and stop capture when hidden. The first click takes control without forwarding a click. Human input shares the lease's command exclusion; tab switches invalidate old stream tickets.
+- Retain native Chrome. Opening it takes human control and stops streaming. Embedded human mode pauses agent observation but still displays images to the user; the UI says this before sign-in. Use native Chrome for private sign-in, accessibility, menus, clipboard copying and drag gestures.
+- Fit the viewport to the live view, cap DPI at 2 and send wheel input and committed Unicode composition. Allow four approved-site tabs. Surface website dialogs explicitly.
+- Require dashboard file approval. Uploads use a picker and exact live file-input handle, name the receiving frame’s origin and reject a changed frame; no path-based agent API. Rejection is bound to the exact transfer so a delayed click cannot cancel a newer request. Pause document attachment responses and read the exact response after approval. Limit transfers to 20 MiB, expire approvals after one minute and keep bytes in memory. Blob/data and unrecognised downloads remain denied.
+- Use a loopback CONNECT proxy. Permit approved hosts on 443 and pin actual connections to public IPs. Disable implicit loopback bypass, direct QUIC and direct WebRTC UDP. Keep Chromium's sandbox enabled. This is not an OS firewall and does not constrain unrestricted same-user programs or every native Chrome feature.
+- Keep the browser in core. Long-lived CDP and streaming connections do not fit the portable request-worker transport in `runtime-plugins-and-node.md`.
+
+**Verification · 10 October 2026:** 39 focused tests pass, including installed macOS Chrome and real Chromium screencast/input tests. Coverage includes 2× DPI and resize, scrolling, committed Unicode, popup switching, stale input, frame-bound uploads with MIME preservation, original-response downloads, approval expiry/replay/size limits, delayed rejection, stream backpressure and Windows/WSL disablement. Real-browser desktop/mobile checks pass on the isolated checkout server: start/stop, click-to-take-control, Unicode entry, scrolling, upload approval, an actual HTTPS attachment download, popup tabs, website dialogs, native-window handoff, loading/retry and empty/unsupported/missing-runtime states. No page errors or horizontal overflow were observed. Screenshots and test logs are saved under `.devhub/screens/a-browser/` and `.devhub/autorun/`; these local artifacts are not committed. Linux X11/Wayland, physical IME candidate windows, sleep/wake and actual desktop webviews were not available on this Mac and are not claimed as tested. Full verification and publication results are recorded in the local job report.
 
 ## 4. Generic integrations, including chat
 
-### Current state in the code (with file paths)
+### Baseline before implementation (with file paths)
 
 - `dashboard/lib/jira/client.ts` implements Jira REST, ADF, issue creation and transitions; `docs/integrations/jira.md` describes its configuration. `dashboard/lib/github/prs.ts` uses `dashboard/lib/gh-exec.ts`; GitHub login is the local `gh` session (`docs/integrations/github.md`).
 - Coupling extends into `shared/tasks/types.ts` (`jiraKey`), `shared/entity-note/`, provider-specific routes and `dashboard/lib/tasks/task-pr-watch.ts`. Generic UI alone would not remove it.
 - `docs/integrations/google-calendar.md`, `datadog.md` and `figma.md` show different auth/delivery models; do not force them through a single credential mechanism.
 - Tier-2 plugins copy source through `dashboard/lib/plugins/materialize.ts`; `types.ts` and `db-materialize.ts` already support `DbConnectionProvider` imports.
-- **The new installer is narrower:** `dashboard/lib/plugins/inspect.ts:427` blocks MCP servers, dashboard modules, overlays and branding; it currently enables skills/agents only. Source materialisation and installed-app runtime extensibility are separate capabilities.
+- The installer now supports prebuilt runtime plugins through a separate `request-worker` protocol. Source materialisation and packaged runtime extensibility remain separate capabilities; source integration adapters still require a build.
 
 ### Options compared (short table)
 
@@ -286,7 +347,7 @@ On macOS/Linux adapters run in Node; on Windows they run in WSL alongside its `g
 
 For source installs, propose `dashboard.providers` using DB-provider codegen: modules covered by `dashboard.paths`, version checks, unique IDs and an empty core baseline. Edit plugin sources; require a compatible build/restart.
 
-Packaged builds initially ship approved adapters. Dynamic plugins need a separate reviewed, out-of-process protocol; the current installer cannot load them. An interface alone does not sandbox plugin code.
+Packaged builds initially ship approved adapters. Dynamic plugins need a separate reviewed, out-of-process protocol; source adapters are not registered by the separate packaged runtime-plugin protocol. An interface alone does not sandbox plugin code.
 
 #### Outbound notification channels
 
@@ -312,8 +373,95 @@ Keep tokens/webhook URLs out of logs and synced config. Guard endpoints/redirect
 | **2 · Migrate workflow and plugins (L)** | Workflow/UI read capabilities; second issue/SCM provider proves the seam; source plugin registration works and packaged limitations are explicit | Old saved links, unsupported writes, stale revision, duplicate provider IDs, absent/disabled plugin, invalid manifest and core-only build |
 | **3 · Notifications (M)** | Slack/Telegram outbox is opt-in and survives restart; WhatsApp stays disabled until policy/rate-card checks and template approval | Consent revocation, redaction, replay/deduplication, 429, network timeout, quiet hours, blocked bot, mobile links; mocked sends by default |
 
-### Open questions for John
+### Open questions — decisions recorded
 
-- Which second tracker/source-control provider should prove the abstraction, and is multi-account support needed immediately?
-- Slack, Telegram or both first? Are generic work notifications allowed on personal messaging accounts?
-- Is WhatsApp worth business onboarding and possible charges, and must provider plugins install into packaged DevHub without rebuilding?
+### Decisions · 9 October 2026
+
+Use GitHub Issues as the second tracker alongside Jira. It proves the provider boundary with credentials DevHub already supports. Keep existing Jira setup and `gh` login as the `default` accounts; add named accounts only when needed, using references to named server environment variables and a service restart.
+
+The first adapters shipped read-only. The 10 October extension adds Jira ticket creation and native transitions, plus GitHub PR creation, title/body updates and draft publication. Each operation uses an expiring, single-use proposal and a separate dashboard confirmation. Provider status, PR state and task completion remain separate.
+
+Start outbound alerts with an opt-in Slack incoming webhook, then an explicitly bound Telegram bot chat. WhatsApp stays parked; no Business API onboarding, templates or pricing commitment is included.
+
+### Implementation
+
+| Area | Local implementation |
+| --- | --- |
+| Provider contract | `dashboard/lib/integrations/types.ts` defines provider/account/kind/ID refs, native status IDs, revisions, capability checks and typed errors. `registry.ts` rejects duplicate IDs and incompatible API versions. |
+| Built-in adapters | `jira.ts` reads/searches issues and lists transitions; `jira-write.ts` prepares and executes confirmed ticket creation/transitions. `github.ts` reads/searches Issues and PRs and reads checks; `github-write.ts` prepares and executes confirmed PR creation, title/body updates and draft publication. Results retain native metadata. |
+| Accounts | `accounts.ts` stores named account metadata and credential variable names in profile config. Default Jira uses existing setup; default GitHub uses `gh`. Additional Jira accounts use a Cloud domain, email variable and token variable; additional GitHub accounts use a token variable against `api.github.com`. |
+| Task links | `task-refs.ts` adds qualified refs alongside existing `jiraKey` and GitHub PR URLs. Legacy links are derived without rewriting them. Added links use a task lock and revision check; removing one does not remove the original Jira key or PR URL. |
+| Dashboard | `/integrations` offers search, inspection, account configuration and alert controls. A task context enables linking results to that task. Existing buttons, inputs, tone panels, loading/error components and responsive layout preserve the dashboard's design. |
+| Alerts | `alert-types.ts`, `alert-store.ts`, `alert-send.ts` and `alert-worker.ts` implement fixed templates, consent, a durable outbox and bounded delivery attempts. The setup guide is `docs/guides/integrations.md`. |
+
+### Source providers and packaged runtime plugins
+
+Source installs support `dashboard.providers` through `dashboard/lib/plugins/integration-materialize.ts`. Each declared module exports a default array of `IntegrationProvider` objects. The materialiser generates static imports into `dashboard/lib/plugin-integrations.generated.ts`; core keeps an empty baseline. Edit the plugin source, materialise it and rebuild to apply changes. This is trusted build-time code, not an arbitrary import into a running packaged app.
+
+The separate runtime-plugin work adds a versioned `request-worker` protocol for packaged plugins, with reviewed pages, routes, MCP contributions, permissions and optional branding. A neutral `team-tools` example can list automation actions, review an exact request, stream bounded execution output and read durable status. The plugin owns its input validation, single-use review tokens, credential use and execution policy. A disconnected page must not claim to have stopped a remote operation. See [Runtime plugins and managed Node](runtime-plugins-and-node.md#request-worker-actions) for the contract and scope decisions. Its contract and host live in `dashboard/lib/plugins/runtime-contract.ts` and `runtime-host.ts`. It does not automatically register `dashboard.providers` modules in the integration registry. Source provider registration and packaged runtime contributions remain distinct paths; neither should be described as a sandbox merely because it has an interface or permission inventory.
+
+### Alert consent and delivery
+
+Alerts are off until a destination is enabled. Consent binds the chosen destination, event types and active work profile to a revision and a SHA-256 fingerprint of the resolved credential. Changing the credential requires fresh consent through Change settings; revoked destinations can be reviewed and re-enabled under the same ID. Configuration stores the credential reference and fingerprint, not the token or webhook URL. Enabling a destination validates its configuration but sends no test message.
+
+Messages use fixed labels for conversations needing attention, failed checks, completed reviews, approval requests and PR attention. They include no task titles, source code, logs or transcripts. An optional task link uses a configured HTTPS dashboard origin; without it, the message asks the recipient to open Task workflows. The address must be reachable and authenticated for the recipient; configuring it does not create remote access. Approvals stay inside DevHub.
+
+The outbox is stored in profile state outside content sync. It deduplicates by work profile, destination and workflow event. Only matching events after consent are queued. Delivery runs while DevHub is running and the matching work profile is active; quiet hours use the destination's configured time zone.
+
+HTTP 429 responses retry after the provider delay with backoff, up to five attempts. Rejected requests become failed deliveries. A timeout, ambiguous response or interrupted in-flight delivery becomes **unknown** and is never automatically retried. Manual retry requires checking the channel and acknowledging that a duplicate is possible. Provider acceptance is recorded; it does not prove the recipient read the message.
+
+Revocation cancels queued deliveries. After it returns, another queued send cannot start under that consent. It cannot retract a message already sent. The Slack webhook fixes the recipient channel; Telegram needs an explicit chat ID and does not use secret chats.
+
+### Platform and scope limits
+
+Adapters and the alert worker run in the Node service. Windows uses the WSL service's environment, config and `gh` authentication; macOS and Linux use their local service. No new inbound integration port is required. Named Jira accounts support Atlassian Cloud; named GitHub accounts use GitHub.com. Enterprise endpoint configuration is not part of this slice.
+
+### Decisions · 10 October 2026 · a-integ
+
+- Keep the existing Jira and PR screen response shapes. Their read projections now enter through `integrations/screen-data.ts`, with provider/account capability checks. Jira creation and every existing transition control use the shared proposal/review flow. Retain parent/team/sprint defaults, task refreshes, PR sorting, archived-repository filtering and stale-cache behaviour. Cancelling confirmation also stops the caller's remaining work: no error toast, task completion or new Jira link.
+- Add `prepareWrite` and `executeWrite` capabilities for Jira creation/transitions and GitHub PR creation/update/publication. Default PR creation to draft. Update title/body together; do not add merge, close, delete or local Git push. Branches must already exist remotely.
+- Persist the input and exact native preview outside content sync. Bind confirmation to its SHA-256, provider identity, account, destination, remote revision and branch SHAs. Expire after 15 minutes; serialize each proposal across processes. Save an unknown outcome before sending so a crash cannot replay it. Changed evidence needs fresh review. Provider APIs still have a compare/send race; this is not a transactional remote lock.
+- Accept Slack slash commands first, then Telegram private bot commands through two fixed webhook endpoints. Verify Slack HMAC/timestamps or Telegram's webhook secret and message age; require exact sender/channel/workspace/profile/account allowlists. Reject browser origins, forwarded Telegram messages and bot senders. Deduplicate requests on disk and bound input size and command rate.
+- Start with `help`, `status`, `status <proposal-id>` and `propose <action JSON>`. Chat only queues a proposal. The connected user must review and confirm it in DevHub; no chat approval, arbitrary shell command, agent dispatch or automatic provider writes. Telegram webhook responses use the Bot API response-method format. Replies contain fixed status text and IDs, not provider content.
+- Configure inbound credentials and allowlists through local server variables and a restart. Keep ingress restricted to the exact webhook paths; remote dashboard access still needs authentication. Inbound consent and outbound-alert consent are separate. WhatsApp stays parked because its paid Business API is outside this job.
+- Preserve the source-provider/runtime-plugin boundary from `runtime-plugins-and-node.md`. These adapters are trusted build-time code. Runtime request workers do not gain integration credentials or confirmation authority.
+
+### Write and chat UI
+
+**Write actions** contains labelled forms and an action-specific **Review action…** step. The shared native dialog shows connected account/user, requester, destination and exact content. PR edits show old and new text; Jira transitions show current and destination states. Loading uses skeletons, submission text reflects the active action, and buttons reject duplicate clicks. Cancel is available before execution. Errors preserve the form.
+
+**Recent actions** distinguishes awaiting review, expired, cancelled, failed, succeeded and **Outcome unknown**. Unknown outcomes have no retry button: check the provider before creating another action. The chat section shows disabled, misconfigured, no-allowlisted-sender and enabled states with a setup link. The PR screen links directly to the PR action form.
+
+Named Jira accounts deliberately omit default-account sprint/team inheritance. Native webview parity, live provider submissions and externally exposed ingress are separate operational checks; mocked requests cover the write paths without sending real messages or publishing test content.
+
+### Verification
+
+The earlier read-only/alert implementation passed full verification and browser checks for search, desktop/mobile layouts, consent re-enablement and unknown-delivery recovery.
+
+The 10 October write/chat extension passes `npm run verify`: lint, MCP/dashboard typechecks, 5,227 tests, vendor checks, production build and dynamic-route checks. Nine tests remain skipped by the existing suite. Verification ran with sequential checks, one test worker and two build threads. Added fixtures cover exact provider payloads, native transitions, draft publication, changed remote evidence, tampered confirmation, expiry, concurrent confirmation, crash-safe unknown outcomes, legacy route proposals and cancellation, signed Slack requests, Telegram private-chat authentication, sender/account isolation, replay and rate limits. All provider writes and chat replies are mocked.
+
+Real Chrome checks cover desktop and phone layouts, review loading, exact account/destination/content, old and new PR text, cancellation with preserved input, one proposal and confirmation on double-click, success, unknown outcomes without retry, network-error recovery and chat disabled/misconfigured states. No page errors or horizontal overflow appeared. Production-build checks also cover the Tickets redirect into Work, ticket sorting/search, cancelled transitions without error toasts, confirmed transitions refreshing the status, and the PR screen's stale-cache notice and write-action link. Screenshots stay local under `.devhub/screens/a-integ/`. Live provider submissions, external webhook ingress and native desktop webviews remain unverified.
+
+Browser checks cover search, desktop/mobile layouts, destination re-enablement with fresh consent, one save on double-click, preserved destination identity and acknowledgement before retrying an unknown delivery. No page errors or horizontal overflow were observed. The contrast check passes all 12 theme variants. Native webviews and live recipient delivery remain unverified.
+
+## 5. Graphite Neon refresh
+
+### Decisions · 10 October 2026
+
+Keep Shift Dock's exact background and hub colours: charcoal `#111416` and lime `#9ed84a` in dark mode; `#f7f8f9` and `#4c840c` in light mode. The preset stays **Graphite Neon**, described as **Layered charcoal + electric lime**. Graphite remains the core fallback; plugin defaults, saved selections and Hollow's October switch keep their existing rules.
+
+Use the existing Instrument Sans display face, stronger page titles and clearer subtitle spacing. Rounded panels echo the logo's rows, with a faint surface highlight and shallow shadow. Light mode uses white cards over pale mineral surfaces and softer overlay shadows. Only active navigation gets the lime outline and docked square; static cards stay still.
+
+Small text uses separate accent ink, with brighter hints in dark mode and darker hints in light mode. Inputs and ghost buttons have a visible boundary. Keyboard focus uses an opaque two-pixel outline with a three-pixel gap, including appearance swatches that previously cleared their outline inline. Text selection and carets use the same palette.
+
+Keep status semantics: mint success, amber warning, coral danger and blue information. Empty states retain their real title, explanation and next action; their icon gets a quiet lime tile and the title carries more weight. Errors keep their problem text and **Retry** action. No theme-specific jokes replace useful recovery instructions.
+
+Content loaders retain their content-shaped skeletons. A faint lime band moves through them using a transform; it stops under reduced motion and **Toggle animations**. The primary button lifts one pixel on pointer hover, then settles on press. Disabled buttons do not lift. No ambient animation is added to healthy content.
+
+Git charts use eight separate series colours, starting with lime, with mode-specific contrast. Labels, branch geometry and merge shapes remain intact. The original eight colours stay as CSS fallbacks for every other theme. Runtime plugin branding remains validated data, as specified in `runtime-plugins-and-node.md`; this refresh adds no plugin CSS injection.
+
+### Verification
+
+`npm run verify` passes, including the production build, with one test worker and two build threads. The contrast check passes all 12 variants with no failures or warnings. The expanded suite covers all five Graphite surfaces, small text at 4.5:1, tinted status badges, primary buttons in both states, and control outlines/chart strokes at 3:1. Preset and Hollow seasonal tests pass. Verification also exposed a timestamp tie in an unrelated AI activity test; it now identifies the second run by ID rather than assuming unique creation times.
+
+Real Chrome checks cover both modes at desktop and phone widths, keyboard focus, hover/press/disabled states, reduced motion, the animation switch and Hollow's October default. No horizontal overflow or page errors were observed. Empty, loading and error states use shared production components in a local fixture. A further browser check confirms branch-label contrast of at least 5.23:1 in dark mode and 7.56:1 in light mode. Native desktop webviews remain untested. Evidence is recorded in `.devhub/autorun/a-theme.result`; screenshots stay local under `.devhub/screens/a-theme/`.

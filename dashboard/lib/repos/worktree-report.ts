@@ -5,6 +5,8 @@ import { writeAtomic } from "@/lib/atomic-write";
 import { listRepos } from "@/lib/repos";
 import { loadWorktreeContext, worktreeInventory } from "./worktree-inventory";
 
+export { cleanupWorktrees } from "./worktree-maintenance";
+
 export interface WorktreeReport {
   scannedAt: string;
   repositories: { name: string; checkouts: number; candidates: number; bytes: number; href: string }[];

@@ -8,6 +8,7 @@ import { copyTextToClipboard } from "@/lib/clipboard";
 import { filterVisiblePaletteCommands,uniqueById, type PaletteScope } from "@/lib/command-palette-score";
 import { copyContextPackToClipboard } from "@/lib/context-pack-client";
 import { openInBrowser } from "@/lib/desktop/bridge";
+import { openReleaseNotes } from "@/lib/release-notes";
 import { isDiagramStoragePath,toDiagramRoutePath } from "@/lib/diagram-utils";
 import type { DocSearchHit } from "@/lib/docs/doc-search-types";
 import { clearFocusSession,readFocusSession,writeFocusSession } from "@/lib/focus-session-storage";
@@ -26,6 +27,8 @@ import { saveStandupAsDailyNote } from "@/lib/standup/daily-note";
 import { openTerminal,openTerminalTranscript } from "@/lib/terminal-launch";
 import { flattenTreeFiles } from "@/lib/tree-utils";
 import { toggleDensity,toggleMotion } from "@/lib/ui-prefs";
+import { celebrateGraphite } from "@/lib/graphite-theme";
+import { THEME_PRESETS, applyThemeSelection, getThemeSelectionFromDom } from "@/lib/theme-presets";
 import {
 BookOpen,
 CheckCircle2,
@@ -317,6 +320,8 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
           body: JSON.stringify({ id, done: true }),
         });
         if (!res.ok) throw new Error(await res.text());
+        const updated = await res.json() as { done?: boolean };
+        if (updated.done) celebrateGraphite("task");
         toast.success("Task toggled.");
       } catch (e) {
         console.error("toggle task from palette:", e);
@@ -454,6 +459,14 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
     }));
 
     const actionCmds: Command[] = [
+      ...THEME_PRESETS.map((preset) => ({
+        id: `action:theme-${preset.id}`,
+        kind: "action" as const,
+        label: `Use ${preset.label} theme`,
+        detail: preset.description,
+        hint: "Appearance",
+        perform: () => applyThemeSelection({ mode: getThemeSelectionFromDom().mode, preset: preset.id }),
+      })),
       /*
         Focus sessions had persistence, a chime, a top-bar readout and presets —
         but the only way to start one was to find and click that readout. The
@@ -515,6 +528,23 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
           clearRouteUsage();
           toast.success("Route usage cleared — counting again from now.");
         },
+      },
+      {
+        id: "action:whats-new",
+        kind: "action",
+        label: "What's new",
+        hint: "Release notes",
+        keywords: "version about update release highlights",
+        perform: () => { onClose(); openReleaseNotes(); },
+      },
+      {
+        id: "nav:changelog",
+        kind: "nav",
+        label: "Full changelog",
+        hint: "Past releases",
+        keywords: "release notes history versions updates",
+        href: "/changelog",
+        perform: () => router.push("/changelog"),
       },
       {
         id: "action:shortcuts",

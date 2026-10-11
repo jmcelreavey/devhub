@@ -1,6 +1,7 @@
 "use client";
 
-import { Loader2 } from "lucide-react";
+import { SkeletonRows } from "@/components/ui/SkeletonRows";
+import { FetchError } from "@/components/ui/FetchError";
 import { ModalShell } from "@/components/shell/ModalShell";
 import { useLive } from "@/lib/hooks/use-fetch";
 
@@ -32,7 +33,7 @@ export function JiraTransitionModal({
   onCancel,
   onConfirm,
 }: JiraTransitionModalProps) {
-  const { data, isLoading: loading } = useLive<{ transitions?: Transition[] }>(
+  const { data, isLoading: loading, error, mutate } = useLive<{ transitions?: Transition[] }>(
     open ? `/api/jira/ticket/${jiraKey}/transitions` : null,
     { refreshInterval: 0 },
   );
@@ -66,12 +67,11 @@ export function JiraTransitionModal({
           click meant for Cancel onto a transition button. */}
       <div className="min-h-44">
         {loading && (
-          <div className="flex items-center gap-2 py-4 text-sm text-text-subtle">
-            <Loader2 size={14} className="animate-spin" /> Loading states…
-          </div>
+          <SkeletonRows count={3} />
         )}
 
-        {!loading && (transitions?.length ?? 0) === 0 && (
+        {error && <FetchError message="Could not load Jira transitions. Check your connection and try again." onRetry={() => void mutate()} />}
+        {!loading && !error && (transitions?.length ?? 0) === 0 && (
           <p className="py-3 text-sm text-text-subtle">
             No transitions available for this ticket.
           </p>

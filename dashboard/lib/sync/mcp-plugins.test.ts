@@ -16,12 +16,12 @@ function writeJson(file: string, data: unknown): void {
 
 function registerPlugin(): void {
   writeJson(path.join(pluginRoot, "devhub-plugin.json"), {
-    name: "bi",
+    name: "team-tools",
     version: "0.1.0",
     devhubApi: "1",
     contributes: { mcp: "mcp/" },
   });
-  writeJson(pluginRegistryPath(home), { plugins: [{ name: "bi", path: pluginRoot, enabled: true }] });
+  writeJson(pluginRegistryPath(home), { plugins: [{ name: "team-tools", path: pluginRoot, enabled: true }] });
 }
 
 beforeEach(() => {
@@ -36,12 +36,12 @@ afterEach(() => {
 
 describe("pluginMcpServers", () => {
   it("lists valid server JSONs from plugin mcp dirs", () => {
-    writeJson(path.join(pluginRoot, "mcp", "bi-tools.json"), { command: "node", args: ["x"] });
+    writeJson(path.join(pluginRoot, "mcp", "team-tools.json"), { command: "node", args: ["x"] });
     writeJson(path.join(pluginRoot, "mcp", "BAD NAME.json"), { command: "node" });
     registerPlugin();
     const map = pluginMcpServers(home);
-    expect([...map.keys()]).toEqual(["bi-tools"]);
-    expect(map.get("bi-tools")?.origin).toBe("plugin:bi");
+    expect([...map.keys()]).toEqual(["team-tools"]);
+    expect(map.get("team-tools")?.origin).toBe("plugin:team-tools");
   });
 
   it("returns an empty map with no registry (back-compat)", () => {
@@ -51,11 +51,11 @@ describe("pluginMcpServers", () => {
 
 describe("readCatalogMcpServer precedence", () => {
   it("resolves a plugin server when not in core repo", () => {
-    writeJson(path.join(pluginRoot, "mcp", "bi-tools.json"), { command: "bi" });
+    writeJson(path.join(pluginRoot, "mcp", "team-tools.json"), { command: "team-tools" });
     registerPlugin();
-    const resolved = readCatalogMcpServer(repoRoot, home, "bi-tools");
+    const resolved = readCatalogMcpServer(repoRoot, home, "team-tools");
     expect(resolved?.source).toBe("plugin");
-    expect(resolved?.server.command).toBe("bi");
+    expect(resolved?.server.command).toBe("team-tools");
   });
 
   it("lets core repo win over a same-named plugin server", () => {
@@ -68,13 +68,13 @@ describe("readCatalogMcpServer precedence", () => {
   });
 
   it("exposes the plugin root so PLUGIN_ROOT can be resolved", () => {
-    writeJson(path.join(pluginRoot, "mcp", "bi-tools.json"), {
+    writeJson(path.join(pluginRoot, "mcp", "team-tools.json"), {
       command: "PLUGIN_ROOT/mcp-servers/x/node_modules/.bin/tsx",
     });
     registerPlugin();
     const map = pluginMcpServers(home);
-    expect(map.get("bi-tools")?.pluginPath).toBe(pluginRoot);
-    const resolved = readCatalogMcpServer(repoRoot, home, "bi-tools");
+    expect(map.get("team-tools")?.pluginPath).toBe(pluginRoot);
+    const resolved = readCatalogMcpServer(repoRoot, home, "team-tools");
     expect(resolved?.pluginPath).toBe(pluginRoot);
   });
 });

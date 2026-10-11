@@ -1,7 +1,7 @@
 /**
  * Plugin integration surface for cross-entity links.
  *
- * BI and future plugins should import EntityRef builders from here (or the
+ * Plugins should import EntityRef builders from here (or the
  * sibling `@/lib/task-note` / `@/lib/meeting-note` / `@/lib/pr-note` modules)
  * after materialize — never invent a parallel link format.
  *

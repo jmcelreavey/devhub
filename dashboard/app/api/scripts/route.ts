@@ -23,6 +23,7 @@ export async function POST(req: NextRequest) {
     excludeAgents,
     agents,
     prune,
+    dryRun,
     commitMessage,
     importSkillNames: rawImportSkills,
     importAgentNames: rawImportAgents,
@@ -39,6 +40,7 @@ export async function POST(req: NextRequest) {
     excludeAgents?: string[];
     agents?: string[];
     prune?: boolean;
+    dryRun?: boolean;
     commitMessage?: string;
     importSkillNames?: string[] | string;
     importAgentNames?: string[] | string;
@@ -72,6 +74,10 @@ export async function POST(req: NextRequest) {
   const importServerNames = parseImport(rawImportServers, serverSlug);
 
   const runOpts: RunScriptOptions = {};
+  if (script === "worktree_cleanup" && dryRun !== undefined) {
+    if (typeof dryRun !== "boolean") return NextResponse.json({ error: "dryRun must be a boolean" }, { status: 400 });
+    runOpts.dryRun = dryRun;
+  }
   if (cleanExclude?.length) runOpts.excludeSkills = cleanExclude;
   if (cleanSkills?.length) runOpts.skills = cleanSkills;
   if (cleanExcludeAgents?.length) runOpts.excludeAgents = cleanExcludeAgents;

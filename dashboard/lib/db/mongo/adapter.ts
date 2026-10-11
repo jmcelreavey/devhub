@@ -9,7 +9,7 @@
  * below cannot be reached at all.
  *
  * Auth is MONGODB-AWS (SigV4) with STS session credentials baked into the URI
- * by the BI provider — the driver speaks it natively, so nothing here handles
+ * by the plugin provider — the driver speaks it natively, so nothing here handles
  * credentials.
  */
 

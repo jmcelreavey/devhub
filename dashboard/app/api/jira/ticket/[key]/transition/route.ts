@@ -1,23 +1,17 @@
-import { NextResponse } from "next/server";
-import { applyTransition } from "@/lib/jira/client";
+import { NextRequest, NextResponse } from "next/server";
 import { JiraTransitionSchema } from "@/lib/schemas";
-import { withErrorHandler, parseBody, notConfigured } from "@/lib/api-utils";
-import { invalidateJiraTicketsCache } from "@/lib/jira/tickets-cache";
-import { invalidateSidebarCountsCache } from "@/lib/sidebar-counts-cache";
+import { requireDashboardAuth, isSameOriginStrict, parseBody } from "@/lib/api-utils";
+import { requestWrite } from "@/lib/integrations/write-store";
+import { alertProfile } from "@/lib/integrations/alert-worker";
+import { integrationFailure } from "@/lib/integrations/write-api";
 
-/** Apply a workflow transition to a ticket (move it to a new state). */
-export const POST = withErrorHandler(
-  async (req: Request, { params }: { params: Promise<{ key: string }> }) => {
+export async function POST(req: NextRequest, { params }: { params: Promise<{ key: string }> }) {
+  const auth = requireDashboardAuth(req); if (!auth.ok) return auth.response;
+  if (!isSameOriginStrict(req)) return NextResponse.json({ error: "Review and confirm transitions in DevHub." }, { status: 403 });
+  const parsed = await parseBody(req, JiraTransitionSchema); if (!parsed.ok) return parsed.response;
+  try {
     const { key } = await params;
-    if (!process.env.JIRA_DOMAIN) {
-      return notConfigured("Jira");
-    }
-    const parsed = await parseBody(req, JiraTransitionSchema);
-    if (!parsed.ok) return parsed.response;
-    await applyTransition(key, parsed.data.transitionId);
-    invalidateJiraTicketsCache();
-    invalidateSidebarCountsCache();
-    return NextResponse.json({ key, ok: true });
-  },
-  "jira.transition.apply",
-);
+    const proposal = await requestWrite({ action: "issue.transition", provider: "jira", account: "default", ref: { provider: "jira", account: "default", kind: "issue", id: key }, transitionId: parsed.data.transitionId }, alertProfile());
+    return NextResponse.json({ proposal, confirmationRequired: true }, { status: 202, headers: { "x-devhub-confirmation": "required" } });
+  } catch (error) { return integrationFailure(error); }
+}

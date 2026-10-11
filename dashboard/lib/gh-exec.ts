@@ -31,12 +31,14 @@ const defaultTimeoutMs = Number(process.env.DEVHUB_GH_TIMEOUT_MS ?? 30_000);
 
 export async function execGh(
   args: string[],
-  opts?: { maxBuffer?: number; cwd?: string; timeoutMs?: number },
+  opts?: { maxBuffer?: number; cwd?: string; timeoutMs?: number; signal?: AbortSignal; input?: string },
 ): Promise<{ stdout: string; stderr: string }> {
   return execExternal("gh", args, {
     maxBuffer: opts?.maxBuffer ?? defaultMaxBuffer,
     env: ghEnv(),
     cwd: opts?.cwd,
+    signal: opts?.signal,
+    input: opts?.input,
     timeoutMs: opts?.timeoutMs ?? defaultTimeoutMs,
     label: `gh:${args[0] ?? "?"}`,
   });

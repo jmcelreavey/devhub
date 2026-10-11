@@ -1,4 +1,5 @@
 "use client";
+import { integrationFetch } from "@/lib/integrations/client-fetch";
 
 /**
  * Compact hop-around chips for cards (tasks, calendar, PRs).
@@ -509,11 +510,12 @@ export function EntityLinkChips({
         setJiraStateKey(null);
         if (!transitionId || !key) return;
         try {
-          const res = await fetch(`/api/jira/ticket/${key}/transition`, {
+          const res = await integrationFetch(`/api/jira/ticket/${key}/transition`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ transitionId }),
           });
+          if (!res) return;
           if (!res.ok) throw new Error("Transition failed");
           toast.success(`Updated ${key}`);
         } catch {

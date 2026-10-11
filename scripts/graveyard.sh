@@ -20,8 +20,8 @@
 # **Authorship share — this script deliberately does not fix it.** Even with
 # every identity claimed, shared work repos still skip: the scanner also drops
 # repos where you wrote under ~20% of commits, on the reasoning that a checkout
-# you contribute to is not a side project you abandoned. On this machine `capi`
-# is 256 of 1428 commits — 18%, just under the line.
+# you contribute to is not a side project you abandoned. For example, 256 of
+# 1428 commits is 18%, just under the line.
 #
 # That default is right for the question the skill asks. A repo forty
 # colleagues commit to is not your corpse, and overriding it globally would

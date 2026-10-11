@@ -210,6 +210,22 @@ build, once from `/Applications` after installing.
 
 ## Cutting a release
 
+Update `CHANGELOG.md` **before release**. Move the changes being shipped out of
+`Unreleased` into `## X.Y.Z — YYYY-MM-DD`, matching the tag exactly. Keep the
+notes user-facing and leave changes that aren't shipping under `Unreleased`.
+Don't rewrite earlier releases.
+
+Check the entry before tagging:
+
+```bash
+node desktop/scripts/extract-release-notes.mjs 2.1.0
+```
+
+Tagged builds fail before the expensive platform builds if that entry is missing,
+empty or duplicated. Dry-run dispatches warn instead, so test versions such as
+`0.0.0-dmgtest` still work. The same section becomes the GitHub release body and
+`latest.json` notes; commit lists are not used as a fallback.
+
 Tag and push:
 
 ```bash

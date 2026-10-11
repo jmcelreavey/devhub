@@ -531,12 +531,12 @@ describe("blocksToPortableMarkdown", () => {
       props: {
         taskId: "cdc243c8-3352-488a-8d0f-deb465e8a5d5",
         date: "2026-07-31",
-        label: "PTF-4484 Address BI Jobs Feedback",
+        label: "PTF-4484 Address Demo Jobs Feedback",
       },
       children: [],
     };
     expect(blocksToPortableMarkdown([block])).toBe(
-      "*Task: PTF-4484 Address BI Jobs Feedback*",
+      "*Task: PTF-4484 Address Demo Jobs Feedback*",
     );
   });
 
@@ -637,12 +637,12 @@ describe("blocksToPortableMarkdown", () => {
         type: "link",
         href: "https://www.example-org.com/terms",
         content: [
-          { type: "text", text: "standard BI T&Cs", styles: { italic: true, textColor: "green" } },
+          { type: "text", text: "standard Demo T&Cs", styles: { italic: true, textColor: "green" } },
         ],
       },
     ]);
     expect(blocksToPortableMarkdown([block])).toBe(
-      "> $\\color{#4d6461}{\\textit{Pointing to }}$[$\\color{#4d6461}{\\textit{standard BI T\\&Cs}}$](https://www.example-org.com/terms)",
+      "> $\\color{#4d6461}{\\textit{Pointing to }}$[$\\color{#4d6461}{\\textit{standard Demo T\\&Cs}}$](https://www.example-org.com/terms)",
     );
   });
 
@@ -654,13 +654,13 @@ describe("blocksToPortableMarkdown", () => {
       content: [{ type: "text", text: "Feedback", styles: {} }],
       children: [
         b("paragraph", "(For UX) Masthead?"),
-        b("bulletListItem", "Clicking BI | Jobs goes home"),
+        b("bulletListItem", "Clicking Demo | Jobs goes home"),
         bInline("paragraph", [{ type: "text", text: "Not a blocker", styles: { italic: true } }]),
       ],
     };
     const md = blocksToPortableMarkdown([block]);
     expect(md).toContain("(For UX) Masthead?");
-    expect(md).toContain("- Clicking BI | Jobs goes home");
+    expect(md).toContain("- Clicking Demo | Jobs goes home");
     expect(md).toContain("> *Not a blocker*");
   });
 

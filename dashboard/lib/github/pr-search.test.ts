@@ -79,7 +79,7 @@ describe("filterPrRows", () => {
 describe("hasSearchQualifier", () => {
   it("detects GitHub qualifiers", () => {
     expect(hasSearchQualifier("author:jmcelreavey")).toBe(true);
-    expect(hasSearchQualifier("meta repo:bi/syndication-services")).toBe(true);
+    expect(hasSearchQualifier("meta repo:other-org/content-api")).toBe(true);
   });
 
   it("does not fire on plain text", () => {
@@ -95,8 +95,8 @@ describe("buildPrSearchQuery", () => {
   });
 
   it("leaves a qualified query unscoped", () => {
-    expect(buildPrSearchQuery("repo:bi/syndication-services meta", ["example-org"])).toBe(
-      "is:pr repo:bi/syndication-services meta sort:updated-desc",
+    expect(buildPrSearchQuery("repo:other-org/content-api meta", ["example-org"])).toBe(
+      "is:pr repo:other-org/content-api meta sort:updated-desc",
     );
   });
 

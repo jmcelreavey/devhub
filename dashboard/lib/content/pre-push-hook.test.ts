@@ -12,6 +12,7 @@ const LEAK_LINE = ["see the ", "heim", "dall service\n"].join("");
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const HOOK_SRC = path.join(REPO_ROOT, ".githooks", "pre-push");
 const SCAN_SRC = path.join(REPO_ROOT, "scripts", "scan-leaks.sh");
+const PUBLIC_PATHS_SRC = path.join(REPO_ROOT, "scripts", "lib", "public-paths.sh");
 
 let root: string;
 let work: string;
@@ -68,8 +69,9 @@ beforeEach(() => {
   fs.mkdirSync(work);
   mustGit(work, "init", "-q");
   mustGit(work, "remote", "add", "origin", path.join(root, "remote.git"));
-  fs.mkdirSync(path.join(work, "scripts"));
+  fs.mkdirSync(path.join(work, "scripts", "lib"), { recursive: true });
   fs.copyFileSync(SCAN_SRC, path.join(work, "scripts", "scan-leaks.sh"));
+  fs.copyFileSync(PUBLIC_PATHS_SRC, path.join(work, "scripts", "lib", "public-paths.sh"));
   fs.mkdirSync(path.join(work, "dashboard", "node_modules"), { recursive: true });
   commitFile("README.md");
   // Seed the remote before the hook exists, so only the pushes under test run it.

@@ -14,7 +14,7 @@ describe("formatConnectionLine", () => {
   it("prints the exact confirmation label for a dangerous write connection", () => {
     expect(
       formatConnectionLine({
-        id: "bi:mongo:fantasy-stocks:prd",
+        id: "team:mongo:sample-data:prd",
         label: "Fantasy Stocks · prd",
         engine: "mongodb",
         accessMode: "write",
@@ -26,7 +26,7 @@ describe("formatConnectionLine", () => {
   it("does not add a confirmation label to read-only connections", () => {
     expect(
       formatConnectionLine({
-        id: "bi:mongo:fantasy-stocks:prd",
+        id: "team:mongo:sample-data:prd",
         label: "Fantasy Stocks · prd",
         engine: "mongodb",
         accessMode: "read",
@@ -39,7 +39,7 @@ describe("formatConnectionLine", () => {
 describe("compact database output", () => {
   it("does not repeat statements in execution results", () => {
     const output = formatExecutionResult({
-      connectionId: "bi:rds:idun:prd",
+      connectionId: "team:rds:payments:prd",
       kind: "write",
       durationMs: 12,
       results: [{ columns: [], rows: [], rowsAffected: 1, durationMs: 10 }],
@@ -225,9 +225,9 @@ describe("db_connect", () => {
             detail: "Writer profile required.",
             remedy: {
               id: "aws-profile",
-              label: "Sign in to dev-dad+",
-              endpoint: "/api/bi/aws-profile",
-              body: { profile: "dev-dad+" },
+              label: "Sign in to dev-team+",
+              endpoint: "/api/team-tools/aws-profile",
+              body: { profile: "dev-team+" },
             },
           },
         ],
@@ -236,19 +236,19 @@ describe("db_connect", () => {
     post.mockResolvedValue({ ok: true });
 
     await handlers.get("db_connect")!({
-      connectionId: "bi:mongo:fantasy-stocks:dev",
+      connectionId: "team:mongo:sample-data:dev",
       accessMode: "write",
       fix: true,
     });
 
     expect(get).toHaveBeenNthCalledWith(
       1,
-      "/api/db/bi%3Amongo%3Afantasy-stocks%3Adev/preflight",
+      "/api/db/team%3Amongo%3Asample-data%3Adev/preflight",
       { accessMode: "write" },
     );
     expect(post).toHaveBeenCalledWith(
-      "/api/bi/aws-profile",
-      { profile: "dev-dad+" },
+      "/api/team-tools/aws-profile",
+      { profile: "dev-team+" },
       300_000,
     );
   });

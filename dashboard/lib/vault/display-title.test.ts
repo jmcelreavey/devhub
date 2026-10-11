@@ -24,11 +24,11 @@ describe("firstHeadingFromBlocks", () => {
         {
           type: "heading",
           props: { level: 1 },
-          content: [{ type: "text", text: "PTF-4484 Address BI Jobs Feedback", styles: {} }],
+          content: [{ type: "text", text: "APP-4484 Address sample feedback", styles: {} }],
           children: [],
         },
       ]),
-    ).toBe("PTF-4484 Address BI Jobs Feedback");
+    ).toBe("APP-4484 Address sample feedback");
   });
 });
 
@@ -60,9 +60,9 @@ describe("vaultDisplayTitle", () => {
   it("prefers content title", () => {
     const result = vaultDisplayTitle(
       "2026-07-31-cdc243c8-3352-488a-8d0f-deb465e8a5d5",
-      "PTF-4484 Address BI Jobs Feedback",
+      "APP-4484 Address sample feedback",
     );
-    expect(result.displayTitle).toBe("PTF-4484 Address BI Jobs Feedback");
+    expect(result.displayTitle).toBe("APP-4484 Address sample feedback");
     expect(result.fromContent).toBe(true);
   });
 

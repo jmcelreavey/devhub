@@ -100,14 +100,14 @@ export function dbFailure(err: unknown): NextResponse {
 /**
  * Map the driver failures that have a known cause on this machine.
  *
- * `rdsProbeErrorMessage` in the BI plugin already does this for its own probe;
+ * `rdsProbeErrorMessage` in the plugin plugin already does this for its own probe;
  * these are the same causes seen from the client's side, plus the ones only a
  * query path hits.
  */
 export function explainDriverError(message: string): string {
   const text = message.toLowerCase();
 
-  // The most common BI failure by far, and the rawest: a several-hundred-
+  // The most common plugin failure by far, and the rawest: a several-hundred-
   // character `aws` invocation whose one useful word is "ExpiredToken". The
   // preflight says the same thing in the panel beside this, but the message
   // itself should not be a command dump.
