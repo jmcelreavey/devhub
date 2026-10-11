@@ -2,6 +2,13 @@
 
 User-visible changes, newest first. Versioned sections describe the public releases; Unreleased, when present, is work that has not shipped yet.
 
+## Unreleased
+
+### Changed
+
+- Fit the top bar to laptop widths. It now follows its own width rather than the window's: section tabs fold into a dropdown, search and Focus shrink to icons, Profiles to an initial, and the Notes/Tasks/Diagrams buttons plus Setup move into a More menu. Recent pages return on wide screens. Nothing overlaps or clips from 900px up in Graphite Neon (Default) or Hollow (Halloween), and every control keeps a label, tooltip and a 32–36px target.
+- Keep laptop navigation discoverable: give section tabs priority over secondary labels, retain labelled search and a stable Tools menu, remove recent-page breadcrumbs, and keep keyboard navigation and focus reliable as the bar resizes.
+
 ## 2.1.0 - 2026-10-11
 
 ![DevHub overview: your day, ticket-to-PR agents, Git, notes, diagrams, skills, plugins and approved integrations](https://raw.githubusercontent.com/jmcelreavey/devhub/main/docs/assets/demos/overview.gif)

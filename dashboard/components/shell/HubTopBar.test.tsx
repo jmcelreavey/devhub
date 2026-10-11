@@ -40,7 +40,8 @@ describe("HubTopBar hydration", () => {
         root = hydrateRoot(container, <HubTopBar />, { onRecoverableError });
       });
       expect(onRecoverableError).not.toHaveBeenCalled();
-      expect(container.querySelector('a[href="/notes"]')?.textContent).toBe("Notes");
+      expect(container.querySelector(".hub-search")?.hasAttribute("disabled")).toBe(false);
+      expect(container.querySelector('nav[aria-label="Recent pages"]')).toBeNull();
     } finally {
       await act(async () => root?.unmount());
       container.remove();

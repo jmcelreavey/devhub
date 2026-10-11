@@ -381,6 +381,7 @@ export function FocusTimer() {
         className="focus-pill running"
         onClick={stop}
         title="End focus session"
+        aria-label={`End focus session, ${fmtMs(remaining)} left`}
         style={{
           background: `linear-gradient(90deg, var(--accent-dim) ${pct * 100}%, transparent ${pct * 100}%)`,
         }}
@@ -411,11 +412,13 @@ export function FocusTimer() {
           setPickerOpen(true);
         }}
         title="Start focus session"
+        aria-label="Start focus session"
         aria-haspopup="menu"
         aria-expanded={pickerOpen}
       >
-        <Timer size={11} aria-hidden />
-        <span>Focus</span>
+        {/* The label drops out on narrow top bars; the icon + aria-label remain. */}
+        <Timer size={14} aria-hidden />
+        <span className="focus-pill-label">Focus</span>
       </button>
       {pickerOpen && pickerCoords && typeof document !== "undefined" &&
         createPortal(

@@ -1,24 +1,16 @@
 "use client";
 
-import { NotesBrowseButton } from "@/components/notes/NotesBrowseButton";
-import { TasksBrowseButton } from "@/components/tasks/TasksBrowseButton";
-import { DiagramsBrowseButton } from "@/components/diagrams/DiagramsBrowseButton";
 import { TerminalDockButton } from "@/components/shell/TerminalDock";
+import { TopBarMoreMenu } from "@/components/shell/TopBarMoreMenu";
 
 /**
- * Shared quick-action cluster — Notes / Tasks / Diagrams panels plus the
- * terminal drawer toggle. Single source of truth so the desktop top bar and
- * the mobile top bar stay in sync (previously the trio was duplicated and the
- * terminal toggle only existed on desktop, leaving no way to open it on
- * mobile).
+ * Keep terminal activity visible; panel shortcuts have one home at every width.
  */
 export function QuickActions() {
   return (
     <>
-      <NotesBrowseButton />
-      <TasksBrowseButton />
-      <DiagramsBrowseButton />
       <TerminalDockButton />
+      <TopBarMoreMenu />
     </>
   );
 }

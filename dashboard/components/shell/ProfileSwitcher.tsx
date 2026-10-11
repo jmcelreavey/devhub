@@ -66,9 +66,9 @@ export function ProfileSwitcher() {
             : "Loading task profiles"
         }
       >
-        <UserRound size={14} aria-hidden />
+        <UserRound size={14} aria-hidden className="hub-profile-icon" />
         <span className="hub-profile-label">Profiles</span>
-        <ChevronDown size={12} aria-hidden />
+        <ChevronDown size={12} aria-hidden className="hub-profile-chevron" />
       </button>
     );
   }
@@ -126,11 +126,18 @@ export function ProfileSwitcher() {
         }
         aria-expanded={open}
       >
-        <UserRound size={14} aria-hidden />
+        {/* Narrow top bars show just the initial, so each profile still reads
+            as itself without spending the label's width. */}
+        {!legacy && data.active && (
+          <span className="hub-profile-initial" aria-hidden>
+            {data.active.charAt(0).toUpperCase()}
+          </span>
+        )}
+        <UserRound size={14} aria-hidden className="hub-profile-icon" />
         <span className="hub-profile-label">
           {legacy ? "Profiles" : data.active}
         </span>
-        <ChevronDown size={12} aria-hidden />
+        <ChevronDown size={12} aria-hidden className="hub-profile-chevron" />
       </button>
       {open && (
         <div

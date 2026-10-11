@@ -2310,11 +2310,19 @@ body[data-grid-resizing="true"] * {
    rule is unlayered and would defeat a Tailwind `hidden md:flex`, so the
    md breakpoint is expressed here rather than on the component. */
 .hub-topbar {
+  /* Responsive tiers (see "Top bar tiers" below) are *container* queries: the
+     bar sits beside a 232px sidebar (44px collapsed), so its own width, not the
+     window's, decides how much fits. */
+  container: hub-topbar / inline-size;
+  /* Bordered, field-like controls (search, tabs, profile) vs bare icon buttons. */
+  --hub-topbar-field: 36px;
+  --hub-topbar-icon: 36px;
   display: none;
   height: 48px;
   flex-shrink: 0;
   align-items: center;
   justify-content: space-between;
+  gap: var(--space-3);
   padding: 0 var(--space-5);
   border-bottom: 1px solid var(--border-muted);
   background: var(--bg-sidebar);
@@ -2514,44 +2522,6 @@ body[data-grid-resizing="true"] * {
   }
 }
 
-.hub-crumbs {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  color: var(--text-subtle);
-  min-width: 0;
-  /* Yields space before the section tabs do. Entries that don't fit wrap onto
-     a hidden second line, so they drop whole instead of being cut mid-word. */
-  flex: 0 100 auto;
-  flex-wrap: wrap;
-  height: 20px;
-  line-height: 20px;
-  overflow: hidden;
-  white-space: nowrap;
-}
-.hub-crumb {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-.hub-crumb a {
-  color: var(--text-subtle);
-  text-decoration: none;
-}
-.hub-crumb a:hover {
-  color: var(--text);
-}
-.hub-recent-label {
-  font-size: 10px;
-  font-weight: 600;
-  color: var(--text-subtle);
-  opacity: 0.7;
-}
-.hub-crumb-sep {
-  color: var(--text-subtle);
-  opacity: 0.6;
-}
 
 .hub-topbar-actions {
   display: flex;
@@ -2578,8 +2548,8 @@ body[data-grid-resizing="true"] * {
 }
 
 .hub-topbar .hub-icon-btn {
-  width: 32px;
-  height: 32px;
+  width: var(--hub-topbar-icon);
+  height: var(--hub-topbar-icon);
   color: var(--text-muted);
 }
 
@@ -2602,7 +2572,9 @@ body[data-grid-resizing="true"] * {
 }
 
 .hub-topbar .focus-pill {
-  height: 32px;
+  height: var(--hub-topbar-icon);
+  min-width: var(--hub-topbar-icon);
+  justify-content: center;
   padding-inline: var(--space-2);
   font-family: var(--font-sans);
   font-size: 12px;
@@ -2626,9 +2598,25 @@ body[data-grid-resizing="true"] * {
 .hub-topbar .hub-profile-trigger {
   display: inline-flex;
   width: auto;
+  height: var(--hub-topbar-field);
   gap: var(--space-2);
   padding-inline: var(--space-2);
   border-color: var(--border-muted);
+}
+
+/* Initial badge: only the compact tier shows it (and only when a profile is
+   active). */
+.hub-profile-initial {
+  display: none;
+  width: 20px;
+  height: 20px;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--accent-dim);
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
 }
 
 .hub-profile-label {
@@ -2698,41 +2686,6 @@ body[data-grid-resizing="true"] * {
   flex: 1;
 }
 
-@media (min-width: 768px) and (max-width: 1100px) {
-  .hub-topbar {
-    height: auto;
-    min-height: 48px;
-    flex-wrap: wrap;
-    row-gap: var(--space-2);
-    padding: var(--space-2) var(--space-3);
-  }
-  .hub-topbar .hub-crumbs {
-    display: none;
-  }
-  .hub-topbar .hub-section-tabs {
-    flex: 1 0 100%;
-    margin-left: 0;
-  }
-  .hub-topbar .hub-icon-btn {
-    width: 28px;
-  }
-  .hub-topbar .hub-profile-trigger {
-    width: auto;
-  }
-  .hub-topbar-actions {
-    gap: var(--space-2);
-  }
-  .hub-toolbar-group {
-    gap: 0;
-  }
-  .hub-preferences {
-    padding-left: var(--space-2);
-  }
-  .hub-profile-label {
-    max-width: 80px;
-  }
-}
-
 /* Grouped action buttons (sync, quick actions). Single source of truth so
    every top-bar cluster shares one look — see HubTopBar / ContentSyncIndicator. */
 .hub-cluster {
@@ -2750,12 +2703,10 @@ body[data-grid-resizing="true"] * {
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  margin-left: auto;
-  margin-right: var(--space-4);
-  width: 180px;
-  height: 32px;
+  width: 168px;
+  height: var(--hub-topbar-field, 36px);
   flex-shrink: 0;
-  padding: var(--space-1) var(--space-2);
+  padding: 0 var(--space-2);
   border-radius: var(--radius-sm);
   border: 1px solid var(--border-muted);
   background: var(--bg-elevated);
@@ -2795,18 +2746,9 @@ body[data-grid-resizing="true"] * {
   background: var(--bg);
   color: var(--text-subtle);
 }
-@media (max-width: 1100px) {
-  .hub-search {
-    margin-right: var(--space-2);
-    width: 32px;
-    padding: 4px 0;
-    justify-content: center;
-    gap: 0;
-  }
-  .hub-search-label,
-  .hub-search-kbd {
-    display: none;
-  }
+/* HoverTip wrapper: takes the auto margin so search + actions pack right. */
+.hub-search-wrap {
+  margin-left: auto;
 }
 
 .hub-icon-btn {
@@ -3679,29 +3621,28 @@ body[data-density="compact"] .card {
 
 /* ── Top-bar section tabs (merged Library / System destinations) ── */
 .hub-section-tabs {
+  /* Shown by the top bar tiers below; the menu form covers narrower bars. */
   display: none;
   align-items: center;
   gap: 2px;
-  margin-left: 10px;
   /* Scroll, don't wrap: "Live links" used to break onto two lines at 1440px. */
   flex-shrink: 1;
   min-width: 0;
   overflow-x: auto;
   scrollbar-width: none;
-  padding: 2px;
+  padding: 1px;
   background: var(--bg);
   border: 1px solid var(--border-muted);
   border-radius: 8px;
 }
-@media (min-width: 768px) {
-  .hub-section-tabs {
-    display: inline-flex;
-  }
-}
 .hub-section-tab {
+  display: inline-flex;
+  align-items: center;
   flex-shrink: 0;
   white-space: nowrap;
-  padding: 3px 10px;
+  /* 32px target inside the 36px group. */
+  min-height: 32px;
+  padding: 0 10px;
   border-radius: 6px;
   font-size: 12px;
   color: var(--text-muted);
@@ -3713,11 +3654,176 @@ body[data-density="compact"] .card {
 .hub-section-tab:hover {
   color: var(--text);
 }
+.hub-topbar .hub-section-tabs .hub-section-tab:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
 .hub-section-tab[data-active] {
   background: var(--bg-elevated);
   color: var(--text);
   box-shadow: inset 0 0 0 1px
     color-mix(in oklab, var(--accent) 20%, transparent);
+}
+
+/* Same destinations as a one-button menu, for bars too narrow for the strip. */
+.hub-section-menu {
+  position: relative;
+  display: inline-flex;
+  min-width: 0;
+}
+.hub-section-menu-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  max-width: 220px;
+  height: var(--hub-topbar-field, 36px);
+  padding: 0 var(--space-2) 0 var(--space-3);
+  border: 1px solid var(--border-muted);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 12px;
+  cursor: pointer;
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+  transition:
+    background var(--dur-fast) var(--ease-swift),
+    outline-color var(--dur-quick) var(--ease-swift);
+}
+.hub-section-menu-trigger:hover {
+  background: var(--bg-elevated);
+}
+.hub-section-menu-trigger:focus-visible {
+  outline-color: var(--accent);
+}
+.hub-section-menu-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.hub-section-menu-pop {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: max-content;
+  min-width: 100%;
+  max-width: 260px;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: var(--shadow-popover);
+  animation: plus-pop var(--dur-fast) var(--ease-swift) both;
+}
+.hub-section-menu-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  min-height: 32px;
+  padding: 0 var(--space-2);
+  border-radius: 6px;
+  color: var(--text-muted);
+  font-size: 12px;
+  text-decoration: none;
+  outline: 2px solid transparent;
+  outline-offset: -2px;
+}
+.hub-section-menu-item:hover {
+  background: var(--bg-overlay);
+  color: var(--text);
+}
+.hub-section-menu-item:focus-visible {
+  outline-color: var(--accent);
+  color: var(--text);
+}
+.hub-section-menu-item[aria-current="page"] {
+  background: var(--accent-dim);
+  color: var(--text);
+}
+
+/* Container widths exclude the sidebar and 40px header padding.
+   Navigation earns space before secondary labels: five tabs at 840px, longer
+   sections at 1040px. Tools stays in the same place on every desktop width. */
+.hub-topbar .hub-more-menu > .hub-icon-btn {
+  display: inline-flex;
+  width: auto;
+  gap: 6px;
+  padding-inline: 8px;
+  font-size: 12px;
+  border-color: var(--border-muted);
+}
+
+@container hub-topbar (max-width: 1159px) {
+  .hub-topbar-actions {
+    gap: var(--space-2);
+  }
+  .hub-preferences {
+    padding-left: var(--space-2);
+  }
+  .hub-search {
+    width: 144px;
+  }
+  .focus-pill-label {
+    display: none;
+  }
+  .hub-topbar .focus-pill:not(.running) {
+    padding-inline: 0;
+    width: var(--hub-topbar-icon);
+  }
+  .hub-topbar .hub-profile-trigger {
+    width: var(--hub-topbar-field);
+    padding-inline: 0;
+    justify-content: center;
+  }
+  .hub-profile-label,
+  .hub-profile-chevron {
+    display: none;
+  }
+  .hub-profile-initial {
+    display: inline-grid;
+  }
+  .hub-profile-trigger:has(.hub-profile-initial) .hub-profile-icon {
+    display: none;
+  }
+}
+
+/* Below laptop size, preserve room for a running timer and the section name. */
+@container hub-topbar (max-width: 599px) {
+  .hub-search {
+    width: var(--hub-topbar-field);
+    padding: 0;
+    justify-content: center;
+    gap: 0;
+  }
+  .hub-search-label,
+  .hub-search-kbd {
+    display: none;
+  }
+}
+
+@container hub-topbar (min-width: 840px) {
+  .hub-topbar .hub-section-tabs:not([data-dense]) {
+    display: inline-flex;
+  }
+  .hub-topbar .hub-section-menu:not([data-dense]) {
+    display: none;
+  }
+}
+
+@container hub-topbar (min-width: 1040px) {
+  .hub-topbar .hub-section-tabs {
+    display: inline-flex;
+  }
+  .hub-topbar .hub-section-menu {
+    display: none;
+  }
 }
 
 /* ── Count tick: number rolls up when it changes ── */
@@ -6508,6 +6614,7 @@ button.task-agent-chip {
 .launch-menu-item {
   display: flex;
   width: 100%;
+  min-height: 32px;
   align-items: flex-start;
   gap: 8px;
   padding: 7px 8px;
@@ -6564,6 +6671,20 @@ button.task-agent-chip {
   font-size: 11px;
   line-height: 1.35;
   color: var(--text-subtle);
+}
+/* Shortcut hint, pushed to the row's end. */
+.launch-menu-kbd {
+  margin-left: auto;
+  align-self: center;
+  padding: 2px 5px;
+  border: 1px solid var(--border-muted);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--text-subtle);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1;
+  white-space: nowrap;
 }
 
 /* ── Task toggle: empty circle perks up on hover, hinting it's clickable ── */
