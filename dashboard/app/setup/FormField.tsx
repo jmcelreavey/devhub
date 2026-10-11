@@ -53,17 +53,10 @@ export function FormField({
             background: "var(--bg-elevated)",
             color: "var(--text)",
             fontSize: "13px",
-            outline: "none",
             boxSizing: "border-box",
             fontFamily: "monospace",
           }}
-          onFocus={(e) => {
-            e.currentTarget.style.borderColor = "var(--accent)";
-            onFocus?.();
-          }}
-          onBlur={(e) => {
-            e.currentTarget.style.borderColor = "var(--border)";
-          }}
+          onFocus={() => onFocus?.()}
         />
         {onToggleSecret && (
           <button

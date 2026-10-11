@@ -10,7 +10,6 @@
 :root[data-theme-preset="hollow"] ::-webkit-scrollbar { width: 8px; height: 8px; }
 :root[data-theme-preset="hollow"] ::-webkit-scrollbar-thumb { background: #70423d; border-radius: 4px; }
 :root[data-theme-preset="hollow"] ::selection { background: var(--accent); color: var(--accent-fg); }
-:root[data-theme-preset="hollow"] :focus-visible { outline: 2px solid var(--accent-text); outline-offset: 3px; }
 :root[data-theme-preset="hollow"] .text-accent { color: var(--accent-text); }
 :root[data-theme-preset="hollow"] :is(h1, h2, h3, .page-title, .hub-hero-date) {
   font-family: "American Typewriter", "Courier New", ui-monospace, monospace;

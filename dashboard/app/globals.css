@@ -354,15 +354,6 @@
 :root[data-theme-preset="graphite"] :is(input, textarea, [contenteditable="true"]) {
   caret-color: var(--accent-text);
 }
-:root[data-theme-preset="graphite"] :focus-visible {
-  outline: 2px solid var(--accent-text);
-  outline-offset: 3px;
-}
-/* The appearance swatches clear their outline inline; restore keyboard focus. */
-:root[data-theme-preset="graphite"] [role="menuitem"]:focus-visible {
-  outline: 2px solid var(--accent-text) !important;
-  outline-offset: 3px;
-}
 :root[data-theme-preset="graphite"] ::selection {
   color: var(--accent-fg);
   background: var(--accent);
@@ -719,10 +710,6 @@ h3,
   background: var(--accent-dim) !important;
   color: var(--accent-text, var(--accent)) !important;
 }
-.jira-widget-key:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
 .jira-widget-open:hover {
   color: var(--accent-text, var(--accent)) !important;
   background: var(--accent-dim);
@@ -819,8 +806,6 @@ h3,
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
-  outline: 2px solid transparent;
-  outline-offset: 2px;
   transition:
     background var(--dur-quick) var(--ease-swift),
     color var(--dur-quick) var(--ease-swift),
@@ -891,15 +876,7 @@ h3,
   color: var(--text);
   font-size: 13px;
   padding: 6px 10px;
-  outline: 2px solid transparent;
-  outline-offset: 2px;
-  transition: outline-color var(--dur-quick) var(--ease-swift);
   width: 100%;
-}
-.input:focus,
-.input:focus-visible {
-  outline-color: var(--accent);
-  border-color: var(--border);
 }
 .input::placeholder {
   color: var(--text-subtle);
@@ -907,9 +884,8 @@ h3,
 
 /*
   Shared search field — InlineSearch (in a card) and SearchInput (boxed).
-  Focus ring is on the wrapper so the accent outline has padding between it
-  and the icon / placeholder. Inner input ring is suppressed because the
-  global *:focus-visible rule would otherwise hug the text.
+  The wrapper carries the focus ring (see the a11y block) so it sits around
+  the icon and the placeholder, not hugging the text.
 */
 .search-field {
   display: flex;
@@ -918,17 +894,10 @@ h3,
   min-height: 36px;
   padding: 8px 12px;
   border-radius: var(--radius-sm);
-  outline: 2px solid transparent;
-  outline-offset: 3px;
-  transition: outline-color var(--dur-fast) var(--ease-swift);
-}
-.search-field:focus-within {
-  outline-color: var(--accent);
 }
 .search-field--boxed {
   background: var(--bg-elevated);
   border: 1px solid var(--border);
-  outline-offset: 2px;
   min-height: 0;
   padding: 6px 12px;
 }
@@ -948,11 +917,6 @@ h3,
   font-size: 13px;
   line-height: 1.4;
   padding: 2px 0;
-  outline: 2px solid transparent;
-}
-.search-field__input:focus,
-.search-field__input:focus-visible {
-  outline-color: transparent;
 }
 .search-field__input::placeholder {
   color: var(--text-subtle);
@@ -1001,17 +965,12 @@ body[data-motion="off"] .search-field {
 .palette-input {
   background: transparent;
   color: var(--text);
-  outline: 2px solid transparent;
   flex: 1;
   font-size: 13px;
   padding: 2px 0 2px 6px;
 }
 .palette-input::placeholder {
   color: var(--text-subtle);
-}
-.palette-input:focus,
-.palette-input:focus-visible {
-  outline-color: transparent;
 }
 
 /* ─── Markdown body ─── */
@@ -1159,15 +1118,7 @@ body[data-motion="off"] .search-field {
   border-radius: var(--radius);
   padding: 12px 14px;
   resize: none;
-  outline: 2px solid transparent;
-  outline-offset: 2px;
   width: 100%;
-  transition: outline-color var(--dur-quick) var(--ease-swift);
-}
-.editor-textarea:focus,
-.editor-textarea:focus-visible {
-  outline-color: var(--accent);
-  border-color: var(--border);
 }
 
 /* ─── Page layout ─── */
@@ -1249,20 +1200,50 @@ body[data-motion="off"] .search-field {
   flex-shrink: 0;
 }
 
-/* ─── Focus ring (a11y) — outline only, resting transparent ─── */
-*:focus {
-  outline: 2px solid transparent;
-  outline-offset: 2px;
+/* ─── Focus ring (a11y) — the one definition ───
+   Every theme inherits this. A theme retunes the three tokens; it never
+   re-declares `outline` on :focus-visible (three theme files used to, with a
+   3px outer offset, and stacked on top of the component rules).
+
+   - Keyboard focus only (:focus-visible). A mouse click on a button or menu
+     item shows nothing; text fields always match, so they ring when clicked.
+   - One ring per control, on its outer visual box. A wrapper around a bare
+     input rings through :has() and silences the input inside it.
+   - Inset: a ring inside the control is never clipped by an overflow:hidden
+     parent and never lands on a neighbour.
+   - No border-radius here: the ring follows the control's own shape. */
+:root {
+  --focus-ring-color: var(--accent-text, var(--accent));
+  --focus-ring-width: 2px;
+  --focus-ring-offset: -2px;
 }
-*:focus-visible {
-  outline-color: var(--accent);
-  border-radius: var(--radius-sm);
+:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-ring-offset);
 }
-.input:focus-visible,
-.editor-textarea:focus-visible,
-button:focus-visible,
-a:focus-visible {
-  outline-color: var(--accent);
+/* An accent fill would swallow an accent ring. */
+:is(.btn-primary, .welcome-action.primary):focus-visible {
+  outline-color: var(--accent-fg);
+}
+/* Inline links have no box to sit inside; hug the glyphs instead. */
+a:not([class]):focus-visible,
+.markdown-body a:focus-visible {
+  outline-offset: 1px;
+  border-radius: 2px;
+}
+/* Wrapper fields: .focus-host is the opt-in for a box that draws the border
+   around a bare <input>. The wrapper rings; the input inside does not. The
+   command palette marks focus with its own bottom bar instead. */
+:is(.focus-host, .search-field, .repo-git-filter-search, .repo-git-branch-filter):has(
+    :is(input, textarea, select):focus-visible
+  ) {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-ring-offset);
+}
+:is(.focus-host, .search-field, .repo-git-filter-search, .repo-git-branch-filter, .palette-input)
+  :is(input, textarea, select):focus-visible,
+.palette-input:focus-visible {
+  outline: none;
 }
 
 /* ─── Route crossfade (View Transitions) — REMOVED ───
@@ -1302,8 +1283,6 @@ a:focus-visible {
   transform: translateY(0);
   opacity: 1;
   pointer-events: auto;
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
 }
 
 @media (prefers-reduced-motion: no-preference) {
@@ -2013,15 +1992,6 @@ body[data-grid-resizing="true"] * {
   border-radius: 4px;
   background: var(--bg);
   color: var(--text);
-  outline: 2px solid transparent;
-  outline-offset: 2px;
-}
-.standup-config-date:focus,
-.standup-config-date:focus-visible,
-.standup-config-time:focus,
-.standup-config-time:focus-visible {
-  outline-color: var(--accent);
-  border-color: var(--border-muted);
 }
 .standup-config-date {
   width: 120px;
@@ -2536,6 +2506,15 @@ body[data-grid-resizing="true"] * {
   gap: var(--space-1);
 }
 
+/* Focus shares this cluster with the panel toggles. A second toolbar group
+   between them costs an extra parent gap and clips the seven-tab section strip
+   when a timer, sync indicator and long profile are all showing. */
+.hub-panels {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
 .hub-preferences {
   padding-left: var(--space-3);
   border-left: 1px solid var(--border-muted);
@@ -2588,11 +2567,6 @@ body[data-grid-resizing="true"] * {
 .hub-topbar .focus-pill:hover {
   background: var(--bg-elevated);
   border-color: var(--border-muted);
-}
-
-.hub-topbar .focus-pill:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
 }
 
 .hub-topbar .hub-profile-trigger {
@@ -2713,22 +2687,15 @@ body[data-grid-resizing="true"] * {
   color: var(--text-muted);
   font-size: 12px;
   cursor: pointer;
-  outline: 2px solid transparent;
-  outline-offset: 2px;
   transition:
     border-color var(--dur-fast) var(--ease-swift),
     background var(--dur-fast) var(--ease-swift),
-    color var(--dur-fast) var(--ease-swift),
-    outline-color var(--dur-quick) var(--ease-swift);
+    color var(--dur-fast) var(--ease-swift);
 }
-.hub-search:hover,
-.hub-search:focus-visible {
+.hub-search:hover {
   border-color: color-mix(in oklab, var(--accent) 35%, var(--border));
   background: var(--bg-overlay);
   color: var(--text-muted);
-}
-.hub-search:focus-visible {
-  outline-color: var(--accent);
 }
 .hub-search-label {
   flex: 1;
@@ -2761,21 +2728,15 @@ body[data-grid-resizing="true"] * {
   background: transparent;
   color: var(--text-subtle);
   cursor: pointer;
-  outline: 2px solid transparent;
-  outline-offset: 2px;
   transition:
     background var(--dur-fast) var(--ease-swift),
     color var(--dur-fast) var(--ease-swift),
-    border-color var(--dur-fast) var(--ease-swift),
-    outline-color var(--dur-quick) var(--ease-swift);
+    border-color var(--dur-fast) var(--ease-swift);
 }
 .hub-icon-btn:hover {
   background: var(--bg-elevated);
   border-color: var(--border-muted);
   color: var(--text);
-}
-.hub-icon-btn:focus-visible {
-  outline-color: var(--accent);
 }
 
 .file-stats-bar {
@@ -2853,10 +2814,6 @@ body[data-grid-resizing="true"] * {
   background: var(--bg-elevated);
   color: var(--text);
   box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--accent) 20%, transparent);
-}
-.accent-picker-mode:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
 }
 
 /* Brand dot — sidebar/topbar logo. Background follows the live accent. */
@@ -3009,11 +2966,6 @@ body[data-grid-resizing="true"] * {
     color: var(--text);
   }
 }
-.nav-item:focus-visible,
-.nav-item-collapsed:focus-visible {
-  outline: 2px solid color-mix(in oklab, var(--accent) 80%, transparent);
-  outline-offset: 2px;
-}
 
 /* Sidebar / files-panel collapse toggles — same quiet bg hover */
 .sidebar-collapse-btn {
@@ -3035,10 +2987,6 @@ body[data-grid-resizing="true"] * {
     background: var(--bg-overlay);
     color: var(--text);
   }
-}
-.sidebar-collapse-btn:focus-visible {
-  outline: 2px solid color-mix(in oklab, var(--accent) 80%, transparent);
-  outline-offset: 2px;
 }
 
 /* Conflict path list — selected vs hover without inline bg killing :hover */
@@ -3065,10 +3013,6 @@ body[data-grid-resizing="true"] * {
     background: var(--bg-overlay);
     color: var(--text);
   }
-}
-.conflict-path-row:focus-visible {
-  outline: 2px solid color-mix(in oklab, var(--accent) 80%, transparent);
-  outline-offset: -2px;
 }
 
 /* TaskList add row — responsive */
@@ -3438,12 +3382,7 @@ body[data-motion="off"] .task-timer-dot {
   transform: scaleX(0);
 }
 
-/* ─── Global focus & press feedback ───────────────────────── */
-:focus-visible {
-  outline: 2px solid color-mix(in oklab, var(--accent) 80%, transparent);
-  outline-offset: 2px;
-  border-radius: var(--radius-sm);
-}
+/* ─── Press feedback (focus ring lives with the a11y block above) ─── */
 button:not(:disabled):active,
 a[role="button"]:not(.disabled):active {
   filter: brightness(0.96);
@@ -3654,10 +3593,6 @@ body[data-density="compact"] .card {
 .hub-section-tab:hover {
   color: var(--text);
 }
-.hub-topbar .hub-section-tabs .hub-section-tab:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: -2px;
-}
 .hub-section-tab[data-active] {
   background: var(--bg-elevated);
   color: var(--text);
@@ -3684,17 +3619,11 @@ body[data-density="compact"] .card {
   color: var(--text);
   font-size: 12px;
   cursor: pointer;
-  outline: 2px solid transparent;
-  outline-offset: 2px;
   transition:
-    background var(--dur-fast) var(--ease-swift),
-    outline-color var(--dur-quick) var(--ease-swift);
+    background var(--dur-fast) var(--ease-swift);
 }
 .hub-section-menu-trigger:hover {
   background: var(--bg-elevated);
-}
-.hub-section-menu-trigger:focus-visible {
-  outline-color: var(--accent);
 }
 .hub-section-menu-label {
   overflow: hidden;
@@ -3732,15 +3661,12 @@ body[data-density="compact"] .card {
   color: var(--text-muted);
   font-size: 12px;
   text-decoration: none;
-  outline: 2px solid transparent;
-  outline-offset: -2px;
 }
 .hub-section-menu-item:hover {
   background: var(--bg-overlay);
   color: var(--text);
 }
 .hub-section-menu-item:focus-visible {
-  outline-color: var(--accent);
   color: var(--text);
 }
 .hub-section-menu-item[aria-current="page"] {
@@ -3750,15 +3676,8 @@ body[data-density="compact"] .card {
 
 /* Container widths exclude the sidebar and 40px header padding.
    Navigation earns space before secondary labels: five tabs at 840px, longer
-   sections at 1040px. Tools stays in the same place on every desktop width. */
-.hub-topbar .hub-more-menu > .hub-icon-btn {
-  display: inline-flex;
-  width: auto;
-  gap: 6px;
-  padding-inline: 8px;
-  font-size: 12px;
-  border-color: var(--border-muted);
-}
+   sections at 1040px. The panels trigger is a normal icon button, same weight
+   as the toggles it stands in for. */
 
 @container hub-topbar (max-width: 1159px) {
   .hub-topbar-actions {
@@ -3824,6 +3743,28 @@ body[data-density="compact"] .card {
   .hub-topbar .hub-section-menu {
     display: none;
   }
+}
+
+/* Panel toggles: inline buttons while the bar has room, folded into the
+   Panels button when it does not. Same container as the tiers above, so the
+   sidebar state is accounted for. One of the two is `display: none`, which also
+   drops it from the tab order. The 1350px floor leaves room for the widest
+   strip (seven System tabs) beside a running timer and a pending-changes pair. */
+.hub-topbar .hub-panel-actions {
+  display: none;
+}
+@container hub-topbar (min-width: 1350px) {
+  .hub-topbar .hub-panel-actions {
+    display: contents;
+  }
+  .hub-topbar .hub-panels-menu {
+    display: none;
+  }
+}
+/* Empty placeholder from RepoGitWorkspace (its panels are portalled). As a
+   flex item it still took a gap, which read as a hole before Focus. */
+.hub-topbar-actions > .repo-git-workspace {
+  display: contents;
 }
 
 /* ── Count tick: number rolls up when it changes ── */
@@ -5520,12 +5461,10 @@ html[data-logo="plugin"] .boot-logo-devhub {
   color: var(--text-muted);
   font-size: 11px;
   padding: 2px 6px;
-  outline: none;
   cursor: pointer;
   transition: border-color var(--dur-fast) var(--ease-swift);
 }
-.terminal-mode-select:hover,
-.terminal-mode-select:focus-visible {
+.terminal-mode-select:hover {
   border-color: color-mix(in oklab, var(--accent) 35%, var(--border));
 }
 .terminal-host {
@@ -6135,8 +6074,6 @@ body[data-motion="off"] .terminal-agent-strip-pulse {
   color: var(--danger, #c44);
 }
 .context-menu-item:focus-visible {
-  outline: 2px solid color-mix(in oklab, var(--accent) 80%, transparent);
-  outline-offset: -2px;
   color: var(--text);
 }
 .context-menu-icon {
@@ -6208,8 +6145,6 @@ body[data-motion="off"] .context-menu:not([hidden]) {
   color: var(--text);
 }
 .links-modal-item:focus-visible {
-  outline: 2px solid color-mix(in oklab, var(--accent) 80%, transparent);
-  outline-offset: -2px;
   color: var(--text);
 }
 .links-modal-item-icon,
@@ -6334,10 +6269,6 @@ body[data-motion="off"] .context-menu:not([hidden]) {
   color: var(--text-muted);
   cursor: pointer;
 }
-.links-modal-remove:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: -2px;
-}
 .links-modal-remove:hover {
   background: var(--bg-overlay);
   color: var(--danger);
@@ -6380,10 +6311,6 @@ body[data-motion="off"] .context-menu:not([hidden]) {
   opacity: 0.35;
   cursor: default;
 }
-.links-modal-add-submit:focus-visible {
-  outline: 2px solid color-mix(in oklab, var(--accent) 80%, transparent);
-  outline-offset: 1px;
-}
 /* Secondary action — same height/radius/border as search-field--boxed. */
 .links-modal-add-link {
   display: flex;
@@ -6409,10 +6336,6 @@ body[data-motion="off"] .context-menu:not([hidden]) {
   color: var(--text);
   border-color: color-mix(in oklab, var(--border) 70%, var(--text-muted));
   background: var(--bg-overlay);
-}
-.links-modal-add-link:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
 }
 
 /* Row that owns an open context menu — board-wide via bindRow host attr */
@@ -6608,6 +6531,11 @@ button.task-agent-chip {
     0 18px 42px rgba(0, 0, 0, 0.58),
     0 0 0 1px color-mix(in oklab, var(--bg-overlay) 55%, transparent);
 }
+/* Holds focus after a pointer open, so arrow keys still work; the popover
+   itself is not a control and takes no ring. */
+.launch-menu:focus-visible {
+  outline: none;
+}
 .launch-menu:not(:popover-open)[hidden] {
   display: none;
 }
@@ -6637,8 +6565,6 @@ button.task-agent-chip {
   color: var(--danger, #c44);
 }
 .launch-menu-item:focus-visible {
-  outline: 2px solid color-mix(in oklab, var(--accent) 80%, transparent);
-  outline-offset: -2px;
   color: var(--text);
 }
 .launch-menu-item:focus-visible:not(:hover) {
@@ -6647,9 +6573,6 @@ button.task-agent-chip {
     var(--bg-elevated) 82%,
     var(--bg-surface) 18%
   );
-}
-.launch-menu-item:hover {
-  outline: none;
 }
 .launch-menu-icon {
   display: inline-flex;
@@ -7538,10 +7461,6 @@ body[data-motion="off"] .evolution-arrow {
   color: var(--text);
   background: var(--bg-elevated);
 }
-.repo-git-tab:focus-visible {
-  outline: 2px solid color-mix(in oklab, var(--accent) 55%, transparent);
-  outline-offset: 1px;
-}
 .repo-git-close {
   padding: 4px 6px;
   color: var(--text-subtle);
@@ -7819,7 +7738,6 @@ body[data-motion="off"] .evolution-arrow {
     background 150ms var(--ease-swift);
 }
 .repo-git-filter-search:focus-within {
-  border-color: color-mix(in oklab, var(--accent) 45%, var(--border));
   background: var(--bg-surface);
 }
 .repo-git-filter-select,
@@ -7839,9 +7757,6 @@ body[data-motion="off"] .evolution-arrow {
   background: transparent;
   padding-left: 0;
   box-shadow: none;
-}
-.repo-git-filter-input:focus {
-  outline: none;
 }
 .repo-git-filter-meta {
   display: flex;
@@ -7948,12 +7863,6 @@ body[data-motion="off"] .evolution-arrow {
   font-size: 11px;
   text-align: left;
   cursor: pointer;
-}
-.repo-git-file-main:focus-visible,
-.repo-git-stash-main:focus-visible,
-.repo-git-branch-main:focus-visible {
-  outline: 2px solid color-mix(in oklab, var(--accent) 55%, transparent);
-  outline-offset: -2px;
 }
 .repo-git-file-status {
   font-family: var(--font-mono, ui-monospace, monospace);
@@ -8348,8 +8257,6 @@ body[data-motion="off"] .evolution-arrow {
   opacity: 0.45;
 }
 .repo-git-diff-ai-pop-item:focus-visible {
-  outline: 2px solid color-mix(in oklab, var(--accent) 80%, transparent);
-  outline-offset: -2px;
   color: var(--text);
 }
 /* Staging is what the menu is usually opened for — the accent icon lets the
@@ -8742,12 +8649,6 @@ body[data-motion="off"] .evolution-arrow {
   font-size: 11px;
   color: var(--text);
 }
-.repo-git-branch-filter input:focus {
-  outline: none;
-}
-.repo-git-branch-filter:focus-within {
-  border-color: color-mix(in oklab, var(--accent) 55%, var(--border));
-}
 /* Family header inside a branch list — `feature/`, `PTF-`, and so on. Sticky so
    the group you are scrolled into stays named. */
 .repo-git-branch-group {
@@ -8868,10 +8769,6 @@ body[data-motion="off"] .evolution-arrow {
 body[data-repo-git-split-dragging] .repo-git-split-handle::after {
   background: var(--accent);
   inset: 4px 1px;
-}
-.repo-git-split-handle:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: -2px;
 }
 body[data-repo-git-split-dragging] {
   cursor: col-resize !important;
@@ -9570,8 +9467,6 @@ body.col-resizing {
   box-shadow: inset 2px 0 0 color-mix(in oklab, var(--warning) 70%, transparent);
 }
 .repo-git-graph-row:focus-visible {
-  outline: 2px solid color-mix(in oklab, var(--accent) 55%, transparent);
-  outline-offset: -2px;
   z-index: 1;
 }
 .repo-git-graph-kebab {
@@ -9689,10 +9584,6 @@ button.repo-git-avatar-zoom {
   color: inherit;
   font: inherit;
 }
-button.repo-git-avatar-zoom:focus-visible {
-  outline: 2px solid color-mix(in oklab, var(--accent) 70%, transparent);
-  outline-offset: 2px;
-}
 .repo-git-avatar-full {
   display: block;
   width: min(28rem, 100%);
@@ -9797,7 +9688,6 @@ button.repo-git-avatar-zoom:focus-visible {
   width: 100%;
   resize: vertical;
   border: 0;
-  outline: none;
   padding: 10px;
   font-family: var(--font-mono, ui-monospace, monospace);
   font-size: 11px;
@@ -10872,12 +10762,6 @@ button.entity-link-chip:hover {
   background: color-mix(in oklab, var(--chip-tint) 12%, transparent);
 }
 
-a.entity-link-chip:focus-visible,
-button.entity-link-chip:focus-visible {
-  outline: 2px solid color-mix(in oklab, var(--chip-tint) 55%, transparent);
-  outline-offset: 1px;
-}
-
 /* "+3" overflow toggle — a chip that reveals the rest. */
 button.entity-link-chip-more {
   cursor: pointer;
@@ -10924,11 +10808,6 @@ button.entity-link-chip-more {
   color: var(--danger, #c44);
   border-color: color-mix(in oklab, var(--danger, #c44) 35%, transparent);
   background: color-mix(in oklab, var(--danger, #c44) 12%, transparent);
-}
-
-.entity-link-chip-remove:focus-visible {
-  outline: 2px solid color-mix(in oklab, var(--danger, #c44) 55%, transparent);
-  outline-offset: 1px;
 }
 
 .entity-link-chip-remove:disabled {
@@ -10995,11 +10874,6 @@ button.entity-link-chip-more {
   background: var(--bg-elevated);
   color: var(--text);
   box-shadow: inset 0 0 0 1px var(--border);
-}
-
-.entity-link-kind:focus-visible {
-  outline: 2px solid color-mix(in oklab, var(--accent) 55%, transparent);
-  outline-offset: 1px;
 }
 
 .entity-link-hint {
@@ -11155,11 +11029,6 @@ button.entity-link-chip-more {
 
 .entity-link-cal-item[data-active="true"]:not([data-selected="true"]) {
   box-shadow: inset 2px 0 0 color-mix(in oklab, var(--accent) 45%, transparent);
-}
-
-.entity-link-cal-item:focus-visible {
-  outline: 2px solid color-mix(in oklab, var(--accent) 55%, transparent);
-  outline-offset: -2px;
 }
 
 .entity-link-cal-item[data-selected="true"] .entity-link-cal-time {

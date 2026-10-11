@@ -1,8 +1,3 @@
-.terminal-dock-tab:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
-}
-
 .terminal-dock-tab-label {
   max-width: 200px;
 }
@@ -341,7 +336,6 @@ body[data-motion="off"] .terminal-block-chip[data-pending]::after {
   background: transparent;
   color: var(--text);
   font-size: 12px;
-  outline: none;
 }
 
 .terminal-find-btn {

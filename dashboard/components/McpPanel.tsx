@@ -645,7 +645,6 @@ export function McpPanel() {
                         fontSize: "12px",
                         fontFamily: "var(--font-mono)",
                         lineHeight: 1.5,
-                        outline: "none",
                         resize: "vertical",
                         boxSizing: "border-box",
                       }}

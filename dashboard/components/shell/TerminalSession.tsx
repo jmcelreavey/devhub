@@ -1026,7 +1026,7 @@ export function TerminalSession({
       onDrop={onDropImages}
     >
       {findOpen && (
-        <div className="terminal-find-bar" role="search" aria-label="Find in terminal">
+        <div className="terminal-find-bar focus-host" role="search" aria-label="Find in terminal">
           <input
             ref={findInputRef}
             className="terminal-find-input"

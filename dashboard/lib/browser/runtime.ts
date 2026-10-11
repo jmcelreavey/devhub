@@ -4,7 +4,7 @@ import { browserPlatformReason } from "./platform";
 import { createBrowserProxy, type BrowserProxy } from "./network";
 import { BrowserSurface } from "./surface";
 import { createHash, randomUUID } from "node:crypto";
-import { chromium, type Browser, type BrowserContext, type Page } from "playwright-core";
+import type { Browser, BrowserContext, Page } from "playwright-core";
 import { defaultAppDataDir, getAppDataDir, getResourceRoot } from "@/lib/desktop/runtime-paths";
 import { execExternal } from "@/lib/exec-external";
 import { withPluginMutationLock } from "@/lib/plugins/lock";
@@ -25,6 +25,27 @@ export interface ManagedBrowser {
 interface Runtime { session?: ManagedBrowser; starting: boolean }
 const host = globalThis as typeof globalThis & { devhubBrowserRuntime?: Runtime };
 const state = host.devhubBrowserRuntime ??= { starting: false };
+
+/**
+ * Playwright is loaded only when a session starts.
+ *
+ * A static import makes Turbopack evaluate `playwright-core` while loading the
+ * route. That package `require`s `browsers.json` through a computed path, which
+ * the standalone file trace omits. The evaluation throws before the handler —
+ * including for an unauthenticated GET — and Next responds with an empty 500.
+ */
+async function loadPlaywright(): Promise<(endpoint: string) => Promise<Browser>> {
+  try {
+    const { chromium } = await import("playwright-core");
+    return (endpoint) => chromium.connectOverCDP(endpoint, { timeout: 5000 });
+  } catch (error) {
+    console.error("[browser] playwright-core failed to load", error);
+    const detail = error instanceof Error ? error.message : "";
+    throw new Error(detail.includes("browsers.json")
+      ? "Playwright could not load because browsers.json is missing. Reinstall DevHub."
+      : "Playwright could not load. Reinstall DevHub.");
+  }
+}
 export function browserRoot() { return path.join(process.env.DEVHUB_APP_DATA?.trim() ? getAppDataDir() : defaultAppDataDir(), "browser"); }
 export function browserProfile() { return getTaskProfileOverview().active ?? "default"; }
 function profileDir(profile: string) { return path.join(browserRoot(), "profiles", createHash("sha256").update(profile).digest("hex").slice(0, 24)); }
@@ -57,6 +78,7 @@ export function assertBrowserRun(taskId: string, runId: string) {
   if (!listTaskAgentRuns(taskId).some((run) => run.runId === runId && !["failed", "abandoned"].includes(run.status))) throw new Error("Choose a conversation linked to this task.");
 }
 export async function startBrowser(input: unknown) {
+  const connectOverCDP = await loadPlaywright();
   const config = StartBrowserSchema.parse(input);
   const profile = browserProfile();
   const checkOwner = () => {
@@ -123,7 +145,7 @@ export async function startBrowser(input: unknown) {
           await new Promise((finish) => setTimeout(finish, 100));
         }
         if (!port) throw new Error("Chrome did not become ready.");
-        const browser = await chromium.connectOverCDP("http://127.0.0.1:" + port, { timeout: 5000 });
+        const browser = await connectOverCDP("http://127.0.0.1:" + port);
         const context = browser.contexts()[0];
         const page = context.pages()[0] ?? await context.newPage();
         for (const other of context.pages()) if (other !== page) await other.close();

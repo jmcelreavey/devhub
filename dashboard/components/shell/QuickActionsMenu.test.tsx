@@ -33,6 +33,42 @@ describe("QuickActionsMenu", () => {
     expect(document.activeElement).toBe(items[0]);
   });
 
+  it("opens by pointer with no item focused, so no item can show a ring", () => {
+    render(<QuickActionsMenu actions={ACTIONS} label="More tools" />);
+    // A real mouse click reports detail >= 1; Enter/Space and script clicks report 0.
+    fireEvent.click(screen.getByRole("button", { name: "More tools" }), { detail: 1 });
+    const menu = screen.getByRole("menu");
+    expect(document.activeElement).toBe(menu);
+    expect(screen.getAllByRole("menuitem")).not.toContain(document.activeElement);
+  });
+
+  it("still reaches the items with the arrow keys after a pointer open", () => {
+    render(<QuickActionsMenu actions={ACTIONS} label="More tools" />);
+    fireEvent.click(screen.getByRole("button", { name: "More tools" }), { detail: 1 });
+    const menu = screen.getByRole("menu");
+    const items = screen.getAllByRole("menuitem");
+    fireEvent.keyDown(menu, { key: "ArrowDown" });
+    expect(document.activeElement).toBe(items[0]);
+    // Back to the container-focused state, then ArrowUp lands on the last item.
+    (menu as HTMLElement).focus();
+    fireEvent.keyDown(menu, { key: "ArrowUp" });
+    expect(document.activeElement).toBe(items[2]);
+  });
+
+  it("closes on Escape after a pointer open and hands focus back", () => {
+    render(<QuickActionsMenu actions={ACTIONS} label="More tools" />);
+    fireEvent.click(screen.getByRole("button", { name: "More tools" }), { detail: 1 });
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "More tools" }));
+  });
+
+  it("opens from the keyboard (Enter/Space click) with the first item focused", () => {
+    render(<QuickActionsMenu actions={ACTIONS} label="More tools" />);
+    fireEvent.click(screen.getByRole("button", { name: "More tools" }), { detail: 0 });
+    expect(document.activeElement).toBe(screen.getAllByRole("menuitem")[0]);
+  });
+
   it("fires the panel's window event and closes", () => {
     const onToggle = vi.fn();
     window.addEventListener("devhub:tasks-toggle", onToggle);

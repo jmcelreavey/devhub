@@ -13,6 +13,15 @@ import {
 import { createPortal } from "react-dom";
 import { MoreHorizontal } from "lucide-react";
 
+/** WebKit ignores :focus-visible on element.focus() unless focusVisible is set. */
+function moveFocus(el: HTMLElement | null | undefined, visible = false) {
+  const options: FocusOptions & { focusVisible?: boolean } = {
+    preventScroll: true,
+    focusVisible: visible,
+  };
+  el?.focus(options);
+}
+
 export interface QuickMenuAction {
   id: string;
   label: string;
@@ -35,12 +44,15 @@ export function QuickActionsMenu({
   label = "Quick actions",
   className,
   triggerLabel,
+  icon,
 }: {
   actions: QuickMenuAction[];
   label?: string;
   /** Lets a top bar hide the whole menu at widths where the items fit inline. */
   className?: string;
   triggerLabel?: string;
+  /** Replaces the ellipsis. The mobile bar keeps the default overflow glyph. */
+  icon?: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
   const [menuStyle, setMenuStyle] = useState<CSSProperties | undefined>();
@@ -49,6 +61,10 @@ export function QuickActionsMenu({
   const menuRef = useRef<HTMLDivElement>(null);
   const menuId = useId();
   const focusLast = useRef(false);
+  // A pointer open focuses the menu itself, not an item: a focused item reads
+  // as keyboard focus in WebKit (the trigger never took focus on click), which
+  // is what drew a ring on "Notes" the moment the menu opened.
+  const openedByPointer = useRef(false);
 
   function updateMenuPosition() {
     const rect = rootRef.current?.getBoundingClientRect();
@@ -56,15 +72,17 @@ export function QuickActionsMenu({
     setMenuStyle({ top: rect.bottom + 6, right: Math.max(8, window.innerWidth - rect.right) });
   }
 
-  function close(restoreFocus: boolean) {
+  function close(restoreFocus: boolean, focusVisible = false) {
     setOpen(false);
-    if (restoreFocus) triggerRef.current?.focus();
+    if (!restoreFocus) return;
+    moveFocus(triggerRef.current, focusVisible);
   }
 
   useEffect(() => {
     if (!open) return;
     const items = menuRef.current?.querySelectorAll<HTMLElement>('[role="menuitem"]');
-    (focusLast.current ? items?.[items.length - 1] : items?.[0])?.focus();
+    if (openedByPointer.current) moveFocus(menuRef.current);
+    else moveFocus(focusLast.current ? items?.[items.length - 1] : items?.[0], true);
     const onDown = (event: MouseEvent) => {
       const target = event.target as Node;
       if (rootRef.current?.contains(target)) return;
@@ -74,7 +92,7 @@ export function QuickActionsMenu({
     const onKey = (event: globalThis.KeyboardEvent) => {
       if (event.key !== "Escape") return;
       setOpen(false);
-      triggerRef.current?.focus();
+      moveFocus(triggerRef.current, true);
     };
     document.addEventListener("mousedown", onDown);
     document.addEventListener("keydown", onKey);
@@ -100,16 +118,20 @@ export function QuickActionsMenu({
   function onMenuKeyDown(event: KeyboardEvent<HTMLDivElement>) {
     if (event.key === "Tab") {
       // Let native Tab continue from the trigger, not the body portal.
-      close(true);
+      close(true, true);
       return;
     }
     const items = [...(menuRef.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? [])];
     const index = items.indexOf(document.activeElement as HTMLElement);
+    // index is -1 while the menu itself holds focus (pointer open): ArrowDown
+    // lands on the first item and ArrowUp on the last.
     const next =
       event.key === "ArrowDown"
         ? (index + 1) % items.length
         : event.key === "ArrowUp"
-          ? (index - 1 + items.length) % items.length
+          ? index < 0
+            ? items.length - 1
+            : (index - 1 + items.length) % items.length
           : event.key === "Home"
             ? 0
             : event.key === "End"
@@ -117,7 +139,7 @@ export function QuickActionsMenu({
               : -1;
     if (next < 0) return;
     event.preventDefault();
-    items[next]?.focus();
+    moveFocus(items[next], true);
   }
 
   return (
@@ -130,11 +152,14 @@ export function QuickActionsMenu({
           if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
           event.preventDefault();
           focusLast.current = event.key === "ArrowUp";
+          openedByPointer.current = false;
           updateMenuPosition();
           setOpen(true);
         }}
-        onClick={() => {
+        onClick={(event) => {
           focusLast.current = false;
+          // detail is 0 for Enter/Space (and script clicks), the click count for a pointer.
+          openedByPointer.current = event.detail > 0;
           updateMenuPosition();
           setOpen((value) => !value);
         }}
@@ -144,7 +169,7 @@ export function QuickActionsMenu({
         aria-label={label}
         title={label}
       >
-        <MoreHorizontal size={16} aria-hidden />
+        {icon ?? <MoreHorizontal size={16} aria-hidden />}
         {triggerLabel && <span>{triggerLabel}</span>}
       </button>
       {open &&
@@ -155,6 +180,7 @@ export function QuickActionsMenu({
             id={menuId}
             className="launch-menu"
             role="menu"
+            tabIndex={-1}
             aria-label={label}
             style={menuStyle}
             onKeyDown={onMenuKeyDown}
@@ -198,8 +224,8 @@ export function QuickActionsMenu({
                   className="launch-menu-item"
                   role="menuitem"
                   tabIndex={-1}
-                  onClick={() => {
-                    close(true);
+                  onClick={(event) => {
+                    close(true, event.detail === 0);
                     if (action.event) window.dispatchEvent(new CustomEvent(action.event));
                   }}
                 >

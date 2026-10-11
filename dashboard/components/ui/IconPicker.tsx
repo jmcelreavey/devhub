@@ -737,7 +737,6 @@ export function IconPicker({
                   padding: "6px 10px",
                   color: "var(--text)",
                   fontSize: "13px",
-                  outline: "none",
                   boxSizing: "border-box",
                 }}
               />

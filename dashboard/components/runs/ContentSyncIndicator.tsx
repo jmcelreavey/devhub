@@ -390,8 +390,13 @@ export function ContentSyncIndicator() {
       }
     : { color: "var(--accent-text, var(--accent))" };
 
+  // The group only exists while it has a button: a bordered, padded shell with
+  // nothing in it still takes a flex slot and a gap in the top bar.
+  const showCluster = showContentAction || gitActionPending;
+
   return (
     <>
+      {showCluster && (
       <span
         role="group"
         className="hub-cluster"
@@ -457,6 +462,7 @@ export function ContentSyncIndicator() {
           </HoverTip>
         )}
       </span>
+      )}
 
       {canOpenWorkspace && (
         <>

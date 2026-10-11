@@ -325,6 +325,90 @@ function stageServer() {
 }
 
 /**
+ * Files the standalone tracer drops because they are loaded through a computed path.
+ *
+ * playwright-core evaluates `require(path.join(packageRoot, "browsers.json"))` as
+ * soon as the module loads. The trace never sees that call. Turbopack then fails
+ * the browser route while the module is still loading — before auth — and Next
+ * answers with an empty 500.
+ */
+const UNTRACED_RUNTIME_FILES = {
+  "playwright-core": ["browsers.json"],
+};
+
+/** Turbopack external slots are `<name>-<16 hex>` (scoped packages sit under `@scope/`). */
+export function externalPackageName(entryName) {
+  return /^(.+)-[a-f0-9]{16}$/.exec(entryName)?.[1] ?? null;
+}
+
+export function installedPackageDir(pkg, roots) {
+  for (const root of roots) {
+    const dir = path.join(root, "node_modules", ...pkg.split("/"));
+    if (fs.existsSync(path.join(dir, "package.json"))) return dir;
+  }
+  return null;
+}
+
+export function externalRuntimeDestinations(serverRoot) {
+  const found = [];
+  const traced = path.join(serverRoot, "node_modules", "playwright-core");
+  if (fs.existsSync(path.join(traced, "package.json")) || fs.existsSync(path.join(traced, "index.js"))) found.push(traced);
+  const walk = (dir) => {
+    let entries;
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory() && entry.name.startsWith("@") && !externalPackageName(entry.name)) {
+        walk(full);
+        continue;
+      }
+      if (externalPackageName(entry.name) === "playwright-core") found.push(full);
+    }
+  };
+  walk(path.join(serverRoot, ".next", "node_modules"));
+  return found;
+}
+
+export function playwrightRuntimeAudit(serverRoot) {
+  const slots = externalRuntimeDestinations(serverRoot);
+  const missing = [];
+  for (const dir of slots) {
+    for (const rel of UNTRACED_RUNTIME_FILES["playwright-core"]) {
+      if (!fs.existsSync(path.join(dir, rel))) missing.push(path.relative(serverRoot, path.join(dir, rel)));
+    }
+  }
+  return { slots: slots.length, missing };
+}
+
+export function ensureExternalRuntimeFiles(serverRoot, options = {}) {
+  const packageRoots = options.packageRoots ?? [dashboardDir, repoRoot];
+  const destinations = externalRuntimeDestinations(serverRoot);
+  const copied = [];
+  if (destinations.length === 0) return copied;
+  const installed = installedPackageDir("playwright-core", packageRoots);
+  if (!installed) {
+    throw new Error(
+      "playwright-core is staged but not installed. The browser route would return an empty 500 without browsers.json.",
+    );
+  }
+  for (const dest of destinations) {
+    for (const rel of UNTRACED_RUNTIME_FILES["playwright-core"]) {
+      const from = path.join(installed, rel);
+      const to = path.join(dest, rel);
+      if (!fs.existsSync(from)) throw new Error(`Installed playwright-core is missing ${rel}.`);
+      if (fs.existsSync(to)) continue;
+      fs.copyFileSync(from, to);
+      copied.push(path.relative(serverRoot, to));
+    }
+  }
+  return copied;
+}
+
+/**
  * Replace Next's external-package symlinks with real directories.
  *
  * Turbopack emits one `.next/node_modules/<pkg>-<hash>` symlink per
@@ -379,6 +463,8 @@ function materialiseExternalPackages() {
   if (links.length > 0) {
     log(`materialised ${links.length} external package link(s) under .next/node_modules`);
   }
+  const runtimeFiles = ensureExternalRuntimeFiles(serverDir);
+  if (runtimeFiles.length > 0) log(`copied untraced runtime file(s): ${runtimeFiles.join(", ")}`);
 }
 
 /**

@@ -34,6 +34,23 @@ describe("top bar layout contract", () => {
     expect(field).toBeGreaterThanOrEqual(icon);
   });
 
+  it("shows panel toggles inline when the bar has room and folds them into Panels otherwise", () => {
+    // Hidden by default so narrow bars render only the menu.
+    expect(css).toMatch(/\.hub-topbar \.hub-panel-actions \{\s*display: none;/);
+    const query = css.indexOf("@container hub-topbar (min-width: 1350px)");
+    expect(query, "wide tier").toBeGreaterThan(-1);
+    const block = css.slice(query, css.indexOf("\n}\n", query));
+    expect(block).toContain(".hub-topbar .hub-panel-actions");
+    expect(block).toMatch(/\.hub-topbar \.hub-panels-menu \{\s*display: none;/);
+    // The trigger is a square icon button. A resting border and a text label
+    // made the old Tools control look like a stray pill.
+    expect(css).not.toMatch(/\.hub-panels-menu > \.hub-icon-btn[^{]*\{[^}]*border-color/);
+  });
+
+  it("keeps the empty RepoGitWorkspace placeholder from taking a flex gap", () => {
+    expect(css).toMatch(/\.hub-topbar-actions > \.repo-git-workspace \{\s*display: contents;/);
+  });
+
   it("does not wrap the bar onto a second row", () => {
     expect(ruleBody(".hub-topbar")).not.toMatch(/flex-wrap:\s*wrap/);
   });

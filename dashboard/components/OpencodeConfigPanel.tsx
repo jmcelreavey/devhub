@@ -30,7 +30,6 @@ const MODEL_INPUT_STYLE = {
   fontSize: "11px",
   fontFamily: "var(--font-mono)",
   width: "180px",
-  outline: "none",
 } as const;
 
 /**
@@ -362,7 +361,6 @@ export function OpencodeConfigPanel() {
                   fontSize: "12px",
                   fontFamily: "var(--font-mono)",
                   lineHeight: 1.5,
-                  outline: "none",
                   resize: "vertical",
                   boxSizing: "border-box",
                 }}

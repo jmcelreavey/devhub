@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { nextDistDir, normalizeStagedDist, rewriteStandaloneConfig, rewriteStagedJavaScript, assertNoStagedDistReferences, relocateDistPaths } from "./stage-dashboard.mjs";
+import { nextDistDir, normalizeStagedDist, rewriteStandaloneConfig, rewriteStagedJavaScript, assertNoStagedDistReferences, relocateDistPaths, ensureExternalRuntimeFiles, playwrightRuntimeAudit } from "./stage-dashboard.mjs";
 
 const standalone = fs.readFileSync(new URL("./fixtures/standalone-server.js.txt", import.meta.url), "utf8");
 const configOf = (text) => JSON.parse(text.match(/^const nextConfig = (.+)$/m)[1]);
@@ -68,4 +68,60 @@ test("config parsing is structural and rejects unexpected standalone shapes", ()
   assert.throws(() => rewriteStandaloneConfig("const nextConfig = {invalid}", ".next-rebuild"), SyntaxError);
   assert.equal(rewriteStagedJavaScript('const config={distDir:"./.next-rebuild",cache:".next-rebuild/cache"};', ".next-rebuild"), 'const config={distDir:"./.next",cache:".next/cache"};');
   assert.equal(rewriteStagedJavaScript('const unchanged=".next-rebuild-other";', ".next-rebuild"), 'const unchanged=".next-rebuild-other";');
+});
+
+function playwrightFixture(context) {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "devhub-pw-"));
+  context.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const installed = path.join(root, "install", "node_modules", "playwright-core");
+  fs.mkdirSync(installed, { recursive: true });
+  fs.writeFileSync(path.join(installed, "package.json"), "{\"name\":\"playwright-core\"}\n");
+  fs.writeFileSync(path.join(installed, "browsers.json"), "{\"browsers\":[]}\n");
+  const server = path.join(root, "server");
+  const hashed = path.join(server, ".next", "node_modules", "playwright-core-b4e737754babfcfa");
+  fs.mkdirSync(path.join(hashed, "lib"), { recursive: true });
+  fs.writeFileSync(path.join(hashed, "package.json"), "{}\n");
+  const traced = path.join(server, "node_modules", "playwright-core");
+  fs.mkdirSync(path.join(traced, "lib"), { recursive: true });
+  fs.writeFileSync(path.join(traced, "package.json"), "{}\n");
+  return { root, installed, server, hashed, traced };
+}
+
+test("staged playwright-core gets browsers.json the tracer drops", (context) => {
+  const { server, hashed, traced } = playwrightFixture(context);
+  const copied = ensureExternalRuntimeFiles(server, { packageRoots: [path.join(server, "..", "install")] });
+  assert.equal(fs.readFileSync(path.join(hashed, "browsers.json"), "utf8"), "{\"browsers\":[]}\n");
+  assert.equal(fs.readFileSync(path.join(traced, "browsers.json"), "utf8"), "{\"browsers\":[]}\n");
+  assert.equal(copied.length, 2);
+  assert.deepEqual(playwrightRuntimeAudit(server), { slots: 2, missing: [] });
+  assert.deepEqual(ensureExternalRuntimeFiles(server, { packageRoots: [path.join(server, "..", "install")] }), []);
+});
+
+test("a hashed symlink into the traced package receives browsers.json", (context) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "devhub-pw-link-"));
+  context.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const install = path.join(root, "install");
+  const installed = path.join(install, "node_modules", "playwright-core");
+  fs.mkdirSync(installed, { recursive: true });
+  fs.writeFileSync(path.join(installed, "package.json"), "{\"name\":\"playwright-core\"}\n");
+  fs.writeFileSync(path.join(installed, "browsers.json"), "{\"browsers\":[]}\n");
+  const server = path.join(root, "server");
+  const traced = path.join(server, "node_modules", "playwright-core");
+  fs.mkdirSync(traced, { recursive: true });
+  fs.writeFileSync(path.join(traced, "index.js"), "module.exports = {};\n");
+  const hashed = path.join(server, ".next", "node_modules", "playwright-core-b4e737754babfcfa");
+  fs.mkdirSync(path.dirname(hashed), { recursive: true });
+  fs.symlinkSync(traced, hashed);
+  ensureExternalRuntimeFiles(server, { packageRoots: [install] });
+  assert.equal(fs.readFileSync(path.join(hashed, "browsers.json"), "utf8"), "{\"browsers\":[]}\n");
+  assert.deepEqual(playwrightRuntimeAudit(server).missing, []);
+});
+
+test("staging fails when the installed package has no browsers.json", (context) => {
+  const { server, installed } = playwrightFixture(context);
+  fs.rmSync(path.join(installed, "browsers.json"));
+  assert.throws(
+    () => ensureExternalRuntimeFiles(server, { packageRoots: [path.join(server, "..", "install")] }),
+    /missing browsers\.json/,
+  );
 });

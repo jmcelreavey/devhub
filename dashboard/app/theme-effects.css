@@ -56,7 +56,6 @@
 :root[data-theme-preset="tokyo"] .theme-effects-preview { border-radius: 8px 20px 8px 20px; }
 :root[data-theme-preset="catppuccin"] .theme-effects-preview { border-radius: 20px; }
 :root[data-theme-fx-master]:not([data-theme-preset="graphite"]) :is(.input, .search-field, .btn-ghost) { border-color: var(--control-border); }
-:root[data-theme-fx-master] :focus-visible { outline: 2px solid var(--accent-text, var(--accent)); outline-offset: 3px; }
 :root[data-theme-fx-master] :is(input, textarea, [contenteditable="true"]) { caret-color: var(--accent-text, var(--accent)); }
 :root[data-theme-fx-master] ::selection { background: var(--accent); color: var(--accent-fg); }
 .theme-cursor-follower { display: none; position: fixed; left: 0; top: 0; width: 22px; height: 22px; border: 1px solid var(--accent-text, var(--accent)); border-radius: 50%; pointer-events: none; z-index: 10050; contain: layout style; }

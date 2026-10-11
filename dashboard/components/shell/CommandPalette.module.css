@@ -60,7 +60,6 @@
 }
 .scopes button:hover { background: var(--bg-elevated); color: var(--text); }
 .scopes button[aria-pressed="true"] { color: var(--accent-text, var(--accent)); background: var(--accent-dim); font-weight: 600; }
-.panel button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .results { overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; flex: 1; min-height: 120px; padding: 8px; }
 .section { padding: 12px 12px 6px; color: var(--text-subtle); font-size: 11px; font-weight: 600; }
 .row {

@@ -18,7 +18,6 @@
 .tabs button { min-height: 44px; padding: 10px 2px; font-size: 14px; color: var(--text-subtle); border-bottom: 2px solid transparent; cursor: pointer; }
 .tabs button[aria-selected="true"] { color: var(--text); border-color: var(--accent); font-weight: 600; }
 .tabs button:hover { color: var(--text); }
-.tabs button:focus-visible, .issues button:focus-visible, .panel:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .panel { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
 .sectionHint { font-size: 13px; line-height: 1.5; color: var(--text-subtle); margin-bottom: 4px; }
 @media (max-width: 640px) {

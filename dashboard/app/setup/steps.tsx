@@ -674,15 +674,8 @@ export function PathField({
             background: "var(--bg-elevated)",
             color: "var(--text)",
             fontSize: "13px",
-            outline: "none",
             boxSizing: "border-box",
             fontFamily: "monospace",
-          }}
-          onFocus={(e) => {
-            if (status !== "err") e.currentTarget.style.borderColor = "var(--accent)";
-          }}
-          onBlur={(e) => {
-            e.currentTarget.style.borderColor = status === "err" ? "var(--danger)" : "var(--border)";
           }}
         />
         {onBrowse && (

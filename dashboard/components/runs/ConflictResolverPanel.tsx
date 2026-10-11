@@ -120,7 +120,7 @@ export function ConflictResolverPanel() {
                 onChange={(e) => setEditedDraft(e.target.value)}
                 spellCheck={false}
                 className="flex-1 w-full resize-none font-mono text-xs p-4"
-                style={{ minHeight: 260, background: "var(--bg)", color: "var(--text)", border: "none", outline: "none" }}
+                style={{ minHeight: 260, background: "var(--bg)", color: "var(--text)", border: "none" }}
               />
               <div className="flex justify-end gap-2 px-4 py-3" style={{ borderTop: "1px solid var(--border)" }}>
                 <button type="button" className="btn btn-primary" disabled={saving || !draft.trim()} onClick={() => void saveSelected()}>

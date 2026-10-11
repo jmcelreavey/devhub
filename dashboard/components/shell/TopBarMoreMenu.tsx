@@ -1,19 +1,20 @@
 "use client";
 
-import { FolderOpen, ListTodo, PenTool, Settings } from "lucide-react";
+import { FolderOpen, ListTodo, PanelsTopLeft, PenTool } from "lucide-react";
 import { useShortcutLabel } from "@/lib/hooks/use-modifier-key";
 import { QuickActionsMenu } from "@/components/shell/QuickActionsMenu";
 
 /**
- * Stable home for panel toggles and Setup at every desktop width.
+ * The three workspace panels, folded into one button when the top bar runs
+ * out of room. Setup is not here — it lives with appearance and profile.
  */
 export function TopBarMoreMenu() {
   const label = useShortcutLabel();
   return (
     <QuickActionsMenu
-      label="More tools"
-      triggerLabel="Tools"
-      className="hub-more-menu"
+      label="Panels"
+      className="hub-panels-menu"
+      icon={<PanelsTopLeft size={14} aria-hidden />}
       actions={[
         {
           id: "notes",
@@ -36,7 +37,6 @@ export function TopBarMoreMenu() {
           event: "devhub:diagrams-toggle",
           shortcut: label("D", true),
         },
-        { id: "setup", label: "Setup & integrations", icon: <Settings size={14} />, href: "/setup" },
       ]}
     />
   );

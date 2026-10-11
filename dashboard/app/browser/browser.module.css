@@ -22,7 +22,6 @@
 .preview { margin-top: 20px; }
 .preview p { font-size: .8rem; color: var(--text-subtle); }
 .frame { position: relative; display: block; width: 100%; aspect-ratio: 16 / 10; min-height: 240px; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; padding: 0; cursor: pointer; background: var(--bg-surface); overscroll-behavior: contain; }
-.frame:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .frame img { width: 100%; height: 100%; object-fit: contain; display: block; user-select: none; }
 .streamHeader { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
 .takeover { position: absolute; inset-inline: 0; bottom: 0; padding: 14px; text-align: center; color: var(--text); background: var(--bg-elevated); border-top: 1px solid var(--border); }

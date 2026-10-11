@@ -65,7 +65,11 @@ export function LaunchMenu({
       const nodes = itemNodes();
       if (nodes.length === 0) return;
       const wrapped = ((index % nodes.length) + nodes.length) % nodes.length;
-      nodes[wrapped]?.focus();
+      const options: FocusOptions & { focusVisible?: boolean } = {
+        preventScroll: true,
+        focusVisible: true,
+      };
+      nodes[wrapped]?.focus(options);
     },
     [itemNodes],
   );

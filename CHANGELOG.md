@@ -2,12 +2,17 @@
 
 User-visible changes, newest first. Versioned sections describe the public releases; Unreleased, when present, is work that has not shipped yet.
 
-## Unreleased
+## 2.1.1 - 2026-10-11
+
+### Fixed
+
+- The packaged Browser page no longer dies on load with a 500. `playwright-core`'s `browsers.json` is staged with the app, and Playwright loads only when a session starts, so a failure returns JSON instead of an empty error.
+- Header focus and layout. Pointer-opened menus no longer focus the first item and draw a thick ring straight away; keyboard focus uses one inset ring on the outer control. Tools stay inline when the bar has room, and an empty sync slot no longer leaves a gap.
 
 ### Changed
 
-- Fit the top bar to laptop widths. It now follows its own width rather than the window's: section tabs fold into a dropdown, search and Focus shrink to icons, Profiles to an initial, and the Notes/Tasks/Diagrams buttons plus Setup move into a More menu. Recent pages return on wide screens. Nothing overlaps or clips from 900px up in Graphite Neon (Default) or Hollow (Halloween), and every control keeps a label, tooltip and a 32–36px target.
-- Keep laptop navigation discoverable: give section tabs priority over secondary labels, retain labelled search and a stable Tools menu, remove recent-page breadcrumbs, and keep keyboard navigation and focus reliable as the bar resizes.
+- Fit the top bar to laptop widths. It now follows its own width rather than the window's: section tabs fold into a dropdown, search and Focus shrink to icons, Profiles to an initial, and Notes, tasks and diagrams fold into a Panels button. Setup sits with appearance and profile, not in that menu. Nothing overlaps or clips from 900px up in Graphite Neon (Default) or Hollow (Halloween), and every control keeps a label, tooltip and a 32–36px target.
+- The header reads as section, search, focus, panels, then preferences. The Panels button is an icon of the same weight as its neighbours, and it only appears when notes, tasks and diagrams no longer fit inline.
 
 ## 2.1.0 - 2026-10-11
 

@@ -174,7 +174,7 @@ export function VaultFilesSidebar({
             </div>
             <div className="px-2 pb-2">
               <div
-                className="flex items-center gap-1.5 px-2 py-1 rounded"
+                className="focus-host flex items-center gap-1.5 px-2 py-1 rounded"
                 style={{ background: "var(--bg-elevated)" }}
               >
                 <Search size={11} style={{ color: "var(--text-subtle)", flexShrink: 0 }} />

@@ -21,6 +21,7 @@ import path from "node:path";
 import crypto from "node:crypto";
 import { repoRoot, resourcesDir, serverDir } from "./staging-paths.mjs";
 import { NATIVE_BINARY_PATTERN, isMuslLinked } from "./native-binaries.mjs";
+import { playwrightRuntimeAudit } from "./stage-dashboard.mjs";
 
 let failures = 0;
 function fail(message) {
@@ -294,6 +295,24 @@ if (userOnlyNames.length === 0) {
   } else {
     pass("every staged symlink resolves inside the bundle");
   }
+}
+
+/**
+ * 6. playwright-core can load.
+ *
+ * The package requires browsers.json by a computed path. Next's file trace
+ * omits it, the route module throws while loading, and the browser page gets
+ * an empty 500 before auth. `ensureExternalRuntimeFiles` copies it back in.
+ */
+{
+  const audit = playwrightRuntimeAudit(serverDir);
+  if (audit.slots === 0) pass("no playwright-core package staged");
+  else if (audit.missing.length > 0) {
+    fail(
+      "playwright-core is missing files the tracer drops (the browser route returns an empty 500):\n      " +
+        audit.missing.join("\n      "),
+    );
+  } else pass("playwright-core includes browsers.json");
 }
 
 process.stdout.write(
