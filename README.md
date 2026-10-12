@@ -166,6 +166,8 @@ More in [Desktop recovery](docs/guides/desktop-recovery.md) and the [FAQ](docs/g
 
 ## Feedback
 
+Questions, ideas, or just want to show how you're using it? Come say hello in [Discussions](https://github.com/jmcelreavey/devhub/discussions).
+
 Found a bug, or something confusing? [Open an issue](https://github.com/jmcelreavey/devhub/issues). It helps to include your operating system, your DevHub version (**DevHub → About DevHub**) and, for start-up problems, the log files (**View → Open Logs Folder**). Have a look through them for anything private before you attach them.
 
 ## Run it from source
