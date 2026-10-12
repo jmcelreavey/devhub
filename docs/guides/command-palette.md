@@ -40,6 +40,8 @@ For TF-IDF "related notes" search across the full notes vault, use the **Search*
 | Open today's note                | Empty-query default list | Opens the notes panel on `daily/YYYY-MM-DD` (`devhub:notes-open-today`). Works even when the panel is already open. Same file as the Today editor. See [Notes System — Daily Notes](../architecture/notes-system.md#daily-notes). |
 | Quick capture                    | `⌘⇧C`                    | Opens the capture dialog for a task, note, or learning.                                                                                                                                                                                                            |
 | Toggle animations                | —                        | Flips the motion kill-switch (`body[data-motion="off"]`).                                                                                                                                                                                                          |
+| What's new                       | Empty-query default list | Reopens the current version's release-notes dialog (`devhub:whats-new`). Same panel as the post-update banner. See [Dashboard — What's new](../architecture/dashboard.md#whats-new). |
+| Full changelog                   | Empty-query default list | Opens `/changelog` (every `CHANGELOG.md` section, newest first). |
 
 **Copy context pack** is different from **Copy standup** on Today: the context pack adds tasks, learnings, and the daily note preview around the same standup window data.
 

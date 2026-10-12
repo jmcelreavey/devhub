@@ -54,7 +54,7 @@ synced copies — never the other way round, unless you explicitly pull from a t
 
 DevHub is built for one user on a trusted machine or trusted LAN.
 
-There is no user login or session system. Mutating API routes are guarded globally by `dashboard/proxy.ts` via `requireDashboardAuth` (strict same-origin `Origin` **or** `X-DevHub-Secret` when `DEVHUB_API_SECRET` is set). Sensitive **GET** routes that need the same guard must enforce it per handler — OpenCode recap, agent usage, the Paseo routes, and every `/api/db` route. See [API Routes — Common Behavior](../reference/api-routes.md#common-behavior) and [Environment Variables](../reference/environment-variables.md#core-variables).
+There is no user login or session system. Mutating API routes are guarded globally by `dashboard/proxy.ts` via `requireDashboardAuth` (strict same-origin `Origin` **or** `X-DevHub-Secret` when `DEVHUB_API_SECRET` is set). Sensitive **GET** routes that need the same guard must enforce it per handler — OpenCode recap, agent usage, the Paseo routes, every `/api/db` route, browser/editor status, and `/api/integrations`. See [API Routes — Common Behavior](../reference/api-routes.md#common-behavior) and [Environment Variables](../reference/environment-variables.md#core-variables).
 
 Do not expose DevHub to the public internet without adding a proper perimeter auth layer on top of these guards.
 

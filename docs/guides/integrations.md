@@ -12,7 +12,7 @@ related:
 
 # Integrations and workflow alerts
 
-Open **Integrations** to search Jira issues, GitHub Issues and pull requests, link them to tasks, and prepare write actions. Jira ticket creation, Jira transitions and GitHub PR creation, updates and publication all require a separate review and confirmation.
+Open **Integrations** (`/integrations`, System tab, or **⌘P**) to search Jira issues, GitHub Issues and pull requests, link them to tasks, and prepare write actions. Jira ticket creation, Jira transitions and GitHub PR creation, updates and publication all require a separate review and confirmation.
 
 ![Preparing a Jira action, reviewing its destination and cancelling without a write](../assets/demos/integration-proposals.gif)
 

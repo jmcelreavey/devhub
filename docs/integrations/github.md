@@ -132,6 +132,12 @@ still lives on the Git workspace **Worktrees** tab.
 
 The older cross-repo panel uses `GET`/`POST /api/repos/worktree-cleanup`.
 
+These leftover **agent-run** folders (`<repos-dir>/.devhub-worktrees/<repo>/`)
+are not the same as **task-implementation** checkouts under a repo's
+`.devhub/checkouts/`. The scheduled action `worktree_cleanup` only removes
+clean, two-day-idle trees in `.devhub/checkouts` (branches stay). It never
+touches `.devhub-worktrees`. See [Scheduled jobs — Weekly worktree cleanup](../guides/scheduled-jobs.md#weekly-worktree-cleanup).
+
 For reviewed bulk removal, open **Repos → worktree count → Worktrees**.
 Extra checkouts appear first, with their cleanup status and linked work under
 **Details & linked work**. The main checkout is always kept. The Worktrees tab

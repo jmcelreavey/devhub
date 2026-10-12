@@ -165,6 +165,13 @@ Attach via **View → Attach to Dev Server…** or record the checkout during de
 | `collect_opencode_config`   | Collect OpenCode Config | yes     | —                                                            |
 | `collect_local_persona`     | Collect Persona         | yes     | `personaTool` (required), `personaSources[]`                 |
 
+### Worktrees
+
+| ID | Label | Mutates | Notes |
+| -- | ----- | ------- | ----- |
+| `worktree_cleanup_scan` | Worktree cleanup review | writes a report only | Inventory and disk use. Never removes files. |
+| `worktree_cleanup` | Clean idle agent worktrees | yes | Removes clean `.devhub/checkouts` trees idle ≥ 2 days; trims ignored builds in kept trees idle ≥ 7 days. Keeps branches. Supports `dryRun`. Not seeded; add the Sunday 03:17 preset from Scheduled Jobs. See [Weekly worktree cleanup](../guides/scheduled-jobs.md#weekly-worktree-cleanup). |
+
 ### Ownership
 
 | ID                | Label                      | Mutates | Notes |

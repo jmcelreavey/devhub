@@ -284,7 +284,7 @@ The bits that didn't get their own section but earn their keep.
 
 | | What it does | Docs |
 | --- | --- | --- |
-| **Worktrees** | Implementation and race runs use isolated worktrees. Finished ones are listed so you can clean up. | [GitHub](../integrations/github.md#finished-worktrees) |
+| **Worktrees** | Implementation and race runs use isolated worktrees. Finished agent-run folders are listed on **PRs → Worktrees**. Task checkouts under `.devhub/checkouts` have a separate Sunday cleanup preset. | [GitHub](../integrations/github.md#finished-worktrees) · [Scheduled jobs](scheduled-jobs.md#weekly-worktree-cleanup) |
 | **Change hints** | The Changes tab nudges you when files that usually change together haven't, and suggests who knows the area, all from the repo's own history. A *why does this exist?* button on a history file launches the commit archaeologist. | [GitHub and git](../integrations/github.md) |
 | **Share a patch** | Publish a git patch or a range diff as a 24-hour, burn-after-reading link. | [Sharing](sharing.md) |
 | **Repo learning and audits** | Get oriented in an unfamiliar checkout, and run a DX audit for onboarding friction, slow CI and local setup pain. | [Repo learning](repo-learning.md) |

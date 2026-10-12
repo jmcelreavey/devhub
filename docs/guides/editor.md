@@ -11,7 +11,7 @@ related:
 
 # Editor and selection chat
 
-In **Repos → Changes**, select lines and choose **Send to AI**. DevHub opens a side panel with the exact selection, its diff revision and staged/unstaged source. Choose a task and an assistant, or continue an idle conversation from that checkout. Sending keeps the diff open and creates no extra worktree.
+In **Repos → Changes**, select lines and choose **Send to AI**. DevHub opens a side panel with the exact selection, its diff revision and staged/unstaged source. Choose a task and an assistant, or continue an idle conversation from that checkout. Sending keeps the diff open and creates no extra worktree. `/editor` is not a sidebar row; **Open editor** from Changes takes you to the workspace's runtime controls.
 
 The default request asks for an explanation. This is an instruction, not a permissions boundary: the assistant retains its existing local access. Discussion runs stay linked to their task without replacing its implementation Resume target.
 
@@ -25,7 +25,7 @@ Selections are limited to 12,000 characters; questions to 8,000. The submitted r
 
 The optional add-on lives in `extensions/devhub-selection`. Build it with `npm ci && npm run build` in that directory, then package with `vsce package` and install the VSIX. It uses the public VS Code extension API, not Cursor's private chat API. Selection commands work in Restricted Mode: the add-on reads the chosen buffer and never executes workspace code. Nothing is published to a marketplace by DevHub.
 
-1. Open **Editor** in DevHub and choose the matching repository.
+1. Open **Editor** (`/editor`, from Changes) and choose the matching repository.
 2. Create a pairing code and copy it.
 3. In the editor, run **DevHub: Pair this Workspace** and paste the code.
 4. Select code and run **DevHub: Ask AI about Selection**.

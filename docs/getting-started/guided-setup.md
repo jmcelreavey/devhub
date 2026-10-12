@@ -30,6 +30,10 @@ see [Installation](installation.md).
 
 DevHub does not bundle Git. **Plugins → Add from GitHub** needs it, and so does the optional private backup. On a Mac, **Install Git** runs `xcode-select --install`. Nothing else in day-to-day notes and tasks needs it.
 
+Download the installer from the
+**[latest GitHub release](https://github.com/jmcelreavey/devhub/releases/latest)**.
+See [The desktop app](desktop-app.md#installing) for which file to pick.
+
 ## Install on a Mac
 
 1. Drag **DevHub** into **Applications** and eject the DMG, then double-click **DevHub** in **Applications**.

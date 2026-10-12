@@ -34,7 +34,7 @@ Only one DevHub process should run the scheduler. A dev server started beside th
 
 Agent checkouts can each hold several GB of dependencies and builds. On **Actions → Scheduled Jobs**, click **Schedule weekly cleanup** to add `worktree_cleanup` for **Sunday 03:17 local time** (`17 3 * * 0`). This is a one-click preset, not an automatically seeded job: the scheduler has no defaults/seeding mechanism. An existing cleanup job disables the preset to avoid duplicates. Wake is off; a missed run catches up when DevHub is running and the Mac is awake. You can enable wake on the saved job.
 
-The action reuses the worktree report inventory, but is deliberately stricter than the review-only `worktree_cleanup_scan`. It only considers Git-registered worktrees inside the linked checkout's `.devhub/checkouts` directory. It never deletes branches, the main checkout, locked worktrees, symlinked checkout directories or nested repositories.
+The action reuses the worktree report inventory, but is deliberately stricter than the review-only `worktree_cleanup_scan`. It only considers Git-registered worktrees inside the linked checkout's `.devhub/checkouts` directory. It never deletes branches, the main checkout, locked worktrees, symlinked checkout directories or nested repositories. Isolated agent-run folders under `<repos-dir>/.devhub-worktrees/` are a different layout — clean those from [PRs → Worktrees](../integrations/github.md#finished-worktrees).
 
 A whole worktree is removed with `git worktree remove` and `git worktree prune` only when **all** of these hold:
 

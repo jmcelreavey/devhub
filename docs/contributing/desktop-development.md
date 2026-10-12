@@ -167,8 +167,8 @@ shipping somebody's notes in a public installer. It also writes
 `public`, bundles the PTY server with esbuild, and stages the matching
 `node-pty` prebuild.
 
-Two things it does that are not obvious, and both exist because they were real
-leaks found in a bundle that otherwise looked perfect:
+Three things it does that are not obvious, and they exist because they were real
+failures in a bundle that otherwise looked perfect:
 
 - **It deletes every `.env*` from the standalone output.** Next bundles those
   and loads them at boot. Correct for a server deployment; here it meant
@@ -177,6 +177,13 @@ leaks found in a bundle that otherwise looked perfect:
 - **It builds against an empty content tree.** Next prerenders static routes
   using the build machine's data, so `/notes` shipped as HTML listing the
   developer's actual notes.
+- **It copies `playwright-core`'s `browsers.json` back in.** The Browser route
+  loads Playwright only when a session starts (`dashboard/lib/browser/runtime.ts`).
+  A static import used to evaluate the package while loading the route; that
+  package `require`s `browsers.json` through a computed path, which Next's file
+  tracer omits, so `/browser` 500'd before auth. `ensureExternalRuntimeFiles`
+  restores it; without it the start action now returns 409 JSON asking you to
+  reinstall. See [Managed browser — Packaged app](../guides/managed-browser.md#packaged-app).
 
 ## The pre-signing gate
 
@@ -187,6 +194,7 @@ leaks found in a bundle that otherwise looked perfect:
 3. The packaged identity is the generic default, not somebody's real one.
 4. No credential-shaped files anywhere in the bundle.
 5. No build-machine content in prerendered HTML.
+6. Every staged `playwright-core` copy includes `browsers.json` (or none is staged).
 
 A signed public release cannot be taken back. That is the whole reason this
 runs before signing rather than after.

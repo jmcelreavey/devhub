@@ -20,22 +20,27 @@ needs no development checkout, npm, Rust or compiler.
 
 ## Installing
 
-Public installer releases have not been published yet. Build artifacts are
-available from successful **Release desktop** workflow runs; tagged releases
-will appear under [Releases](https://github.com/jmcelreavey/devhub/releases).
+Download the installer for your computer from the
+**[latest GitHub release](https://github.com/jmcelreavey/devhub/releases/latest)**.
+The bundle includes DevHub's server, Node.js and GitHub CLI. File names include
+the version; use the **latest** link so you don't pick an old asset by hand.
 
-**macOS 13 or later:** choose the `.dmg` for Apple Silicon or Intel, open it,
-drag DevHub to Applications, then launch it. The bundled GitHub CLI sets this
-minimum version.
+**macOS 13 or later:** choose `DevHub_<version>_aarch64.dmg` (Apple Silicon) or
+`DevHub_<version>_x64.dmg` (Intel). Open it, drag DevHub to Applications, then
+launch it. The bundled GitHub CLI sets this minimum version.
 
-**Windows:** run the `-setup.exe`. It installs DevHub for your Windows user
-and installs WebView2 if needed. On first launch, choose **Set up Windows
-support** if asked. Windows installs WSL 2 and Ubuntu through its own
+**Windows:** run `DevHub_<version>_x64-setup.exe`. It installs DevHub for your
+Windows user and installs WebView2 if needed. On first launch, choose **Set up
+Windows support** if asked. Windows installs WSL 2 and Ubuntu through its own
 administrator prompt. Finish Ubuntu's account setup, restart if asked, then
 open DevHub again. DevHub uses an existing user WSL2 distro when available.
 
 Windows installs remain unverified on a clean Windows machine. See
 [Windows app](../architecture/desktop-windows-wsl.md) for the current limits.
+
+**Linux:** download `DevHub_<version>_amd64.AppImage`, make it executable and
+run it. On Debian or Ubuntu you can install `DevHub_<version>_amd64.deb`
+instead. Linux is the least documented platform so far.
 
 ### Unsigned installers
 
@@ -168,6 +173,14 @@ it is refused rather than installed.
 
 You can also check manually: **DevHub → Check for Updates…**
 
+The banner shows that version's release notes before you install. After an
+update, DevHub opens a once-per-version **What's new** panel from
+`CHANGELOG.md`. Dismiss it for this version (including **Esc**); reopen it from
+**⌘P → What's new**, **Setup → About**, or `/changelog`. Desktop and browser
+remember dismissal separately (`localStorage` keys
+`devhub:release-notes:desktop` and `devhub:release-notes:web`). Agents can read
+the same notes with MCP `release_notes_read` without the dashboard.
+
 ## Running your projects
 
 Pick a repository, and DevHub either finds an existing Upstart script or offers
@@ -204,6 +217,14 @@ and `renderer.log` when reporting the failure.
 you open DevHub from another device over your network — it hands out a real
 shell, and that is not something to expose to a network. Use it on the machine
 DevHub is running on.
+
+**The Browser page is blank or returns an empty 500.** Playwright loads only
+when you start a Chrome session. The packaged app must include
+`playwright-core`'s `browsers.json` (Next's file tracer drops it). 2.1.1 stages
+that file; if an older build is missing it, the start action returns JSON such
+as "Playwright could not load because browsers.json is missing. Reinstall
+DevHub." Reinstall from the [latest release](https://github.com/jmcelreavey/devhub/releases/latest).
+See [Managed browser](../guides/managed-browser.md#packaged-app).
 
 **Nothing works and you want to start clean.** Quit DevHub and move
 `~/Library/Application Support/DevHub/config` aside. Your notes and tasks are in

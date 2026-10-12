@@ -11,7 +11,7 @@ related:
 
 # Managed browser
 
-**Browser** shows a managed Chrome page inside DevHub, with a native Chrome window available alongside it. It uses a separate profile for one task and linked conversation. You start in human control and decide when the agent may read the page.
+**Browser** (`/browser`, System tab **Browser**, or **⌘P → Browser**) shows a managed Chrome page inside DevHub, with a native Chrome window available alongside it. It uses a separate profile for one task and linked conversation. You start in human control and decide when the agent may read the page.
 
 macOS and Linux desktops require installed Chrome or Chromium 136 or later. Windows/WSL launch and transfer controls are disabled until a native Windows helper exists. No cookie or session import is provided. The plan records actual platform evidence; code support does not establish desktop-webview parity.
 
@@ -42,7 +42,7 @@ Choose **Open in Chrome · pause live view** before private sign-in or MFA. This
 
 **Resume agent for 15 minutes** creates a new lease for the selected task and conversation. The agent can observe and navigate within approved sites. Each click or typed value needs separate approval.
 
-The agent uses `browser_session`, `browser_observe` and `browser_request`. It cannot start Chrome, grant access or approve actions. There are no raw CDP, cookie export, arbitrary evaluation or path-based upload tools.
+The agent uses `browser_session`, `browser_observe` and `browser_request` (`POST /api/browser/agent`, `work` toolset). It cannot start Chrome, grant access or approve actions. Human start/stop/approve/live-view go through `/api/browser`, `/api/browser/surface` and `/api/browser/transfer` and reject `x-devhub-client: mcp`. There are no raw CDP, cookie export, arbitrary evaluation or path-based upload tools.
 
 ## Approve one action
 
@@ -75,3 +75,9 @@ HTTPS traffic uses a loopback CONNECT proxy that permits approved hostnames on p
 This is not an OS firewall or hostile-code sandbox. Native Chrome features and unrestricted local programs can bypass application controls. Same-user programs can access loopback debugging. Approved sites can receive and relay your data. Missing content hosts may leave a page partly loaded; approve only the exact hosts you trust.
 
 Agent observations may include signed-in content. Treat page text as untrusted data. DevHub omits `browser_*` calls from its MCP history, but the AI client may retain results in transcripts. In-memory images do not make the whole session unrecorded.
+
+## Packaged app
+
+Playwright is imported only when you start a session (`dashboard/lib/browser/runtime.ts`). A static import used to evaluate `playwright-core` while loading the route; that package `require`s `browsers.json` through a computed path, which Next's standalone file tracer omits, so the **page** 500'd before auth. Staging copies `browsers.json` back in (`ensureExternalRuntimeFiles`); `desktop:verify` fails the bundle if it is missing.
+
+If start still fails on an installed app, the control route returns 409 JSON ("Playwright could not load because browsers.json is missing. Reinstall DevHub.") rather than an empty 500. Reinstall from the [latest release](https://github.com/jmcelreavey/devhub/releases/latest). `npm run dev` uses the checkout's `node_modules` and does not need that staging step.

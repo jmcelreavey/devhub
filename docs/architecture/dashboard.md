@@ -31,7 +31,10 @@ The dashboard is the main DevHub interface. It is a local Next.js app with pages
 | Setup        | Environment and integration configuration                                                                   |
 | Repos        | Sibling git checkout discovery, per-repo **work hub**, GitHub clone/search, Cursor/GitKraken/CLI launch, compose-up, Repo Learning, and owned-repo radar (`?view=owned`) |
 | Databases    | In-app client for PostgreSQL, MongoDB, and SQLite (`/db`) — see [Database client](database-client.md)       |
-| Integrations | Calendar, Jira, Datadog, GitHub, and optional plugin views                                                     |
+| Integrations | Calendar, Jira, Datadog, GitHub, and `/integrations` for write proposals and workflow alerts                     |
+| Browser      | Managed Chrome for one task (`/browser`) — System tab, not a sidebar row. See [Managed browser](../guides/managed-browser.md) |
+| Editor       | Selection chat beside a diff, plus optional in-app code-server (`/editor`). See [Editor](../guides/editor.md) |
+| Workflows    | Durable checks, reviews and publication proposals (`/workflow`). See [Task checks](../guides/task-checks-and-reviews.md) |
 
 ## Walkthroughs
 
@@ -63,7 +66,7 @@ Finished agent/PR worktrees get a **non-dismissible** one-line count (`WorktreeC
 
 Notes, search and the command palette have their own clips in [Notes system](notes-system.md#walkthroughs) and [Command palette](../guides/command-palette.md#walkthrough).
 
-## Navigation (2026-09 IA)
+## Navigation
 
 The sidebar is driven by `dashboard/lib/nav.ts` — **14** core sidebar destinations in `NAV_ITEMS` (plugin items such as Ops merge in separately), grouped into **Workspace**, **Library**, **Infrastructure**, and **System**. Integration-gated items stay hidden until `GET /api/setup/status` reports the matching flag. Plugin destinations (e.g. Ops) merge in via `groupSidebarNav`.
 
@@ -84,7 +87,7 @@ Coding chats live on **Agents** (`/agents`). `/chamber` and `/opencode` redirect
 | Databases  | `/db`       | Desktop nav only, **ungated**. SQLite works with no setup; plugins can add connection providers. See [Database client](database-client.md) |
 | Ops        | `/ops`      | Infrastructure group; from a plugin (`gate: infra`)                                                         |
 | Datadog    | `/datadog`  | Infrastructure group; gated on `datadog`                                                                  |
-| System     | `/status`   | Top-bar tabs: Status, Logs (desktop), Actions (desktop), Setup                                |
+| System     | `/status`   | Top-bar tabs: Status, Logs (desktop), Actions (desktop), Plugins, Integrations, Browser, Setup |
 | Agents     | `/agents`   | System group. Tabs: Chats / Usage / Connection (old `?view=activity` links open Chats). See [Agents (Paseo)](../guides/paseo-agents.md) |
 
 ### Merged destinations
@@ -105,13 +108,29 @@ are AND-ed on every tab.
 
 **Library** and **System** use `SectionTabs` in the top bar on sibling routes such as `/docs` and `/setup`. Library tabs are **Notes**, **Docs**, **Diagrams**, **Live links** (gated on GitHub), and **Radar**. Search and Databases have sidebar destinations. Appraisal, Research, My Voice and Conventions remain reachable through **⌘P**.
 
-System tabs are **Status**, **Logs** (desktop), **Actions** (desktop), and **Setup**. **Infrastructure** is a sidebar group: Ops comes from the Infrastructure plugin and Datadog from core.
+System tabs are **Status**, **Logs** (desktop), **Actions** (desktop), **Plugins**, **Integrations**, **Browser**, and **Setup**. **Infrastructure** is a sidebar group: Ops comes from the Infrastructure plugin and Datadog from core. `/editor` opens from **Repos → Changes**; `/workflow` from a task's **Workflow and evidence**; `/changelog` from **⌘P → Full changelog**.
 
 **Diagrams** (`/diagrams`, Library tab) opens a browse-by-folder landing page — recent diagrams plus folder cards (`lib/diagrams/diagram-browse.ts`). Click a card or recent item to open the tldraw editor at `/diagrams/[...path]`.
 
+### Top bar at laptop widths
+
+The header (`HubTopBar`) follows **its own** width (CSS container queries on `.hub-topbar`), not the window's. Left to right: section, search, focus, panels, then preferences (appearance, Setup, profile).
+
+| Bar width | What folds |
+| --------- | ---------- |
+| Under ~840px, or under ~1040px when there are more than five section tabs | Library/System tabs become a **Section** dropdown labelled with the current page |
+| Under ~1350px | Notes, tasks and diagrams fold into a **Panels** button. Terminal stays visible. Setup stays with appearance and profile — it is not in Panels |
+| Under ~1160px | Search and idle Focus shrink to icons; Profiles shrinks to an initial. An empty sync slot collapses so it does not leave a gap |
+
+Pointer-opened menus do not auto-focus the first item (that drew a thick ring). Keyboard focus uses one inset ring on the outer control. `⌘N` / `⌘T` / `⌘D` still toggle the panels when the labels are folded. Verified not to overlap from 900px up in Graphite Neon (Default) and Hollow (Halloween).
+
+### What's new
+
+After an update, a once-per-version **What's new** panel reads `GET /api/release-notes` (parsed `CHANGELOG.md`). Dismissal lives in `localStorage` (`devhub:release-notes:desktop` or `:web`) and hides the sidebar pill until the next version. Reopen it from **⌘P → What's new**, **Setup → About**, or `/changelog`. Desktop update banners show incoming notes before install. MCP `release_notes_read` reads the changelog without the dashboard.
+
 ### Legacy routes
 
-Older URLs still work and remain reachable via **⌘P** (`LEGACY_NAV_ITEMS` in `nav.ts`): `/own`, `/appraisal`, `/one-on-one`, `/recall`, `/radar`, `/research`, `/learnings`, `/voice`, `/conventions`, `/diagrams`, `/docs`, `/shared`, `/actions`, `/logs`, `/setup`. Library tabs cover `/radar`, `/diagrams`, `/docs`, and `/shared`; the other Library tools stay in the palette. `/own` redirects to `/repos?view=owned`. `/tasks` and `/tickets` redirect to `/work` and are not in `ALL_NAV_DESTINATIONS`. `/ops` (plugin) and `/datadog` live under the **Infrastructure** sidebar group. `/chamber` and `/opencode` redirect to `/agents`; `/agent-activity` redirects to `/agents`.
+Older URLs still work and remain reachable via **⌘P** (`LEGACY_NAV_ITEMS` in `nav.ts`): `/own`, `/appraisal`, `/one-on-one`, `/recall`, `/radar`, `/research`, `/learnings`, `/voice`, `/conventions`, `/diagrams`, `/docs`, `/shared`, `/actions`, `/logs`, `/plugins`, `/integrations`, `/browser`, `/setup`. Library tabs cover `/radar`, `/diagrams`, `/docs`, and `/shared`; System tabs cover `/plugins`, `/integrations`, `/browser`, and `/setup`. The other destinations stay in the palette. `/own` redirects to `/repos?view=owned`. `/tasks` and `/tickets` redirect to `/work` and are not in `ALL_NAV_DESTINATIONS`. `/ops` (plugin) and `/datadog` live under the **Infrastructure** sidebar group. `/chamber` and `/opencode` redirect to `/agents`; `/agent-activity` redirects to `/agents`.
 
 On mobile, the bottom shelf uses **Work** (`/work`) instead of separate Tasks/Tickets entries.
 
