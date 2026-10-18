@@ -194,4 +194,6 @@ Release history is in [CHANGELOG.md](CHANGELOG.md), with private-main work separ
 
 ## Licence
 
-[MIT](LICENSE)
+Copyright (c) 2026 John McElreavey.
+
+DevHub is licensed under [AGPL-3.0](LICENSE). For commercial licensing or setup help, open a [Discussion](https://github.com/jmcelreavey/devhub/discussions) or contact John.
