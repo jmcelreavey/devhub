@@ -1,6 +1,6 @@
 ---
 title: Getting started without Git
-description: Install the DevHub app on Mac or Windows and start using it straight away. No fork, no Git knowledge, and no GitHub account needed until you want a backup.
+description: Install the DevHub app on Mac, Windows or Linux and start using it straight away. No fork, no Git knowledge, and no GitHub account needed until you want a backup.
 order: 0
 icon: Rocket
 tags: [setup, desktop]
@@ -21,12 +21,12 @@ see [Installation](installation.md).
 
 ## What you need
 
-| | Mac | Windows |
+| | Mac | Windows | Linux |
 | --- | --- | --- |
-| System | macOS 13 or later | Windows with WSL 2 and an Ubuntu distro, plus WebView2 (the installer fetches it if missing) |
-| Installer | `.dmg` (Apple Silicon or Intel) | `-setup.exe` |
-| Node.js and GitHub CLI | Included in the app | Included in the installer |
-| Git | Not included. Needed for **Plugins → Add from GitHub** and the optional backup | Not included. Needed for plugins and the optional backup, and it must be inside Ubuntu |
+| System | macOS 13 or later | Windows with WSL 2 and an Ubuntu distro, plus WebView2 (the installer fetches it if missing) | 64-bit Intel/AMD (x86_64). Built on Ubuntu 22.04; no published Arm installer |
+| Installer | `.dmg` (Apple Silicon or Intel) | `-setup.exe` | `_amd64.AppImage` (in-app updates) or `_amd64.deb` (manual updates) |
+| Node.js and GitHub CLI | Included in the app | Included in the installer | Included in the app |
+| Git | Not included. Needed for **Plugins → Add from GitHub** and the optional backup | Not included. Needed for plugins and the optional backup, and it must be inside Ubuntu | Not included. Needed for plugins and the optional backup |
 
 DevHub does not bundle Git. **Plugins → Add from GitHub** needs it, and so does the optional private backup. On a Mac, **Install Git** runs `xcode-select --install`. Nothing else in day-to-day notes and tasks needs it.
 
@@ -60,6 +60,16 @@ See [The desktop app](desktop-app.md#installing) for which file to pick.
 Your notes and tasks live inside the Ubuntu distro, not on the `C:` drive. See
 [Windows app](../architecture/desktop-windows-wsl.md) for why, and for what has been
 tested.
+
+## Install on Linux
+
+1. Download `DevHub_<version>_amd64.AppImage` (or the `.deb` on Debian/Ubuntu).
+2. `chmod +x` the AppImage and run it. If FUSE is missing, start it with
+   `APPIMAGE_EXTRACT_AND_RUN=1`.
+3. Wait a few seconds for the start-up screen. The setup wizard opens.
+
+Notes land in `~/.local/share/devhub/`. Closing the Linux window **quits**
+DevHub — there is no tray. See [The desktop app](desktop-app.md#installing).
 
 ## First run
 

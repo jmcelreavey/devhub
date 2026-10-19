@@ -18,7 +18,7 @@ DevHub is designed for local developer machines.
 | ----------------- | ---------------------- | ---------------------------------------------------- |
 | macOS             | Primary                | Best-supported local development path                |
 | Windows with WSL2 | Supported              | Use WSL for the repo and Node environment            |
-| Linux             | Supported              | Works best with standard Node and Git tooling        |
+| Linux             | Supported              | Packaged AppImage and `.deb` are x86_64, built on Ubuntu 22.04. Closing the window quits (no tray). Checkout installs use standard Node 22 and Git. |
 | iOS and iPadOS    | Dashboard over LAN | Notes and tasks work; local terminals and scripts run on the host |
 
 ## Required Tools

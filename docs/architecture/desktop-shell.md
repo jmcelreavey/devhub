@@ -41,9 +41,12 @@ DevHub.app
   Contents/Resources/services  supervisor.mjs, terminal-pty-server.cjs, node-pty
   Contents/Resources/resources skills, agents, mcp, persona, docs (read-only)
 
-  ~/Library/Application Support/DevHub   (writable, never replaced by updates)
-    config/.env.local  notes/  tasks/  collections/  upstarts/  docs/
-    persona/identity.txt  logs/
+  Writable app data (never replaced by updates):
+    macOS   ~/Library/Application Support/DevHub
+    Linux   ~/.local/share/devhub   ($XDG_DATA_HOME/devhub when set)
+    Windows Ubuntu ~/.local/share/devhub
+      config/.env.local  notes/  tasks/  collections/  upstarts/  docs/
+      persona/identity.txt  logs/
 ```
 
 ## The path contract
@@ -206,5 +209,8 @@ See [Migrating](../getting-started/migrating.md) for the user-facing flow.
 - **Linux CI.** `release-desktop.yml` now builds on `ubuntu-22.04` (AppImage +
   `.deb`) with self-test on the runner. Staging strips foreign native binaries
   (wrong OS or musl-linked ELF on glibc) so `linuxdeploy` does not fail
-  opaquely. End-user Linux install docs are still macOS-first.
+  opaquely. There is no Linux Arm installer. Linux has no tray: closing the
+  window destroys it and stops the sidecar (macOS/Windows hide instead). The
+  in-app updater lists the AppImage only; `.deb` installs update from the
+  release page. See [The desktop app](../getting-started/desktop-app.md).
 - **Windows.** The [WSL2-backed app](desktop-windows-wsl.md) is implemented, but still needs verification on real Windows. Upstarts run through Bash inside WSL.

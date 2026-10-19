@@ -42,7 +42,7 @@ Two things worth knowing:
 
 ### Linux
 
-Download the `.AppImage`, make it executable and run it. On Debian or Ubuntu you can install the `.deb` instead. Linux is the least documented platform so far.
+Download the `.AppImage`, make it executable (`chmod +x`) and run it. On Debian or Ubuntu you can install the `.deb` instead. Only x86_64 installers are published (Ubuntu 22.04). If the AppImage cannot mount, run it with `APPIMAGE_EXTRACT_AND_RUN=1`. Closing the Linux window quits DevHub — there is no tray icon. Data lives in `~/.local/share/devhub/`. More in [The desktop app](docs/getting-started/desktop-app.md).
 
 ## First run
 
@@ -148,7 +148,7 @@ Portable plugins can declare reviewed actions, streaming output and status route
 
 DevHub checks for an update a little while after it starts and shows a banner if there is one. You choose when to download it and when to restart, and a failed update leaves what you have untouched. Updates are signed, and DevHub refuses one that doesn't verify.
 
-You can also check yourself with **DevHub → Check for Updates…**, which is in the tray icon's menu too. Your notes and tasks live outside the app (on a Mac in `~/Library/Application Support/DevHub`, on Windows inside your Ubuntu under `~/.local/share/devhub`), so an update never touches them. On Linux the in-app updater covers the AppImage. If you installed the `.deb`, download the new one from the release page.
+You can also check yourself with **DevHub → Check for Updates…**, which is in the macOS menu, the Windows tray, and the Linux window menubar. Your notes and tasks live outside the app (on a Mac in `~/Library/Application Support/DevHub`, on Linux and in Windows' Ubuntu under `~/.local/share/devhub`), so an update never touches them. On Linux the in-app updater covers the AppImage. If you installed the `.deb`, download the new one from the release page.
 
 ## Troubleshooting
 
@@ -158,7 +158,7 @@ You can also check yourself with **DevHub → Check for Updates…**, which is i
 - **Windows: the window can't reach DevHub.** A `localhostForwarding=false` line in `%USERPROFILE%\.wslconfig` breaks the connection. Remove it and restart WSL.
 - **"Port 1337 is in use".** Another program, or a second DevHub, has the port. DevHub only offers to stop a leftover DevHub development server of its own (**Stop it and continue**). Otherwise quit the other program, then click **Try again**.
 - **A start-up error.** The window shows the last few log lines and an **Open logs** button.
-- **Closing the window didn't quit DevHub.** It keeps running from the tray or menu-bar icon so scheduled jobs carry on. Choose **Quit DevHub** there.
+- **Closing the window didn't quit DevHub (macOS and Windows).** It keeps running from the tray or menu-bar icon so scheduled jobs carry on. Choose **Quit DevHub** there. On Linux, closing the window *does* quit.
 - **Agents shows a connection error.** Set up Safe-Chain, then Paseo from **Setup → Tools**. Packaged DevHub includes Node.js and npm for Agents, without changing your shell PATH. If bundled tools are unavailable, update or reinstall DevHub. Checkout users need their own Node.js. On Windows, WSL needs `systemd=true` in `/etc/wsl.conf` first.
 - **An update failed.** Nothing changed. Click **Try again** or **Open release page**.
 

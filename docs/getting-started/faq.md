@@ -89,6 +89,19 @@ update. Uninstalling the app also leaves it in place.
 
 Open **Setup → GitHub**, or use **Set up private repo** on the Today strip.
 
+## Where does Linux keep my data?
+
+In `~/.local/share/devhub/` (`$XDG_DATA_HOME/devhub` if you set `XDG_DATA_HOME`).
+Config, notes, tasks and logs live there, not inside the AppImage or `.deb`.
+See [The desktop app](desktop-app.md#where-your-data-lives).
+
+## Does closing the window quit DevHub?
+
+On macOS and Windows, no: the window hides and a tray icon keeps the server
+(and scheduled jobs) running until you choose **Quit DevHub**. On Linux, yes:
+there is no tray, so closing the window stops the sidecar. See
+[Scheduled jobs](../guides/scheduled-jobs.md#when-jobs-run).
+
 ## What licence is DevHub under?
 
 DevHub's public core is **AGPL-3.0-only**. The SPDX identifier is in

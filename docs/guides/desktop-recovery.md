@@ -15,8 +15,15 @@ What to do when the desktop app will not start, and how to prove each fix
 worked. Every scenario here has been deliberately triggered and verified.
 
 Notes, tasks, collections, Upstarts, docs and settings live outside the app bundle,
-in `~/Library/Application Support/DevHub/` or the directories you chose during
-migration. Reinstalling the app preserves those directories. Keep backups before
+in the OS app-data directory or the folders you chose during migration:
+
+| Platform | Default app-data / logs |
+| -------- | ----------------------- |
+| macOS | `~/Library/Application Support/DevHub/` |
+| Linux | `~/.local/share/devhub/` (`$XDG_DATA_HOME/devhub` when set) |
+| Windows | Ubuntu `~/.local/share/devhub/` — see [Windows app](../architecture/desktop-windows-wsl.md) |
+
+Reinstalling the app preserves those directories. Keep backups before
 changing content paths or replacing configuration.
 
 ## First: read the actual error
@@ -24,7 +31,7 @@ changing content paths or replacing configuration.
 DevHub does not show a blank window on failure. It shows what went wrong, the
 last twenty log lines, and three buttons: **Try again**, **Open logs**, **Quit**.
 
-Full logs:
+Full logs live in `<app-data>/logs/` (see the table above). On a Mac that is:
 
 ```
 ~/Library/Application Support/DevHub/logs/
@@ -75,6 +82,7 @@ Look at the log for the sidecar's own output. Common causes:
 **A bad value in `config/.env.local`.** Move it aside and restart:
 
 ```bash
+# macOS; on Linux use ~/.local/share/devhub/config/.env.local
 mv ~/Library/Application\ Support/DevHub/config/.env.local \
    ~/Library/Application\ Support/DevHub/config/.env.local.bak
 ```
@@ -92,7 +100,11 @@ The shipped binary can check itself, against a **temporary** data directory —
 it never reads or writes your real data:
 
 ```bash
+# macOS
 /Applications/DevHub.app/Contents/MacOS/devhub-desktop --self-test
+
+# Linux AppImage (forwards the flag to the inner binary)
+./DevHub_<version>_amd64.AppImage --self-test
 ```
 
 Nine checks: staged resources, the bundled Node runtime, sidecar startup,
@@ -109,8 +121,10 @@ A failed update leaves the running version completely untouched — Tauri stages
 the replacement and only swaps on success. The banner offers **Try again** and
 **Open release page**.
 
-If updates keep failing, download the latest DMG manually. Your data is not
-affected by reinstalling.
+If updates keep failing, download the latest installer for your platform
+manually (`.dmg`, `.AppImage` / `.deb`, or `-setup.exe`). Your data is not
+affected by reinstalling. On Linux a `.deb` install is never updated in-app —
+only the AppImage is listed in `latest.json`.
 
 Updates are refused if their signature does not verify. That is working as
 intended, not a bug to route around — there is deliberately no "install anyway".
@@ -144,7 +158,7 @@ listening.
 
 Tauri only updates upward — there is no in-app downgrade, deliberately.
 
-Download the older DMG from Releases and install it over the current one. Your
+Download the older installer from Releases and install it over the current one. Your
 data stays in its separate folder. Back it up before downgrading; older versions may not understand newer data formats.
 
 ## The dashboard looks stale after `git pull`
@@ -187,4 +201,6 @@ previous app automatically** if any check after the swap fails. Use
 
 ## Nuclear option
 
-Quit DevHub and reinstall from Releases. The app bundle and `~/Library/Application Support/DevHub` are separate; leave the data folder in place. Keep a backup before a downgrade or a data reset.
+Quit DevHub and reinstall from Releases. The app bundle and the app-data
+directory are separate; leave the data folder in place. Keep a backup before a
+downgrade or a data reset.

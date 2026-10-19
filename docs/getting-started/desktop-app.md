@@ -1,6 +1,6 @@
 ---
 title: The desktop app
-description: Install DevHub on macOS or Windows and connect your own private Git repo.
+description: Install DevHub on macOS, Windows or Linux and connect your own private Git repo.
 order: 3
 icon: Monitor
 tags: [setup, desktop]
@@ -14,9 +14,10 @@ related:
 
 # The DevHub desktop app
 
-The release pipeline builds a macOS `.dmg` and a Windows `-setup.exe`.
-Both include DevHub's server, Node.js and GitHub CLI. Running the installed app
-needs no development checkout, npm, Rust or compiler.
+The release pipeline builds a macOS `.dmg`, a Windows `-setup.exe`, and Linux
+`.AppImage` / `.deb` installers. They include DevHub's server, Node.js and
+GitHub CLI. Running the installed app needs no development checkout, npm, Rust
+or compiler.
 
 ## Installing
 
@@ -38,9 +39,36 @@ open DevHub again. DevHub uses an existing user WSL2 distro when available.
 Windows installs remain unverified on a clean Windows machine. See
 [Windows app](../architecture/desktop-windows-wsl.md) for the current limits.
 
-**Linux:** download `DevHub_<version>_amd64.AppImage`, make it executable and
-run it. On Debian or Ubuntu you can install `DevHub_<version>_amd64.deb`
-instead. Linux is the least documented platform so far.
+**Linux (x86_64):** download `DevHub_<version>_amd64.AppImage`, make it
+executable and run it. On Debian or Ubuntu you can install
+`DevHub_<version>_amd64.deb` instead. Release CI builds both on Ubuntu 22.04
+(`x86_64-unknown-linux-gnu`); there is no published Linux Arm installer.
+
+```bash
+chmod +x DevHub_<version>_amd64.AppImage
+./DevHub_<version>_amd64.AppImage
+```
+
+AppImages normally need FUSE. If the file refuses to mount, unpack it instead
+of installing extra packages:
+
+```bash
+APPIMAGE_EXTRACT_AND_RUN=1 ./DevHub_<version>_amd64.AppImage
+```
+
+The same flag is what the Linux release job uses when the runner has no FUSE.
+Pass `--self-test` to the AppImage (or the `devhub-desktop` binary) to run the
+packaged checks against a temporary data directory — it never reads or writes
+`~/.local/share/devhub`.
+
+**Closing the Linux window quits DevHub.** macOS and Windows hide the window
+and keep the server running from a tray icon; Linux has no tray, so close
+destroys the window, stops the sidecar, and scheduled jobs do not run until
+you open DevHub again.
+
+The packaged Browser needs a graphical session (`DISPLAY` or
+`WAYLAND_DISPLAY`). Headless SSH and WSL are refused — see
+[Managed browser](../guides/managed-browser.md).
 
 ### Unsigned installers
 
@@ -134,8 +162,17 @@ again — it records what it did, so a second run is not a second copy.
 
 ## Where your data lives
 
+Notes, tasks, config and logs live in the OS app-data directory, never inside
+the replaceable app bundle:
+
+| Platform | Default directory |
+| -------- | ----------------- |
+| macOS | `~/Library/Application Support/DevHub/` |
+| Linux | `~/.local/share/devhub/` (`$XDG_DATA_HOME/devhub` when `XDG_DATA_HOME` is set) |
+| Windows | Inside Ubuntu: `~/.local/share/devhub/` — see [Windows app](../architecture/desktop-windows-wsl.md) |
+
 ```
-~/Library/Application Support/DevHub/
+<app-data>/
   config/.env.local     your settings and API tokens
   notes/  tasks/  collections/  upstarts/  docs/
   persona/identity.txt  your AI tone/identity file
@@ -143,8 +180,9 @@ again — it records what it did, so a second run is not a second copy.
 ```
 
 This directory is **never replaced by an update**. The app's own files live
-inside `DevHub.app` and get replaced wholesale every time; your data does not
-live there and cannot be affected by it.
+inside the bundle (macOS `.app`, Linux AppImage/deb, Windows installer) and
+get replaced wholesale every time; your data does not live there and cannot
+be affected by it.
 
 If you chose "keep in place" during migration, the relevant folders stay
 wherever they already were and DevHub simply points at them.
@@ -171,7 +209,13 @@ leaves the version you are running completely untouched.
 Updates are cryptographically signed. If a downloaded update does not verify,
 it is refused rather than installed.
 
-You can also check manually: **DevHub → Check for Updates…**
+You can also check manually: **DevHub → Check for Updates…** (macOS menu bar,
+the Windows tray, or the Linux window menubar).
+
+On Linux the updater consumes the signed **AppImage** (`latest.json` lists
+`.AppImage`, not `.deb`). If you installed the `.deb`, download the new one
+from the [latest release](https://github.com/jmcelreavey/devhub/releases/latest)
+and install it yourself.
 
 The banner shows that version's release notes before you install. After an
 update, DevHub opens a once-per-version **What's new** panel from
@@ -209,9 +253,9 @@ Use the window that is already open, or quit it first.
 not kill it — quit that process and hit Retry.
 
 **The window shows a startup error.** Click **Open logs**. The last twenty lines
-are also shown in the window itself. Logs are at
-`~/Library/Application Support/DevHub/logs/`; grab `shell.log`, `sidecar.log`,
-and `renderer.log` when reporting the failure.
+are also shown in the window itself. Logs are under the app-data directory
+(`logs/` next to `config/` — see [Where your data lives](#where-your-data-lives));
+grab `shell.log`, `sidecar.log`, and `renderer.log` when reporting the failure.
 
 **The terminal will not connect.** The terminal is deliberately unavailable when
 you open DevHub from another device over your network — it hands out a real
@@ -226,14 +270,20 @@ as "Playwright could not load because browsers.json is missing. Reinstall
 DevHub." Reinstall from the [latest release](https://github.com/jmcelreavey/devhub/releases/latest).
 See [Managed browser](../guides/managed-browser.md#packaged-app).
 
-**Nothing works and you want to start clean.** Quit DevHub and move
-`~/Library/Application Support/DevHub/config` aside. Your notes and tasks are in
-sibling folders and are not affected.
+**Nothing works and you want to start clean.** Quit DevHub and move the
+`config` folder inside the app-data directory aside. Your notes and tasks are
+in sibling folders and are not affected.
 
 ## Uninstalling
 
-Delete `/Applications/DevHub.app`.
+**macOS:** delete `/Applications/DevHub.app`.
 
-Your data in `~/Library/Application Support/DevHub` is left alone deliberately —
-deleting an app should not delete your notes. Remove that folder by hand if you
-genuinely want it gone.
+**Linux AppImage:** delete the `.AppImage` file.
+
+**Linux .deb:** remove the package with your package manager.
+
+**Windows:** uninstall DevHub from Windows Settings. Notes stay in the Ubuntu
+distro.
+
+Your data folder is left alone deliberately — deleting an app should not
+delete your notes. Remove that folder by hand if you genuinely want it gone.

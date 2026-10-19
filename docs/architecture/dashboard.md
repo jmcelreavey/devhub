@@ -426,7 +426,7 @@ Failed sync runs surface from `GET /api/scripts/history` with log detail from `G
 
 ### Desktop logs (`/logs`)
 
-On desktop, **System → Logs** (`/logs`, also in ⌘P) tails the rotating log files under the OS app-data directory (`~/Library/Application Support/DevHub/logs/` on macOS). The page polls `GET /api/status/logs` every two seconds while **Live** is on, with filters for `shell`, `sidecar`, and `renderer` sources. **Open folder** calls the Tauri `open_logs` bridge when available. For startup failures before the dashboard loads, see [Desktop recovery](../guides/desktop-recovery.md).
+On desktop, **System → Logs** (`/logs`, also in ⌘P) tails the rotating log files under the OS app-data directory (`~/Library/Application Support/DevHub/logs/` on macOS, `~/.local/share/devhub/logs/` on Linux, and that same Linux path inside Ubuntu on Windows). The page polls `GET /api/status/logs` every two seconds while **Live** is on, with filters for `shell`, `sidecar`, and `renderer` sources. **Open folder** calls the Tauri `open_logs` bridge when available. For startup failures before the dashboard loads, see [Desktop recovery](../guides/desktop-recovery.md).
 
 The page reloads on manual refresh and polls Git/services/MCP/LAN every 30 seconds in the background.
 

@@ -21,12 +21,21 @@ Manage them on **Actions → Scheduled Jobs**, or from an agent through the DevH
 ## When jobs run
 
 - The scheduler checks the wall clock every 30 seconds while the dashboard is running.
-- **Missed runs catch up once.** If the Mac was asleep or DevHub was closed at 07:00, the job runs on the next check — once, not once per missed occurrence.
+- **Missed runs catch up once.** If the machine was asleep or DevHub was closed at 07:00, the job runs on the next check — once, not once per missed occurrence.
 - A new schedule, re-enabling a job, or approving it starts from *now*: time it did not have that schedule is not backfilled.
 - A script job that is due while another action is running waits and retries on each check.
-- Cron expressions are 5-field and use the Mac's local time.
+- Cron expressions are 5-field and use the machine's local time.
 
-In the desktop app, **closing the window hides it and keeps DevHub running** — on macOS a menu-bar tray icon appears while hidden (click it or choose **Show DevHub** to restore the window); the Dock icon also brings it back, and ⌘Q quits. Tick **Open DevHub at login** on the Scheduled Jobs card so jobs survive a reboot.
+In the desktop app on **macOS and Windows**, closing the window hides it and
+keeps DevHub running — on macOS a menu-bar tray icon appears while hidden
+(click it or choose **Show DevHub** to restore the window); the Dock icon also
+brings it back, and ⌘Q quits. The Windows tray icon stays visible so you can
+quit. Tick **Open DevHub at login** on the Scheduled Jobs card so jobs survive
+a reboot.
+
+**Linux has no tray.** Closing the window destroys it, stops the sidecar, and
+scheduled jobs do not run until you open DevHub again. Leave the window open
+overnight if you need the Sunday worktree cleanup or other jobs.
 
 Only one DevHub process should run the scheduler. A dev server started beside the desktop app shares `~/.local/state/devhub/jobs.json`; start it with `DEVHUB_SCHEDULER=0`.
 
