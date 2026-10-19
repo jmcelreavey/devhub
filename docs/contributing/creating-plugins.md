@@ -15,6 +15,10 @@ A plugin is a **separate repo** that adds skills, agents, MCP servers, and/or a 
 module to DevHub without living in the core repo. This guide walks through building one
 from scratch. For the design/reference, see [Plugins](../architecture/plugins.md).
 
+The DevHub core is AGPL-3.0-only. A plugin repo has its own licence; this guide
+does not pick one. Code you contribute *to the core* is AGPL-3.0-only. See the
+[FAQ](../getting-started/faq.md#what-licence-is-devhub-under).
+
 > Core always wins on name collisions, and plugin assets are **read-only** inside DevHub —
 > you edit them in the plugin repo, then re-sync.
 

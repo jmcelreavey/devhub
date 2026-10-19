@@ -130,6 +130,20 @@ Company workflows belong in a separate plugin repo. See the
 - Keep PRs small and single-concern.
 - No secrets, ever. No company-internal names in the public core.
 
+## Licence
+
+The public core is **AGPL-3.0-only** ([`LICENSE`](LICENSE), `package.json`).
+Contributions you send to the public repo are under that licence. Keep
+`LICENSE` and the SPDX field when backporting; do not relicense the core in a
+public PR.
+
+Private mirrors and separate plugin repos are yours. The AGPL's network clause
+matters if you offer a *modified* DevHub as a service to other people — the app
+is designed for one person on a trusted machine and does not provide hosted
+multi-user accounts. For commercial licensing or setup help, open a
+[Discussion](https://github.com/jmcelreavey/devhub/discussions). Read
+`LICENSE`; this is not legal advice.
+
 ## Traps
 
 Things that have cost real time here. Each one looked like it worked and didn't.

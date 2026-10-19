@@ -70,6 +70,9 @@ First run only, before the marker exists, pass the upstream commit your mirror l
 
 Only **generic, non-company, non-personal** features belong in the public core. Company or
 personal logic stays in a [plugin](../architecture/plugins.md); personal data is auto-excluded.
+The public core is AGPL-3.0-only — keep `LICENSE` and the SPDX field; do not
+relicense the core as part of a feature PR. See the
+[FAQ](../getting-started/faq.md#what-licence-is-devhub-under).
 
 This stays a **deliberate terminal action** — it opens a public, effectively irreversible
 PR, so there's no dashboard button. Preview first, always:

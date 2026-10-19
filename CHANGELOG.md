@@ -2,6 +2,12 @@
 
 User-visible changes, newest first. Versioned sections describe the public releases; Unreleased, when present, is work that has not shipped yet.
 
+## Unreleased
+
+### Changed
+
+- Relicence the public core from MIT to **AGPL-3.0-only**. `LICENSE` is the GNU AGPL v3 text, `package.json` and the selection extension declare `AGPL-3.0-only`, and the README licence section names the copyright and a commercial-contact path via Discussions.
+
 ## 2.1.1 - 2026-10-11
 
 ### Fixed

@@ -1,6 +1,6 @@
 ---
 title: FAQ
-description: Short answers about GitHub, forks, other Git hosts, privacy and updating the DevHub app.
+description: Short answers about GitHub, forks, other Git hosts, privacy, licence and updating the DevHub app.
 order: 5
 icon: LifeBuoy
 tags: [setup, faq]
@@ -88,3 +88,20 @@ update. Uninstalling the app also leaves it in place.
 ## How do I link a repo later?
 
 Open **Setup → GitHub**, or use **Set up private repo** on the Today strip.
+
+## What licence is DevHub under?
+
+DevHub's public core is **AGPL-3.0-only**. The SPDX identifier is in
+`package.json`; the full text is in [`LICENSE`](../../LICENSE). Copyright is
+John McElreavey, 2026.
+
+That is a copyleft licence: the source of the core stays available, and if you
+run a *modified* DevHub as a network service for other people, AGPL requires
+you to offer them the corresponding source. DevHub itself is built for one
+person on a trusted machine; hosted multi-user deployments are
+[out of scope](../contributing/scope.md).
+
+Contributions to the public core are under the same licence. For commercial
+licensing or setup help, open a
+[Discussion](https://github.com/jmcelreavey/devhub/discussions) or contact John.
+This page is not legal advice — read `LICENSE`.

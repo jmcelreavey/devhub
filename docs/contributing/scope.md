@@ -31,6 +31,10 @@ a packaged desktop app, and a plugin overlay system (see
 
 - **Local-first** — one user on a trusted machine, with optional trusted-LAN access.
   The default dashboard port is `1337`; hosted deployments are outside the scope.
+- **AGPL-3.0-only** — the public core ships under that licence (`LICENSE`).
+  Hosted multi-user deployments stay out of scope; if you run a modified copy
+  as a network service for others, AGPL's source-offer requirement applies.
+  See the [FAQ](../getting-started/faq.md#what-licence-is-devhub-under).
 - **Tight scope** — ship what measurably reduces friction; defer ambition.
 - **Degrade, don't break** — integrations are optional. A missing tool turns its
   feature off; notes and tasks still work. Checkout installs need Node, and code
