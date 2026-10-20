@@ -23,6 +23,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { z } from "zod";
+import { applyEffort, cliEffortArgs } from "@/lib/ai/effort";
 import { CHATGPT_APP_CODEX } from "@/lib/ai/preference";
 import { AGENT_STREAM_FORMATS, type AgentStreamFormat } from "@/lib/agent-runs/events";
 import { augmentedPathEnv } from "@/lib/process-env";
@@ -30,6 +31,8 @@ import { augmentedPathEnv } from "@/lib/process-env";
 export interface AgentArgsInput {
   prompt: string;
   model?: string;
+  /** Reasoning effort. Blank sends nothing. Cursor is written into the model id. */
+  effort?: string;
   resumeSessionId?: string;
   maxTurns?: number;
 }
@@ -63,17 +66,21 @@ export const BUILT_IN_AGENT_PROVIDERS: readonly AgentProviderSpec[] = [
     supportsResume: true,
     supportsMaxTurns: true,
     custom: false,
-    buildArgs: ({ prompt, model, resumeSessionId, maxTurns }) => [
-      "-p",
-      prompt,
-      "--output-format",
-      "stream-json",
-      "--verbose",
-      "--dangerously-skip-permissions",
-      ...flag("--model", model),
-      ...flag("--max-turns", maxTurns ? String(maxTurns) : undefined),
-      ...flag("--resume", resumeSessionId),
-    ],
+    buildArgs: ({ prompt, model, effort, resumeSessionId, maxTurns }) => {
+      const applied = applyEffort({ provider: "claude", model, effort });
+      return [
+        "-p",
+        prompt,
+        "--output-format",
+        "stream-json",
+        "--verbose",
+        "--dangerously-skip-permissions",
+        ...flag("--model", applied.model ?? model),
+        ...cliEffortArgs("claude", applied.thinkingOptionId),
+        ...flag("--max-turns", maxTurns ? String(maxTurns) : undefined),
+        ...flag("--resume", resumeSessionId),
+      ];
+    },
   },
   {
     id: "cursor",
@@ -84,17 +91,20 @@ export const BUILT_IN_AGENT_PROVIDERS: readonly AgentProviderSpec[] = [
     supportsMaxTurns: false,
     custom: false,
     // No --stream-partial-output: its deltas repeat the whole message at the end.
-    buildArgs: ({ prompt, model, resumeSessionId }) => [
-      "-p",
-      prompt,
-      "--output-format",
-      "stream-json",
-      "--force",
-      "--approve-mcps",
-      "--trust",
-      ...flag("--model", model),
-      ...flag("--resume", resumeSessionId),
-    ],
+    buildArgs: ({ prompt, model, effort, resumeSessionId }) => {
+      const applied = applyEffort({ provider: "cursor", model, effort });
+      return [
+        "-p",
+        prompt,
+        "--output-format",
+        "stream-json",
+        "--force",
+        "--approve-mcps",
+        "--trust",
+        ...flag("--model", applied.model ?? model),
+        ...flag("--resume", resumeSessionId),
+      ];
+    },
   },
   {
     id: "codex",
@@ -105,14 +115,18 @@ export const BUILT_IN_AGENT_PROVIDERS: readonly AgentProviderSpec[] = [
     supportsResume: false,
     supportsMaxTurns: false,
     custom: false,
-    buildArgs: ({ prompt, model }) => [
-      "exec",
-      "--json",
-      "--dangerously-bypass-approvals-and-sandbox",
-      "--skip-git-repo-check",
-      ...flag("-m", model),
-      prompt,
-    ],
+    buildArgs: ({ prompt, model, effort }) => {
+      const applied = applyEffort({ provider: "codex", model, effort });
+      return [
+        "exec",
+        "--json",
+        "--dangerously-bypass-approvals-and-sandbox",
+        "--skip-git-repo-check",
+        ...cliEffortArgs("codex", applied.thinkingOptionId),
+        ...flag("-m", applied.model ?? model),
+        prompt,
+      ];
+    },
   },
   {
     id: "gemini",

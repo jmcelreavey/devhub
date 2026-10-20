@@ -41,8 +41,41 @@ const PALETTES = {
   light: { bg: "#f7f8f9", mod: "#46545f", tint: "#669826", hub: "#4c840c", halo: 0.14 },
 };
 
+/**
+ * Hollow (Halloween) mark: its own artwork, not a tint of Shift Dock. The rows
+ * stay (that is the DevHub silhouette) in two purples; the docked hub becomes a
+ * jack-o'-lantern with a stem and a carved face. Flat fills only: no halo, no
+ * gradient, no glow. The face is a true cut-out (evenodd), so whatever sits
+ * behind the mark shows through on dark and light surfaces alike.
+ */
+const HALLOWEEN_PALETTES = {
+  dark: { bg: "#1a1024", mod: "#b48ee0", tint: "#7a4bb0", hub: "#ff8a1f", stem: "#7fb04a" },
+  light: { bg: "#f7f8f9", mod: "#5b3486", tint: "#8a5cc2", hub: "#e06a00", stem: "#4f7d1f" },
+};
+
+// 64-unit box. Pumpkin x 36..60, y 21..43 sits where the hub docks.
+const PUMPKIN_PATH = [
+  "M45 21H51A9 9 0 0 1 60 30V34A9 9 0 0 1 51 43H45A9 9 0 0 1 36 34V30A9 9 0 0 1 45 21Z",
+  "M40 31.5L45 31.5L42.5 27Z", // left eye
+  "M51 31.5L56 31.5L53.5 27Z", // right eye
+  "M40 35H46L47.5 37.2L49 35H56Q54.5 40.5 48 40.5Q41.5 40.5 40 35Z", // grin with one tooth
+].join("");
+const STEM_PATH = "M47.5 22V17.5Q47.5 15 50 15H51.5V17Q50.5 17.5 50.5 19V22Z";
+
+function halloweenBody(p, { rowFill = null, solidFill = null } = {}) {
+  const rows = rowFill ?? `fill="${p.mod}"`;
+  return [
+    `<rect x="5" y="5" width="40" height="12" rx="6" ${rows}/>`,
+    `<rect x="5" y="47" width="40" height="12" rx="6" ${rows}/>`,
+    `<rect x="5" y="26" width="28" height="12" rx="6" ${rowFill ?? `fill="${p.tint}"`}/>`,
+    `<path d="${STEM_PATH}" fill="${solidFill ?? p.stem}"/>`,
+    `<path d="${PUMPKIN_PATH}" fill="${solidFill ?? p.hub}" fill-rule="evenodd"/>`,
+  ].join("");
+}
+
 /** 64-unit mark box. The bounding box (5..59) is centred on 32,32. */
-function markBody(p, { halo = true } = {}) {
+function markBody(p, { halo = true, halloween = false } = {}) {
+  if (halloween) return halloweenBody(p);
   return [
     halo
       ? `<rect x="34" y="18" width="28" height="28" rx="8" fill="${p.hub}" fill-opacity="${p.halo}"/>`
@@ -56,8 +89,8 @@ function markBody(p, { halo = true } = {}) {
 
 const A11Y = `role="img" aria-label="DevHub"><title>DevHub</title>`;
 
-function markSvg(p) {
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" ${A11Y}${markBody(p)}</svg>\n`;
+function markSvg(p, halloween = false) {
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" ${A11Y}${markBody(p, { halloween })}</svg>\n`;
 }
 
 /**
@@ -104,14 +137,18 @@ function faviconSchemeSvg() {
  * Full-bleed app tile (the OS applies its own mask). A soft lime glow sits behind
  * the hub. `markScale` is the 64-unit box as a fraction of the tile.
  */
-function tileSvg(size, markScale) {
-  const p = PALETTES.dark;
+function tileSvg(size, markScale, halloween = false) {
+  const p = halloween ? HALLOWEEN_PALETTES.dark : PALETTES.dark;
   const s = size * markScale;
   const u = s / 64;
   const hubX = size / 2 + (48 - 32) * u;
   const hubY = size / 2;
   const glowR = size * 0.42;
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" ${A11Y}<defs><radialGradient id="g" gradientUnits="userSpaceOnUse" cx="${hubX.toFixed(2)}" cy="${hubY.toFixed(2)}" r="${glowR.toFixed(2)}"><stop offset="0" stop-color="${p.hub}" stop-opacity="0.24"/><stop offset="1" stop-color="${p.hub}" stop-opacity="0"/></radialGradient></defs><rect width="${size}" height="${size}" fill="${p.bg}"/><rect width="${size}" height="${size}" fill="url(#g)"/><g transform="translate(${size / 2} ${size / 2}) scale(${u.toFixed(5)}) translate(-32 -32)">${markBody(p)}</g></svg>\n`;
+  if (halloween) {
+    // Flat tile: solid colour, no glow behind the pumpkin.
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" ${A11Y}<rect width="${size}" height="${size}" fill="${p.bg}"/><g transform="translate(${size / 2} ${size / 2}) scale(${u.toFixed(5)}) translate(-32 -32)">${markBody(p, { halloween })}</g></svg>\n`;
+  }
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" ${A11Y}<defs><radialGradient id="g" gradientUnits="userSpaceOnUse" cx="${hubX.toFixed(2)}" cy="${hubY.toFixed(2)}" r="${glowR.toFixed(2)}"><stop offset="0" stop-color="${p.hub}" stop-opacity="0.24"/><stop offset="1" stop-color="${p.hub}" stop-opacity="0"/></radialGradient></defs><rect width="${size}" height="${size}" fill="${p.bg}"/><rect width="${size}" height="${size}" fill="url(#g)"/><g transform="translate(${size / 2} ${size / 2}) scale(${u.toFixed(5)}) translate(-32 -32)">${markBody(p, { halloween })}</g></svg>\n`;
 }
 
 /** The mark alone on transparent, for small OS icon frames where a tile would shrink it. */
@@ -121,8 +158,11 @@ function bareSvg(size) {
 }
 
 /** Black plus alpha for the macOS menu bar. The hub is solid; the rows are softer. */
-function traySvg(size) {
+function traySvg(size, halloween = false) {
   const row = `fill="#000" fill-opacity="0.55"`;
+  if (halloween) {
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 64 64">${halloweenBody(null, { rowFill: row, solidFill: "#000" })}</svg>`;
+  }
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 64 64"><rect x="5" y="5" width="40" height="12" rx="6" ${row}/><rect x="5" y="47" width="40" height="12" rx="6" ${row}/><rect x="5" y="26" width="28" height="12" rx="6" ${row}/><rect x="37" y="21" width="22" height="22" rx="5" fill="#000"/></svg>`;
 }
 
@@ -142,8 +182,8 @@ async function gridPng(p, size) {
 const tileMarkScale = (size) => (size <= 64 ? 0.92 : 0.78);
 
 /** App tile PNG drawn at its own size. */
-function tilePng(size) {
-  return pngBuffer(tileSvg(size, tileMarkScale(size)));
+function tilePng(size, halloween = false) {
+  return pngBuffer(tileSvg(size, tileMarkScale(size), halloween));
 }
 
 function writeFile(dest, data) {
@@ -256,7 +296,28 @@ async function renderDesktop() {
   writeFile(path.join(tauriIcons, "icon.icns"), icnsBuffer(icns));
 }
 
+async function renderHalloween() {
+  for (const mode of ["dark", "light"]) {
+    writeFile(path.join(publicDir, "hollow", `brand-mark-${mode}.svg`), markSvg(HALLOWEEN_PALETTES[mode], true));
+  }
+  writeFile(path.join(publicDir, "hollow/icon-master.svg"), tileSvg(1024, tileMarkScale(1024), true));
+  if (process.argv.includes("--dashboard-only")) return;
+  const dest = path.join(tauriIcons, "halloween");
+  for (const [name, size] of [["32x32.png", 32], ["128x128.png", 128], ["128x128@2x.png", 256], ["icon.png", 512]]) {
+    writeFile(path.join(dest, name), await tilePng(size, true));
+  }
+  for (const [name, size] of [["trayTemplate.png", 22], ["trayTemplate@2x.png", 44]]) {
+    writeFile(path.join(dest, name), await pngBuffer(traySvg(size, true)));
+  }
+  const frames = [["icp4", 16], ["icp5", 32], ["icp6", 64], ["ic07", 128], ["ic08", 256], ["ic09", 512], ["ic10", 1024], ["ic11", 32], ["ic12", 64], ["ic13", 256], ["ic14", 512]];
+  writeFile(path.join(dest, "icon.icns"), icnsBuffer(await Promise.all(
+    frames.map(async ([type, size]) => ({ type, buffer: await tilePng(size, true) })),
+  )));
+}
+
 async function main() {
+  await renderHalloween();
+  if (process.argv.includes("--halloween-only")) return;
   await renderDashboard();
   if (process.argv.includes("--dashboard-only")) {
     process.stdout.write("[render-brand-icons] wrote dashboard rasters\n");

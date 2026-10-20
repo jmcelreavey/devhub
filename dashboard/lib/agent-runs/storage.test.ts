@@ -47,6 +47,7 @@ describe("durable agent history", () => {
     const run = create();
     run.spec.runtime = "paseo";
     run.spec.createdAt = 1;
+    run.status = { ...run.status, conversationId: "agent", messageId: "devhub-run" };
     expect(reconcileAgentRun(run).status.state).toBe("queued");
     run.status = { ...run.status, state: "running", pid: 2_000_000_000 };
     expect(reconcileAgentRun(run).status.state).toBe("running");

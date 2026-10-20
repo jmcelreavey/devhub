@@ -10,9 +10,9 @@ import { useSetupStatus } from "@/lib/hooks/use-setup-status";
 
 /**
  * Top-bar tab strip for merged destinations (2026-06 IA): when the current
- * route belongs to the Library (/notes, /docs, …) or System (/status, /logs,
- * …) families, show its sibling pages as tabs. Infrastructure destinations (Ops, Datadog)
- * are first-class sidebar items under the Infrastructure group — no top-bar strip. Gated
+ * route belongs to the Library (/notes, /docs, …) or Settings (/status, /logs,
+ * …) families, show its sibling pages as tabs. Tools destinations (Ops, Datadog)
+ * are first-class sidebar items under the Tools group — no top-bar strip. Gated
  * tabs only appear when their integration is configured.
  *
  * Both forms are always rendered: the segmented strip, and a one-button menu

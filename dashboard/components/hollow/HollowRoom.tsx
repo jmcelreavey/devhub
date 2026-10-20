@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import type { HollowRuntimePlan } from "@/lib/hollow-theme";
+import { hollowActivityPaused, observeHollowActivity } from "./hollow-activity";
 
 /** Stronger exposures are masked out of every card, control and text run. */
 export function HollowRoom({ plan }: { plan: HollowRuntimePlan }) {
@@ -19,7 +20,7 @@ export function HollowRoom({ plan }: { plan: HollowRuntimePlan }) {
       root?.classList.remove("is-rare", "is-rare-preview");
     };
     function arm() {
-      if (document.hidden) return;
+      if (hollowActivityPaused()) return;
       if (preview) { root?.classList.add("is-rare", "is-rare-preview"); return; }
       timer = window.setTimeout(() => {
         root?.classList.add("is-rare");
@@ -28,8 +29,8 @@ export function HollowRoom({ plan }: { plan: HollowRuntimePlan }) {
     }
     const visibility = () => { clear(); arm(); };
     arm();
-    document.addEventListener("visibilitychange", visibility);
-    return () => { clear(); document.removeEventListener("visibilitychange", visibility); };
+    const stopActivity = observeHollowActivity(visibility);
+    return () => { clear(); stopActivity(); };
   }, [plan.rareEvents]);
 
   useEffect(() => {
@@ -37,7 +38,7 @@ export function HollowRoom({ plan }: { plan: HollowRuntimePlan }) {
     const animations = new Map<HTMLDivElement, Animation>();
     let next = 0;
     function leave(event: PointerEvent) {
-      if (document.hidden || !(event.target instanceof Element)) return;
+      if (hollowActivityPaused() || !(event.target instanceof Element)) return;
       const card = event.target.closest(".hub-card, .card, .task-row, [role='row']");
       if (!card || card.closest(".cm-editor, .xterm, .monaco-editor, .bn-root")) return;
       if (event.relatedTarget instanceof Node && card.contains(event.relatedTarget)) return;
@@ -50,17 +51,17 @@ export function HollowRoom({ plan }: { plan: HollowRuntimePlan }) {
         { opacity: .05, transform: transform + " scale(.75)" },
         { opacity: .5, offset: .18, transform: transform + " scale(1)" },
         { opacity: 0, transform: transform + " translateY(-18px) scale(1.35)" },
-      ], { duration: 600, easing: "ease-out" });
+      ], { duration: 300, easing: "cubic-bezier(.22,1,.36,1)" });
       animations.set(node, animation);
     }
     const stop = () => { animations.forEach(animation => animation.cancel()); animations.clear(); };
     window.addEventListener("pointerout", leave, { passive: true });
-    document.addEventListener("visibilitychange", stop);
+    const stopActivity = observeHollowActivity(stop);
     document.addEventListener("scroll", stop, true);
     return () => {
       stop();
       window.removeEventListener("pointerout", leave);
-      document.removeEventListener("visibilitychange", stop);
+      stopActivity();
       document.removeEventListener("scroll", stop, true);
     };
   }, [plan.cursorTrail]);

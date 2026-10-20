@@ -75,6 +75,43 @@ describe("PrRow", () => {
     vi.unstubAllGlobals();
   });
 
+  it("opens pull-request actions from the CI pill without opening the row menu", () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false }));
+    render(
+      <PrRow
+        row={{ ...row, checks: "failing", checkCounts: { passed: 1, failed: 2, pending: 0 } }}
+        kind="reviews"
+        density="compact"
+      />,
+    );
+    fireEvent.contextMenu(screen.getByLabelText("checks failing"), { clientX: 12, clientY: 12 });
+    const menu = document.querySelector('[role="menu"]:not([hidden])');
+    expect(menu?.textContent).toMatch(/Open failing checks/);
+    expect(menu?.textContent).toMatch(/Open PR in GitHub/);
+    expect(menu?.textContent).not.toMatch(/Review with agent/);
+    vi.unstubAllGlobals();
+  });
+
+  it("opens pull-request actions from Shift+F10 on an approved pill", () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false }));
+    render(<PrRow row={{ ...row, approved: true }} kind="authored" density="compact" />);
+    fireEvent.keyDown(screen.getByLabelText("Approved"), { key: "F10", shiftKey: true });
+    const menu = document.querySelector('[role="menu"]:not([hidden])');
+    expect(menu?.textContent).toMatch(/Open checks/);
+    expect(menu?.textContent).not.toMatch(/Open failing checks/);
+    vi.unstubAllGlobals();
+  });
+
+  it("shows a draft pill when the pull request is a draft", () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false }));
+    render(<PrRow row={{ ...row, draft: true }} kind="authored" density="compact" />);
+    const draft = screen.getByText("Draft");
+    expect(draft.getAttribute("data-pr-status-pill")).toBe("");
+    fireEvent.keyDown(draft, { key: "ContextMenu" });
+    expect(document.querySelector('[role="menu"]:not([hidden])')?.textContent).toMatch(/Copy PR link/);
+    vi.unstubAllGlobals();
+  });
+
   it("opens the row menu from a right-click on the PR title", () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false }));
     render(<PrRow row={row} kind="reviews" density="compact" />);
@@ -85,6 +122,15 @@ describe("PrRow", () => {
     expect(menu).toBeTruthy();
     expect(menu?.textContent).toMatch(/Review with agent/i);
     expect(menu?.textContent).toMatch(/Investigate pipeline/i);
+    expect([...menu!.querySelectorAll(".context-menu-group-label")].slice(0, 4).map((node) => node.textContent)).toEqual([
+      "Review", "Open", "Copy and share", "Visibility",
+    ]);
+    const actions = [...menu!.querySelectorAll('[role="menuitem"]')];
+    expect(actions.slice(0, 8).map((node) => node.querySelector(".context-menu-label")?.textContent)).toEqual([
+      "Review with agent", "Investigate pipeline", "Open in Cursor", "Open on GitHub",
+      "Open note", "Copy PR URL", "Copy Jira URL", "Skip until updated",
+    ]);
+    for (const action of actions) expect(action.querySelector(".context-menu-icon svg")).not.toBeNull();
     const host = document.querySelector("[data-context-menu-host][data-context-menu='open']");
     expect(host?.classList.contains("pr-row")).toBe(true);
     vi.unstubAllGlobals();

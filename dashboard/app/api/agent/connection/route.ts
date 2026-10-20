@@ -13,7 +13,7 @@ async function connection() {
     return NextResponse.json({
       connected: true, origin: paseoWebOrigin(), defaultCwd: getCheckoutRoot() ?? getRepoRoot(),
       defaultAgentId: defaultPaseoProvider(providers) ?? "",
-      agents: providers.map((p) => ({ id: p.id, name: p.label, ready: p.ready, models: p.models, ...(p.error ? { error: p.error } : {}) })),
+      agents: providers.map((p) => ({ id: p.id, name: p.label, ready: p.ready, models: p.models, ...(p.thinking ? { thinking: p.thinking } : {}), ...(p.error ? { error: p.error } : {}) })),
     }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     const detail = error instanceof Error && "detail" in error && typeof error.detail === "string" ? error.detail : null;

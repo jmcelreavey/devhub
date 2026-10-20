@@ -1,3 +1,4 @@
+import { seedSummaryFromJira } from "@/lib/tasks/seed-jira-summary";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -20,6 +21,8 @@ import {
 } from "@shared/tasks/store.ts";
 import { taskMatchesId } from "@shared/tasks/view.ts";
 import { createTaskNoteResolver } from "./task-notes";
+import { listRepoNames } from "@/lib/repos";
+import { resolveTaskInput } from "./resolve-task-input";
 import type { Task } from "@/lib/tasks/types";
 
 export type { Task } from "@/lib/tasks/types";
@@ -74,7 +77,7 @@ export function taskMigrationNotice(): string {
 function present(task: Task, date: string): Task {
   const notePath = createTaskNoteResolver()(task, date).notePath;
   if (task.jiraKey || !task.links?.some((link) => link.kind === "jira")) return { ...task, notePath };
-  const normalized = normalizeTaskLinkState(task.text, task.jiraKey, task.links);
+  const normalized = normalizeTaskLinkState(task.text, task.jiraKey, task.links, task.parentKey);
   return { ...task, notePath, text: normalized.text, jiraKey: normalized.jiraKey, links: normalized.links };
 }
 
@@ -94,10 +97,14 @@ export async function addTask(
   due?: string,
   links?: Task["links"],
   stage?: Task["stage"],
+  parentKey?: string,
 ): Promise<Task> {
   await ensureTasksMigrated();
   const startDate = date ?? todayISO();
-  const task = await withTaskLock(tasksDir(), () => createTask(tasksDir(), { text, startDate, due, links, stage }));
+  const input = resolveTaskInput(text, links, text.includes("@") ? listRepoNames() : []);
+  const task = await withTaskLock(tasksDir(), () => createTask(tasksDir(), { ...input, startDate, due, stage, parentKey }));
+  // A ticket-backed task gets the ticket's description as its summary; the response doesn't wait for Jira.
+  if (task.jiraKey) void seedSummaryFromJira(task, startDate);
   return present(task, startDate);
 }
 
@@ -110,6 +117,18 @@ export async function toggleTask(taskId: string, date?: string): Promise<Task | 
   if (!current) return null;
   const task = await withTaskLock(tasksDir(), () => patchTask(tasksDir(), id, { status: current.done ? "reactivate" : "complete" }));
   return task ? present(task, target) : null;
+}
+
+export async function setTaskCompletion(taskId: string, completed: boolean, date?: string): Promise<Task | null> {
+  await ensureTasksMigrated();
+  const id = canonicalId(taskId);
+  if (!id) return null;
+  const task = await withTaskLock(tasksDir(), () => {
+    const current = findTask(tasksDir(), id);
+    if (!current || current.done === completed) return current;
+    return patchTask(tasksDir(), id, { status: completed ? "complete" : "reactivate" });
+  });
+  return task ? present(task, date ?? todayISO()) : null;
 }
 
 export async function abandonTask(taskId: string, reason?: string, date?: string): Promise<Task | null> {
@@ -146,15 +165,20 @@ export async function updateTask(
   const target = date ?? todayISO();
   const id = canonicalId(taskId);
   if (!id) return null;
-  const existing = findTask(tasksDir(), id);
-  if (!existing) return null;
-  const next = { ...patch };
-  if (patch.links !== undefined) {
-    const normalized = normalizeTaskLinkState(patch.text ?? existing.text, existing.jiraKey, patch.links);
-    next.text = normalized.text;
-    next.links = normalized.links?.length ? normalized.links : [];
-  }
-  const task = await withTaskLock(tasksDir(), () => patchTask(tasksDir(), id, next));
+  const repoNames = patch.text?.includes("@") ? listRepoNames() : [];
+  const task = await withTaskLock(tasksDir(), () => {
+    const existing = findTask(tasksDir(), id);
+    if (!existing) return null;
+    const next = { ...patch };
+    if (patch.text !== undefined) {
+      Object.assign(next, resolveTaskInput(patch.text, patch.links ?? existing.links, repoNames));
+    } else if (patch.links !== undefined) {
+      const normalized = normalizeTaskLinkState(existing.text, existing.jiraKey, patch.links, existing.parentKey);
+      next.text = normalized.text;
+      next.links = normalized.links?.length ? normalized.links : [];
+    }
+    return patchTask(tasksDir(), id, next);
+  });
   return task ? present(task, target) : null;
 }
 

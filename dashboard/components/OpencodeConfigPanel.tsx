@@ -4,6 +4,8 @@ import { useCallback, useEffect, useState } from "react";
 import { AlertTriangle, CheckCircle2, Edit3, Save, TerminalSquare, X } from "lucide-react";
 import { useToast } from "@/lib/hooks/use-toast";
 import { SyncButton } from "@/components/runs/SyncButton";
+import { EffortSelect } from "@/components/agents/EffortSelect";
+import { effortInModel, effortOptionsForModel, resolveCursorModelEffort } from "@/lib/ai/effort";
 import { SkeletonRows } from "@/components/ui/SkeletonRows";
 import {
   DEFAULT_CURSOR_AGENT_MODEL,
@@ -54,6 +56,7 @@ function AgentCliCard() {
   const [cursorModel, setCursorModel] = useState("");
   const [saving, setSaving] = useState(false);
   const toast = useToast();
+  const cursorModels = config?.models?.["cursor-cli"] ?? [];
 
   useEffect(() => {
     void getAgentCliConfig(true).then((c) => {
@@ -161,17 +164,40 @@ function AgentCliCard() {
                 />
               </label>
             ) : provider === "cursor-cli" ? (
-              <label className="text-xs flex items-center gap-1 text-text-muted">
-                Model
-                <input
-                  type="text"
-                  value={cursorModel}
-                  placeholder={DEFAULT_CURSOR_AGENT_MODEL}
-                  onChange={(e) => setCursorModel(e.target.value)}
-                  spellCheck={false}
-                  style={MODEL_INPUT_STYLE}
-                />
-              </label>
+              <>
+                <label className="text-xs flex items-center gap-1 text-text-muted">
+                  Model
+                  <input
+                    type="text"
+                    value={cursorModel}
+                    placeholder={DEFAULT_CURSOR_AGENT_MODEL}
+                    onChange={(e) => setCursorModel(e.target.value)}
+                    spellCheck={false}
+                    style={MODEL_INPUT_STYLE}
+                  />
+                </label>
+                {cursorModel.trim() && effortOptionsForModel({
+                  provider: "cursor",
+                  model: cursorModel,
+                  availableModels: cursorModels,
+                }) && (
+                  <label className="text-xs flex items-center gap-1 text-text-muted">
+                    Effort
+                    <EffortSelect
+                      labelled={false}
+                      provider="cursor"
+                      model={cursorModel}
+                      availableModels={cursorModels}
+                      value={effortInModel(cursorModel)}
+                      className=""
+                      style={MODEL_INPUT_STYLE}
+                      onChange={(effort) => {
+                        setCursorModel(resolveCursorModelEffort(cursorModel, effort, cursorModels));
+                      }}
+                    />
+                  </label>
+                )}
+              </>
             ) : null}
           </div>
           <p className="text-xs" style={{ color: "var(--text-subtle)", lineHeight: 1.5, marginTop: "6px" }}>

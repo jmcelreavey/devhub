@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { generateAiText } from "@/lib/ai/generate";
+import { aiProviderLabel, detectAiProviderAvailability, type AiProviderId } from "@/lib/ai/preference";
 import { getWritingVoicePrompt } from "@/lib/ai/writing-voice";
 import type { PlanWorkItem } from "./create-tasks-from";
 
@@ -13,10 +14,17 @@ const titlesSchema = z.object({
   })).max(100),
 });
 
+export interface WorkItemTitleOptions {
+  provider?: AiProviderId;
+  model?: string;
+  effort?: string;
+}
+
 export async function suggestWorkItemTitles(
   noteTitle: string,
   workItems: PlanWorkItem[],
   signal?: AbortSignal,
+  options: WorkItemTitleOptions = {},
 ): Promise<PlanWorkItem[]> {
   if (workItems.length === 0) return [];
   const source = JSON.stringify({ noteTitle, workItems });
@@ -24,7 +32,15 @@ export async function suggestWorkItemTitles(
     throw new Error("This note is too large for automatic title suggestions.");
   }
 
+  // A model chosen for one provider must never be sent to a fallback provider.
+  if (options.provider && !detectAiProviderAvailability()[options.provider]) {
+    throw new Error(`${aiProviderLabel(options.provider)} is not available. Choose another provider for title suggestions.`);
+  }
+
   const result = await generateAiText({
+    prefer: options.provider,
+    model: options.model,
+    effort: options.effort,
     activity: { action: "Suggest ticket titles" },
     system: [
       getWritingVoicePrompt(),

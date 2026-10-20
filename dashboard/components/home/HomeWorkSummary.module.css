@@ -1,0 +1,58 @@
+.home { max-width: 1280px; padding: 24px 32px 48px; }
+.intro { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
+.date { color: var(--text-muted); font-size: 12px; line-height: 1.5; min-height: 18px; margin-bottom: 8px; }
+.intro h1 { color: var(--text); font-size: 28px; font-weight: 600; line-height: 1.25; letter-spacing: -0.025em; text-wrap: balance; }
+.meta { display: flex; flex-direction: column; align-items: flex-end; gap: 10px; color: var(--text-muted); font-size: 11px; }
+.meta a, .context > a, .sectionHead > a { color: var(--text-muted); text-decoration: none; text-underline-offset: 3px; }
+.meta a:hover, .context > a:hover, .sectionHead > a:hover { color: var(--text); text-decoration: underline; }
+.context { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 24px; padding: 16px 0; border-bottom: 1px solid var(--border-muted); font-size: 12px; }
+.meeting { display: inline-flex; align-items: center; gap: 8px; min-width: 0; margin-right: auto; }
+.meeting svg { flex-shrink: 0; }
+.meeting span { overflow-wrap: anywhere; }
+.section { min-width: 0; }
+.sectionHead { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.sectionHead h2 { color: var(--text); font-size: 14px; font-weight: 600; }
+.count { color: var(--text-muted); background: var(--bg-elevated); border-radius: var(--radius-sm); min-width: 24px; padding: 1px 6px; text-align: center; font-size: 11px; font-variant-numeric: tabular-nums; }
+.sectionHead > a { margin-left: auto; font-size: 11px; }
+.list { min-width: 0; }
+.list:empty { display: none; }
+.list > * { padding: 0; }
+.list > * + * { border-top: 1px solid var(--border-muted); }
+.list > article { padding: 10px 0; }
+.list :global(.btn) { min-height: 30px; font-size: 12px; }
+.empty { color: var(--text-muted); font-size: 12px; line-height: 1.6; padding: 8px 0; }
+.dayLinks { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 32px; margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--border-muted); }
+.previewToggle { display: inline-flex; align-items: center; gap: 6px; margin: 12px 0 8px; padding: 4px 0; min-height: 32px; border: 0; background: transparent; font-size: 12px; color: var(--text-muted); cursor: pointer; }
+.previewToggle:hover { color: var(--text); text-decoration: underline; text-underline-offset: 3px; }
+.compactList { list-style: none; padding: 0; margin: 0; }
+.compactList li { display: flex; align-items: center; gap: 16px; padding: 10px 0; }
+.compactList li + li { border-top: 1px solid var(--border-muted); }
+.compactTitle { flex: 1; min-width: 0; color: var(--text); text-decoration: none; font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
+.compactTitle:hover span { text-decoration: underline; text-underline-offset: 3px; }
+.compactTitle small { display: block; color: var(--text-muted); font-size: 11px; }
+.prTabs { display: flex; gap: 4px; }
+.prTabs button { border: 0; background: transparent; color: var(--text-muted); font-size: 12px; padding: 6px 8px; border-radius: var(--radius-sm); cursor: pointer; }
+.prTabs button[aria-pressed="true"] { background: var(--bg-elevated); color: var(--text); }
+.prTabs button:hover { color: var(--text); }
+.tasks { margin-top: 32px; }
+.taskFilters { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-bottom: 12px; }
+.taskCount { color: var(--text-muted); font-size: 11px; }
+.taskEdit { display: flex; flex-wrap: wrap; gap: 8px; }
+.taskEdit input { flex: 1; min-width: 0; }
+.taskContext { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px; color: var(--text-muted); font-size: 11px; line-height: 1.5; }
+.taskContext > a { color: inherit; text-decoration: none; }
+.taskContext > a:hover { color: var(--text); text-decoration: underline; text-underline-offset: 3px; }
+@media (max-width: 1100px) {
+  .dayLinks { grid-template-columns: minmax(0, 1fr); gap: 24px; }
+}
+@media (max-width: 767px) {
+  .home { padding: 24px 16px 40px; }
+  .intro { align-items: flex-start; flex-wrap: wrap; gap: 12px; margin-bottom: 20px; }
+  .intro h1 { font-size: 25px; }
+  .meta { flex-direction: row; align-items: center; justify-content: space-between; width: 100%; }
+  .context { gap: 12px 20px; padding-bottom: 20px; }
+  .meeting { flex-basis: 100%; }
+
+  .list > * { padding-right: 0; padding-left: 0; }
+  .sectionHead { flex-wrap: wrap; }
+}

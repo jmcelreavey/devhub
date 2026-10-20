@@ -24,6 +24,7 @@ interface AgentSpec {
   prompt: string;
   cwd: string;
   model?: string;
+  effort?: string;
   worktree?: boolean;
   maxTurns?: number;
 }
@@ -133,6 +134,7 @@ const AgentInput = z
     prompt: z.string().min(1).describe("Self-contained task prompt the agent runs on every trigger"),
     cwd: z.string().min(1).describe("Repo directory the agent works in (absolute or ~/...)"),
     model: z.string().optional(),
+    effort: z.string().max(32).optional().describe("Reasoning effort. Omit for the provider default."),
     worktree: z.boolean().optional().describe("Isolated git worktree per run (default true)"),
     maxTurns: z.number().int().min(1).max(500).optional(),
   })

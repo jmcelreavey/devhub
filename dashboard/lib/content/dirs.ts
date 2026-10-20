@@ -1,6 +1,7 @@
 import path from "node:path";
 import { resolveContentDir as resolveSharedContentDir } from "../../../shared/vault/content-dirs.ts";
 import { resolveActiveTasksDir } from "../../../shared/vault/task-profiles.ts";
+import { scopedTaskDirectory } from "@/lib/tasks/profile-context";
 import {
   getAppDataDir,
   getCheckoutRoot,
@@ -92,7 +93,8 @@ export function getTasksDir(): string {
  * data; `getTasksDir()` is the root that holds every profile.
  */
 export function getActiveTasksDir(): string {
-  return resolveActiveTasksDir(getTasksDir());
+  const root = getTasksDir();
+  return scopedTaskDirectory(root) ?? resolveActiveTasksDir(root);
 }
 
 /** Checklist collections; defaults to `REPO_ROOT/collections` when `COLLECTIONS_DIR` is unset. */

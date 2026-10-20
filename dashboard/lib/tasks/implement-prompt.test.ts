@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildTaskImplementPrompt, taskImplementPlanUrl } from "./implement-prompt";
+import { buildTaskPlanPrompt, buildTaskImplementPrompt, taskImplementPlanUrl } from "./implement-prompt";
 
 describe("buildTaskImplementPrompt", () => {
   it("points the skill at the encoded task plan and post-implementation gates", () => {
@@ -18,7 +18,22 @@ describe("buildTaskImplementPrompt", () => {
     expect(prompt).not.toContain("tags_lookup");
     expect(prompt).toContain("Do not create a clone or worktree by default");
     expect(prompt).toContain("ask before using a worktree");
-    expect(prompt).toContain("Never commit without asking");
+    expect(prompt).toContain("Never commit without explicit approval");
+  });
+
+  it("records explicit chat approval without requiring a second UI decision", () => {
+    const prompt = buildTaskImplementPrompt({ origin: "http://localhost:1337", taskId: "task-1", date: "2026-10-19" });
+
+    expect(prompt).toContain("Reuse approval I have already given in this conversation");
+    expect(prompt).toContain("An explicit request to create the PR includes committing and pushing the reviewed changes as needed");
+    expect(prompt).toContain("Jira transitions and task completion need their own explicit approval");
+    expect(prompt).toContain("record the user's instruction in the task note");
+    expect(prompt).toContain("POST action: decide with proposalId and approve: true");
+    expect(prompt).toContain("Never approve an action the user has not authorised");
+    expect(prompt).toContain("changed scope needs fresh approval");
+    expect(prompt).toContain("POST action: begin");
+    expect(prompt).toContain("action: receipt");
+    expect(prompt).not.toContain("Wait for the human decision in DevHub");
   });
 
   it("carries the picked repo on the plan URL so the plan route starts there", () => {
@@ -46,4 +61,19 @@ describe("buildTaskImplementPrompt", () => {
     expect(prompt).toContain("Working tree: /repos/app-poc");
     expect(prompt).toContain("Jira ticket: PTF-4783");
   });
+});
+
+describe("task note maintenance", () => {
+  it("tells implement agents to maintain the note through task_note_update", () => {
+    const prompt = buildTaskImplementPrompt({ origin: "http://localhost:1337", taskId: "t1", date: "2026-10-16" } as Parameters<typeof buildTaskImplementPrompt>[0]);
+    expect(prompt).toContain("task_note_update");
+    expect(prompt).toContain("/api/tasks/note/sections");
+  });
+});
+
+it("tells a paused Auto planner to leave approval to the user", () => {
+  const prompt = buildTaskPlanPrompt({ origin: "http://fixture", taskId: "t", date: "2026-10-19", pauseAfterPlan: true });
+  expect(prompt).toContain("Pause after planning is on");
+  expect(prompt).toContain("never approve your own plan");
+  expect(prompt).toContain("Next step: Approve plan or Revise");
 });

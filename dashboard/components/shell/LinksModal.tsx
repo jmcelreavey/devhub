@@ -1,5 +1,5 @@
 "use client";
-import { integrationFetch } from "@/lib/integrations/client-fetch";
+import { useJiraTransition } from "@/lib/hooks/use-jira-transition";
 
 import { useId, useState, type MouseEvent } from "react";
 import { useRouter } from "next/navigation";
@@ -8,6 +8,7 @@ import { ModalShell } from "@/components/shell/ModalShell";
 import { KIND_ICON } from "@/components/EntityLinkChips";
 import { ContextMenu, useContextMenu } from "@/components/shell/ContextMenu";
 import { buildEntityRefMenuGroups } from "@/lib/entity-ref-menu";
+import { openInBrowser } from "@/lib/desktop/bridge";
 import { JiraTransitionModal } from "@/components/jira/JiraTransitionModal";
 import { copyTextAndToast } from "@/lib/pr-slack";
 import { useToast } from "@/lib/hooks/use-toast";
@@ -45,7 +46,7 @@ export function groupLinkRefs(refs: readonly EntityRef[]): EntityRef[] {
 function goTo(router: ReturnType<typeof useRouter>, dest: string | null | undefined) {
   if (!dest) return;
   if (/^https?:\/\//i.test(dest)) {
-    window.open(dest, "_blank", "noopener,noreferrer");
+    void openInBrowser(dest);
   } else {
     router.push(dest);
   }
@@ -87,6 +88,7 @@ export function LinksModal({
 }) {
   const router = useRouter();
   const toast = useToast();
+  const move = useJiraTransition();
   const menu = useContextMenu<EntityRef>();
   const [jiraStateKey, setJiraStateKey] = useState<string | null>(null);
   const HeaderIcon = kind ? (KIND_ICON[kind] ?? Link2) : Link2;
@@ -225,22 +227,10 @@ export function LinksModal({
         title="Update Jira status"
         skipLabel="Cancel"
         onCancel={() => setJiraStateKey(null)}
-        onConfirm={async (transitionId) => {
+        onConfirm={(transitionId, to) => {
           const key = jiraStateKey;
           setJiraStateKey(null);
-          if (!transitionId || !key) return;
-          try {
-            const res = await integrationFetch(`/api/jira/ticket/${key}/transition`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ transitionId }),
-            });
-            if (!res) return;
-            if (!res.ok) throw new Error("Transition failed");
-            toast.success(`Updated ${key}`);
-          } catch {
-            toast.error(`Couldn't transition ${key}`);
-          }
+          if (transitionId && key) void move(key, { transitionId }, { to });
         }}
       />
     </ModalShell>

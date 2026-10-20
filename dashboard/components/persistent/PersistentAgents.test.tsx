@@ -154,4 +154,20 @@ describe("persistent Agents", () => {
     const frame = await screen.findByTitle("Agents — Paseo");
     await waitFor(() => expect(frame.getAttribute("src")).toBe("http://localhost:6767/h/srv/workspace/wks?open=agent%3Afirst"));
   });
+  it("shows start progress until the chat exists", async () => {
+    route.query = "run=run-new-12345678";
+    let opens = 0;
+    vi.mocked(fetch).mockImplementation(async (url: string | URL | Request) => {
+      const href = String(url);
+      if (href.includes("/api/paseo/open")) {
+        opens += 1;
+        if (opens === 1) return { ok: false, status: 404, json: async () => ({ error: "Creating an isolated worktree…", starting: true, phase: "worktree" }) } as Response;
+        return { ok: true, status: 200, json: async () => ({ url: "http://localhost:6767/h/srv/workspace/wks?open=agent%3Aready" }) } as Response;
+      }
+      return { ok: true, status: 200, json: async () => ({ connected: true, origin: "http://127.0.0.1:6767" }) } as Response;
+    });
+    render(<PersistentAgents />);
+    expect(await screen.findByRole("status")).toHaveTextContent("Creating an isolated worktree");
+    await waitFor(() => expect(screen.getByTitle("Agents — Paseo").getAttribute("src")).toContain("agent%3Aready"), { timeout: 2000 });
+  });
 });

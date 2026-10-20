@@ -182,6 +182,31 @@ describe("idle worktree maintenance", () => {
     mocks.taskRuns.mockReturnValue([{ runId: "run-abcdef-12345678", branch: "feature", status: "done", updatedAt: "2026-09-24" }]);
     expect((await cleanupWorktrees(vi.fn())).removed).toEqual([]);
   });
+  // OPUS-REVIEW-2026-10-16 M3: the orchestrator dispatches its plan run with `defer: true`, so the
+  // worktree exists before Paseo's background start finishes. The AgentRun's `activity.taskId` is
+  // written synchronously at creation (dispatch.ts), independent of that background work, so the
+  // worktree is linked to its task from the start — the same "task still active" protection as any
+  // other agent worktree, with no orchestrator-specific gap.
+  it("keeps an orchestrator plan worktree open while its task is open, even after the plan run itself finishes", async () => {
+    mocks.runs.mockReturnValue([{
+      spec: { id: "run-plan", cwd: root, worktree: { path: linked }, title: "Plan", activity: { source: "interactive", action: "plan", taskId: "task-1", taskDate: "2026-09-24" } },
+      status: { state: "succeeded", updatedAt: 0 },
+    }]);
+    mocks.tasks.mockReturnValue([{ date: "2026-09-24", tasks: [{ id: "task-1", text: "Plan this", done: false, createdAt: "2026-09-24", startDate: "2026-09-24", rank: "1" }] }]);
+    age(8);
+    const result = await cleanupWorktrees(vi.fn());
+    expect(result.errors).toEqual([]);
+    expect(result.removed).toEqual([]);
+    expect(fs.existsSync(linked)).toBe(true);
+  });
+  it("removes an orchestrator plan worktree once its task is closed, same as any other finished task", async () => {
+    mocks.runs.mockReturnValue([{
+      spec: { id: "run-plan", cwd: root, worktree: { path: linked }, title: "Plan", activity: { source: "interactive", action: "plan", taskId: "task-1", taskDate: "2026-09-24" } },
+      status: { state: "succeeded", updatedAt: 0 },
+    }]);
+    mocks.tasks.mockReturnValue([{ date: "2026-09-24", tasks: [{ id: "task-1", text: "Plan this", done: true, createdAt: "2026-09-24", startDate: "2026-09-24", rank: "1" }] }]);
+    expect((await cleanupWorktrees(vi.fn())).removed).toEqual([linked]);
+  });
   it.each(["paseo", "processes", "partial-processes", "origin", "git-operation"])("fails closed for unavailable %s evidence", async (kind) => {
     if (kind === "paseo") mocks.paseo.mockRejectedValue(new Error("Paseo down"));
     if (kind === "processes") mocks.processes.mockRejectedValue(new Error("lsof failed"));

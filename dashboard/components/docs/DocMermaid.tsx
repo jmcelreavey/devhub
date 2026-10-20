@@ -31,6 +31,7 @@ export function DocMermaid({ code }: { code: string }) {
         const mermaid = (await import("mermaid")).default;
         mermaid.initialize({
           startOnLoad: false,
+          securityLevel: "strict",
           theme: "base",
           themeVariables: readPaletteVariables(mode === "dark"),
         });

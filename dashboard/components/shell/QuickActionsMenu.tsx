@@ -25,6 +25,7 @@ function moveFocus(el: HTMLElement | null | undefined, visible = false) {
 export interface QuickMenuAction {
   id: string;
   label: string;
+  section?: string;
   icon: ReactNode;
   /** Window event the matching panel/dock listens for. */
   event?: string;
@@ -189,50 +190,56 @@ export function QuickActionsMenu({
                   !rootRef.current?.contains(event.relatedTarget)) setOpen(false);
             }}
           >
-            {actions.map((action) => {
-              const content = (
-                <>
-                  <span className="launch-menu-icon">{action.icon}</span>
-                  <span className="launch-menu-copy">
-                    <span className="launch-menu-label">{action.label}</span>
-                  </span>
-                  {action.shortcut && (
-                    <kbd className="launch-menu-kbd" aria-hidden>
-                      {action.shortcut}
-                    </kbd>
-                  )}
-                </>
-              );
-              if (action.href) {
-                return (
-                  <Link
-                    key={action.id}
-                    href={action.href}
-                    className="launch-menu-item"
-                    role="menuitem"
-                    tabIndex={-1}
-                    onClick={() => close(false)}
-                  >
-                    {content}
-                  </Link>
-                );
-              }
-              return (
-                <button
-                  key={action.id}
-                  type="button"
-                  className="launch-menu-item"
-                  role="menuitem"
-                  tabIndex={-1}
-                  onClick={(event) => {
-                    close(true, event.detail === 0);
-                    if (action.event) window.dispatchEvent(new CustomEvent(action.event));
-                  }}
-                >
-                  {content}
-                </button>
-              );
-            })}
+            {[...new Set(actions.map((action) => action.section))].map((section, index) => (
+              <div key={section ?? "actions"} className="context-menu-group">
+                {index > 0 && <div className="context-menu-divider" role="separator" />}
+                {section && <div className="context-menu-group-label">{section}</div>}
+                {actions.filter((action) => action.section === section).map((action) => {
+                  const content = (
+                    <>
+                      <span className="launch-menu-icon">{action.icon}</span>
+                      <span className="launch-menu-copy">
+                        <span className="launch-menu-label">{action.label}</span>
+                      </span>
+                      {action.shortcut && (
+                        <kbd className="launch-menu-kbd" aria-hidden>
+                          {action.shortcut}
+                        </kbd>
+                      )}
+                    </>
+                  );
+                  if (action.href) {
+                    return (
+                      <Link
+                        key={action.id}
+                        href={action.href}
+                        className="launch-menu-item"
+                        role="menuitem"
+                        tabIndex={-1}
+                        onClick={() => close(false)}
+                      >
+                        {content}
+                      </Link>
+                    );
+                  }
+                  return (
+                    <button
+                      key={action.id}
+                      type="button"
+                      className="launch-menu-item"
+                      role="menuitem"
+                      tabIndex={-1}
+                      onClick={(event) => {
+                        close(true, event.detail === 0);
+                        if (action.event) window.dispatchEvent(new CustomEvent(action.event));
+                      }}
+                    >
+                      {content}
+                    </button>
+                  );
+                })}
+              </div>
+            ))}
           </div>,
           document.body,
         )}

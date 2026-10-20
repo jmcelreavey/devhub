@@ -1,7 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import Link from "next/link";
+import { ArrowRight, ChevronLeft, ChevronRight } from "lucide-react";
 import { TaskItem } from "@/components/tasks/TaskList";
 import type { Task } from "@/lib/tasks/types";
 import { FetchError, InlineSearch, SkeletonRows } from "@/components";
@@ -9,6 +10,11 @@ import { paletteCommandScore } from "@/lib/command-palette-score";
 import { useToast } from "@/lib/hooks/use-toast";
 import { useLive } from "@/lib/hooks/use-fetch";
 import { BootScreen, useBootGate } from "@/components/today/TodayBootScreen";
+import { taskMatchesWorkFilters } from "@/lib/storyboard/view-state";
+import type { BoardCard, BoardFilters } from "@/lib/storyboard/notes-board-shared";
+
+const NO_FILTERS: BoardFilters = {};
+const NO_CARDS: readonly BoardCard[] = [];
 
 const PAGE_SIZE = 50;
 const FILTERS = ["all", "open", "done", "abandoned", "moved"] as const;
@@ -153,13 +159,26 @@ function TaskRow({
   );
 }
 
-export default function TasksPage() {
-  const [query, setQuery] = useState("");
+export default function TasksPage({ embedded = false, query: sharedQuery, filters = NO_FILTERS, cards = NO_CARDS, date, attentionIds }: {
+  embedded?: boolean;
+  query?: string;
+  filters?: BoardFilters;
+  cards?: readonly BoardCard[];
+  date?: string;
+  attentionIds?: ReadonlySet<string>;
+} = {}) {
+  const [localQuery, setQuery] = useState("");
+  const query = sharedQuery ?? localQuery;
   const [filter, setFilter] = useState<StatusFilter>("all");
-  const [page, setPage] = useState(1);
+  const [pagination, setPagination] = useState({ page: 1, query });
+  const page = pagination.query === query ? pagination.page : 1;
+  const setPage = (next: number | ((current: number) => number)) => setPagination((current) => ({ query, page: typeof next === "function" ? next(current.query === query ? current.page : 1) : next }));
   const { data, error, isLoading, mutate } = useLive<TaskDay[]>("/api/tasks/history?includeTasks=1");
   const boot = useBootGate(data !== undefined || !!error);
   const toast = useToast();
+  const Heading = embedded ? "h2" : "h1";
+  const byTask = useMemo(() => new Map(cards.map((card) => [card.taskId, card])), [cards]);
+  const noteTags = useLive<{ tags: Record<string, string[]> }>(filters.tag || query.includes("#") ? "/api/tasks/note-tags" : null);
 
   const allRecords = useMemo(() => {
     return (data ?? [])
@@ -185,13 +204,14 @@ export default function TasksPage() {
     const q = query.trim();
     return allRecords
       .filter((record) => filter === "all" || record.status === filter)
+      .filter((record) => (!date || record.date === date) && (!attentionIds || attentionIds.has(record.task.id)) && taskMatchesWorkFilters(record.task, filters, byTask.get(record.task.id), noteTags.data?.tags))
       .map((record) => ({
         ...record,
-        score: q ? paletteCommandScore(q, taskSearchParts(record)) : 1,
+        score: q ? paletteCommandScore(q, [...taskSearchParts(record), ...(noteTags.data?.tags[record.task.id] ?? []).map((tag) => `#${tag}`), ...(byTask.get(record.task.id)?.tags ?? []).map((tag) => `#${tag}`)]) : 1,
       }))
       .filter((record) => !q || record.score > 0)
       .sort(compareTaskRecords);
-  }, [allRecords, filter, query]);
+  }, [allRecords, filter, query, filters, byTask, noteTags.data?.tags, date, attentionIds]);
 
   const patchTask = async (
     record: TaskRecord,
@@ -262,11 +282,11 @@ export default function TasksPage() {
   const rangeEnd = Math.min(pageStart + PAGE_SIZE, records.length);
 
   return (
-    <div className="page-wrapper">
-      <BootScreen state={boot} />
+    <div className={embedded ? undefined : "page-wrapper"}>
+      {!embedded ? <BootScreen state={boot} /> : null}
       <div className="page-header">
         <div>
-          <h1 className="page-title">Tasks</h1>
+          <Heading className="page-title">History</Heading>
           <div className="text-xs flex flex-wrap gap-x-3 text-text-subtle">
             <span>{counts.all} total</span>
             <span>{counts.open} open</span>
@@ -275,12 +295,16 @@ export default function TasksPage() {
             <span>{counts.moved} moved</span>
           </div>
         </div>
+        <Link href="/review" className="btn btn-ghost" style={{ fontSize: 12, padding: "4px 10px" }}>
+          Weekly review <ArrowRight size={12} aria-hidden />
+        </Link>
       </div>
 
-      {error && <FetchError message="Couldn't load task history." />}
+      {error && <FetchError message="Couldn't load task history." onRetry={() => void mutate()} />}
+      {noteTags.error ? <FetchError message="Couldn't load task-note tags. Tag results may be incomplete." onRetry={() => void noteTags.mutate()} /> : null}
 
       <div className="card card-body mb-4 space-y-3">
-        <InlineSearch
+        {sharedQuery === undefined ? <InlineSearch
           id="tasks-search"
           label="Search tasks"
           placeholder="Search tasks, Jira keys, dates, status…"
@@ -289,7 +313,7 @@ export default function TasksPage() {
             setQuery(next);
             setPage(1);
           }}
-        />
+        /> : null}
 
         <div className="flex flex-wrap gap-1">
           {FILTERS.map((value) => (
@@ -319,7 +343,7 @@ export default function TasksPage() {
 
       {!isLoading && !error && records.length === 0 && (
         <p className="text-sm text-text-muted">
-          {query ? "No matching tasks found." : "No tasks yet."}
+          {query || date || filter !== "all" || Object.keys(filters).length > 0 ? "No matching tasks found." : "No tasks yet."}
         </p>
       )}
 
@@ -361,7 +385,7 @@ export default function TasksPage() {
                 record={record}
                 onToggle={() => patchTask(
                   record,
-                  { done: !record.task.done },
+                  { completion: !record.task.done },
                   (task) => ({
                     ...task,
                     done: !task.done,

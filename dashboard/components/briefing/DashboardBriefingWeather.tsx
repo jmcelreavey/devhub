@@ -1,6 +1,18 @@
 "use client";
 
-import type { WeatherInfo } from "@/lib/morning-briefing";
+import {
+  Cloud,
+  CloudDrizzle,
+  CloudFog,
+  CloudLightning,
+  CloudRain,
+  CloudSnow,
+  CloudSun,
+  Snowflake,
+  Sun,
+  type LucideIcon,
+} from "lucide-react";
+import { weatherIconName, type WeatherDay, type WeatherIconName, type WeatherInfo } from "@/lib/morning-briefing";
 import { useGridSize, type GridSizeCategory } from "@/lib/hooks/use-grid-size";
 
 /**
@@ -15,6 +27,25 @@ function forecastDayCount(size: GridSizeCategory): number {
   return 4;
 }
 
+const WEATHER_ICONS: Record<WeatherIconName, LucideIcon> = {
+  sun: Sun,
+  "cloud-sun": CloudSun,
+  cloud: Cloud,
+  "cloud-fog": CloudFog,
+  "cloud-drizzle": CloudDrizzle,
+  "cloud-rain": CloudRain,
+  "cloud-snow": CloudSnow,
+  snowflake: Snowflake,
+  "cloud-lightning": CloudLightning,
+};
+
+/** "H:17° L:9°", just the high when the low is missing, "" when neither is known. */
+function highLowLabel(day: WeatherDay): string {
+  if (day.highC == null) return "";
+  const high = `H:${Math.round(day.highC)}°`;
+  return day.lowC != null ? `${high} L:${Math.round(day.lowC)}°` : high;
+}
+
 interface DashboardBriefingWeatherProps {
   weather: WeatherInfo;
 }
@@ -26,12 +57,8 @@ export function DashboardBriefingWeather({ weather }: DashboardBriefingWeatherPr
 
   const today = days[0];
   const forecast = days.slice(0, forecastDayCount(gridSize));
-  const hl =
-    today.highC != null && today.lowC != null
-      ? `  H:${Math.round(today.highC)}° L:${Math.round(today.lowC)}°`
-      : today.highC != null
-        ? `  H:${Math.round(today.highC)}°`
-        : "";
+  const range = highLowLabel(today);
+  const hl = range ? `  ${range}` : "";
 
   return (
     <div
@@ -62,5 +89,28 @@ export function DashboardBriefingWeather({ weather }: DashboardBriefingWeatherPr
         ) : null}
       </div>
     </div>
+  );
+}
+
+/**
+ * One-line weather for the collapsed briefing header: icon, now, condition and
+ * today's range. Renders nothing when there's no forecast, so the header never
+ * shows a half-empty chip. Condition and range drop out as the header narrows.
+ */
+export function DashboardBriefingWeatherInline({ weather }: DashboardBriefingWeatherProps) {
+  const today = weather.days?.[0];
+  if (!today || !Number.isFinite(weather.currentTempC)) return null;
+
+  const Icon = WEATHER_ICONS[weatherIconName(today.code)];
+  const range = highLowLabel(today);
+
+  return (
+    <span className="mbw-wx-inline" title={`${weather.location} · ${today.description}`}>
+      <span className="sr-only">Weather in {weather.location}: </span>
+      <Icon size={14} aria-hidden className="mbw-wx-inline-icon" />
+      <span className="mbw-wx-inline-temp">{Math.round(weather.currentTempC)}°</span>
+      <span className="mbw-wx-inline-cond">{today.description}</span>
+      {range ? <span className="mbw-wx-inline-range">{range}</span> : null}
+    </span>
   );
 }

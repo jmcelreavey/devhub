@@ -100,7 +100,7 @@ export function WhileYouWereAway() {
             </li>
           ))}
           {groups.length > 3 && (
-            <li className="text-xs">+{groups.length - 3} more — see Run history on System</li>
+            <li className="text-xs">+{groups.length - 3} more — see Run history on Settings</li>
           )}
         </ul>
       </div>

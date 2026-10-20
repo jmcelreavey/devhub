@@ -72,7 +72,7 @@ function RunStrip({ run, mining, onRetry }: { run: MineRun | undefined; mining: 
     `${run.prsScanned} PR${run.prsScanned === 1 ? "" : "s"}`,
     run.considered > run.comments ? `${run.comments} of ${run.considered} comments` : `${run.comments} comments`,
     `+${run.added} new · ${run.autoAccepted ?? 0} automatically accepted · ${run.autoRejected ?? 0} automatically rejected · ${run.reinforced} reinforced`,
-    [run.provider, run.model].filter(Boolean).join(" · "),
+    [run.provider, run.model, run.effort].filter(Boolean).join(" · "),
     formatDuration(run.ms),
   ];
   return (

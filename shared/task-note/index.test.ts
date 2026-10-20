@@ -17,25 +17,33 @@ describe("taskNotePath", () => {
 });
 
 describe("buildTaskNoteMarkdown", () => {
-  it("pre-fills header, jira link, taskRef backlink, and scaffold", () => {
+  it("pre-fills the metadata block, taskRef backlink, and scaffold", () => {
     const md = buildTaskNoteMarkdown(task);
     expect(md).toContain("# Ship note-from-task");
-    expect(md).toContain("**Date:** 2026-07-28");
-    expect(md).toContain("**Jira:** [PTF-4313](https://example.atlassian.net/browse/PTF-4313)");
-    expect(md).toContain("## Links");
+    expect(md).toContain("```task-meta");
+    expect(md).toContain('"date": "2026-07-28"');
+    expect(md).toContain('"href": "https://example.atlassian.net/browse/PTF-4313"');
+    expect(md).toContain('"label": "Open in Work"');
     expect(md).toContain("::task-ref abc-123 2026-07-28 Ship note-from-task");
-    expect(md).toContain("[Open in Work](/work?tab=tasks)");
+    expect(md).not.toContain("## Links");
+    expect(md).not.toContain("**Date:**");
     expect(md).toContain("## Notes");
-    expect(md).toContain("## Action items");
+    expect(md).not.toContain("- [ ]");
   });
 
   it("omits jira line when absent", () => {
     const md = buildTaskNoteMarkdown({ ...task, jiraKey: undefined, jiraUrl: undefined });
-    expect(md).not.toContain("**Jira:**");
+    expect(md).not.toContain('"kind": "jira"');
   });
 });
 
 describe("normalizeTaskLinkState", () => {
+  it("keeps PTF-4891 as parent context, but still promotes a real child link", () => {
+    const parent = { kind: "jira" as const, id: "PTF-4891", label: "Parent PTF-4891", href: "https://jira.example.test/browse/PTF-4891" };
+    expect(normalizeTaskLinkState("Android login", undefined, [parent], "PTF-4891")).toEqual({ text: "Android login", jiraKey: undefined, links: [parent] });
+    const child = { kind: "jira" as const, id: "PTF-5271", label: "PTF-5271" };
+    expect(normalizeTaskLinkState("Android login", undefined, [parent, child], "PTF-4891")).toMatchObject({ jiraKey: "PTF-5271", text: "PTF-5271 Android login" });
+  });
   it("dedupes links and promotes jiraKey when unset", () => {
     const out = normalizeTaskLinkState("PR 3: Acme comments count", null, [
       {
@@ -69,4 +77,3 @@ describe("normalizeTaskLinkState", () => {
     expect(out.text).toBe("BAR-1 already linked");
   });
 });
-

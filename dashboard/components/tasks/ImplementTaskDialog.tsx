@@ -1,5 +1,6 @@
 "use client";
 
+import { openNoteHrefInPanel, openNoteInPanel } from "@/lib/notes/open-in-panel";
 import { EntityLinkDialog } from "@/components/EntityLinkDialog";
 import { ImplementReadyPanel,type ImplementReadyApiResponse } from "@/components/tasks/ImplementReadyPanel";
 import { PlanTaskDialog } from "@/components/tasks/PlanTaskDialog";
@@ -18,7 +19,7 @@ type TaskImplementPromptInput,
 import type { Task } from "@/lib/tasks/types";
 import { jiraBrowseUrl } from "@/lib/utils";
 import { useRouter } from "next/navigation";
-import { useMemo,useState } from "react";
+import { useCallback,useEffect,useMemo,useRef,useState } from "react";
 import { mutate } from "swr";
 
 const PLAN_POLL_MS = 5000;
@@ -30,6 +31,7 @@ export function ImplementTaskDialog({
   onClose,
   cwd,
   repoName: hubRepoName,
+  autoByDefault = false,
 }: {
   open: boolean;
   task: Task;
@@ -38,6 +40,8 @@ export function ImplementTaskDialog({
   /** Hub checkout — wins over the plan URL when set. */
   cwd?: string;
   repoName?: string;
+  /** Opened from "Start on auto": Run on auto is checked, with the model, instructions and worktree still editable. */
+  autoByDefault?: boolean;
 }) {
   const router = useRouter();
   const toast = useToast();
@@ -94,6 +98,31 @@ export function ImplementTaskDialog({
     jiraKey: task.jiraKey,
   });
 
+  const planRequest = useRef<{ key: string; promise: Promise<string | undefined> } | null>(null);
+  const planKey = `${task.id}:${date}:${repoName ?? ""}:${task.jiraKey ?? ""}`;
+  // The plan endpoint talks to Jira. Start it while the sheet is open so Start chat does not wait on it.
+  const loadPlanPath = useCallback(() => {
+    const current = planRequest.current;
+    if (current?.key === planKey) return current.promise;
+    const promise = fetch(taskImplementPlanUrl({
+      origin: typeof window === "undefined" ? "" : window.location.origin,
+      taskId: task.id, date, repoName, cwd, jiraKey: task.jiraKey,
+    }), { cache: "no-store" }).then(async (response) => {
+      const plan = (await response.json().catch(() => ({}))) as { error?: string; repoPath?: string | null };
+      if (!response.ok) throw new Error(plan.error || "Couldn't load the task implementation plan");
+      return plan.repoPath ?? undefined;
+    }).catch((err: unknown) => {
+      if (planRequest.current?.promise === promise) planRequest.current = null;
+      throw err;
+    });
+    planRequest.current = { key: planKey, promise };
+    return promise;
+  }, [planKey, task.id, date, repoName, cwd, task.jiraKey]);
+  useEffect(() => {
+    if (!open || cwd) return;
+    void loadPlanPath().catch(() => undefined);
+  }, [open, cwd, loadPlanPath]);
+
   const close = () => {
     setLinksOverride(null);
     setPlanRunning(false);
@@ -144,7 +173,9 @@ export function ImplementTaskDialog({
         open={open}
         onClose={close}
         title="Implement with agent"
-        description="Choose the CLI for this task. Leave model blank to use that CLI's default."
+        allowAuto={!task.done && !task.abandonedAt}
+        autoByDefault={autoByDefault}
+        description="Starts on your saved Implement tier. Pick another tier, agent or model to override it for this run."
         getPrompt={() => buildTaskImplementPrompt(promptInput())}
         cwd={cwd}
         repoName={repoName}
@@ -160,10 +191,10 @@ export function ImplementTaskDialog({
             selectedRepoId={selectedRepoId}
             onSelectRepo={setSelectedRepoId}
             actions={{
-              onNavigate: navigate,
+              onNavigate: (href) => { if (!openNoteHrefInPanel(href)) navigate(href); },
               onOpenNote: () => {
                 ensureNote()
-                  .then((result) => navigate(result.href))
+                  .then((result) => openNoteInPanel(result.path))
                   .catch(() => toast.error("Couldn't open task note."));
               },
               onGeneratePlan: () => setPlanOpen(true),
@@ -180,19 +211,7 @@ export function ImplementTaskDialog({
             }}
           />
         }
-        resolveCwd={
-          cwd
-            ? undefined
-            : async () => {
-                const planResponse = await fetch(taskImplementPlanUrl(promptInput()), { cache: "no-store" });
-                const plan = (await planResponse.json().catch(() => ({}))) as {
-                  error?: string;
-                  repoPath?: string | null;
-                };
-                if (!planResponse.ok) throw new Error(plan.error || "Couldn't load the task implementation plan");
-                return plan.repoPath ?? undefined;
-              }
-        }
+        resolveCwd={cwd ? undefined : () => loadPlanPath()}
       />
       <PlanTaskDialog
         open={open && planOpen}

@@ -1,5 +1,8 @@
 .page { max-width: 1240px; margin-inline: auto; }
 .subtitle { margin-top: 6px; font-size: 14px; line-height: 1.5; color: var(--text-subtle); }
+.related { display: flex; flex-wrap: wrap; gap: 0 16px; margin-top: 4px; font-size: 13px; }
+.related a { display: inline-flex; align-items: center; gap: 4px; min-height: 32px; color: var(--accent-text, var(--accent)); text-decoration: none; }
+.related a:hover { text-decoration: underline; text-underline-offset: 3px; }
 .summary { margin-block: 24px 28px; padding: 20px 24px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg-surface); }
 .summaryHeading { display: flex; gap: 12px; align-items: flex-start; }
 .summaryHeading > svg, .summaryHeading > span { flex-shrink: 0; margin-top: 3px; }

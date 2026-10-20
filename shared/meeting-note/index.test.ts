@@ -34,7 +34,7 @@ describe("buildMeetingNoteMarkdown", () => {
     expect(md).toContain("**Event:** [Open in Calendar](https://calendar.google.com/event?eid=xyz)");
     expect(md).toContain("## Agenda");
     expect(md).toContain("## Action items");
-    expect(md).toContain("- [ ] ");
+    expect(md).not.toContain("- [ ]");
   });
 
   it("omits optional lines and labels all-day events", () => {

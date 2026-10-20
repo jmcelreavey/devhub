@@ -2,14 +2,25 @@
 
 import { useCallback, useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { ChevronDown } from "lucide-react";
+import { clampMenuPosition, menuGroupsWithDangerLast, readViewportSize, type ContextMenuGroup } from "./ContextMenu";
 
 export interface LaunchMenuItem {
   id: string;
   label: string;
   description?: string;
+  section?: string;
   icon?: ReactNode;
   danger?: boolean;
   onSelect: () => void | Promise<void>;
+}
+
+export function groupLaunchMenuItems(items: LaunchMenuItem[], sections: string[] = []): ContextMenuGroup[] {
+  const labels = [...new Set([...sections, ...items.map((item) => item.section ?? "")])];
+  return menuGroupsWithDangerLast(labels.map((label) => ({
+    id: label || "actions",
+    label: label || undefined,
+    items: items.filter((item) => (item.section ?? "") === label),
+  })));
 }
 
 /**
@@ -22,6 +33,7 @@ export function LaunchMenu({
   hideLabel = false,
   icon,
   items,
+  sections,
   align = "right",
   buttonClassName = "btn btn-ghost",
   buttonStyle,
@@ -31,6 +43,7 @@ export function LaunchMenu({
   hideLabel?: boolean;
   icon?: ReactNode;
   items: LaunchMenuItem[];
+  sections?: string[];
   align?: "left" | "right";
   buttonClassName?: string;
   buttonStyle?: CSSProperties;
@@ -42,16 +55,20 @@ export function LaunchMenu({
   const menuRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuId = useId();
+  const typeahead = useRef({ text: "", at: 0 });
+  const groups = groupLaunchMenuItems(items, sections);
 
   const updateMenuPosition = useCallback(() => {
     const rect = rootRef.current?.getBoundingClientRect();
     if (!rect) return;
-    setMenuStyle({
-      top: rect.bottom + 6,
-      ...(align === "right"
-        ? { right: Math.max(8, window.innerWidth - rect.right), left: "auto" }
-        : { left: Math.max(8, rect.left), right: "auto" }),
-    });
+    const size = menuRef.current?.getBoundingClientRect();
+    const placed = clampMenuPosition(
+      align === "right" ? rect.right - (size?.width || 230) : rect.left,
+      rect.bottom + 6,
+      { width: size?.width || 230, height: size?.height || 0 },
+      readViewportSize(),
+    );
+    setMenuStyle({ ...placed, right: "auto", bottom: "auto", margin: 0, overflowY: "auto" });
   }, [align]);
 
   /** Menu items in DOM order — the roving focus targets. */
@@ -70,6 +87,7 @@ export function LaunchMenu({
         focusVisible: true,
       };
       nodes[wrapped]?.focus(options);
+      nodes[wrapped]?.scrollIntoView?.({ block: "nearest" });
     },
     [itemNodes],
   );
@@ -87,6 +105,7 @@ export function LaunchMenu({
     const supportsPopover = typeof menu.showPopover === "function";
 
     if (open) {
+      typeahead.current = { text: "", at: 0 };
       updateMenuPosition();
       if (supportsPopover) {
         try {
@@ -104,6 +123,7 @@ export function LaunchMenu({
     }
 
     if (!open) return;
+    updateMenuPosition();
 
     const onDown = (event: MouseEvent) => {
       const target = event.target as Node;
@@ -198,30 +218,53 @@ export function LaunchMenu({
           } else if (event.key === "Tab") {
             // Tabbing out of a menu closes it rather than walking the page behind.
             closeAndRestoreFocus();
+          } else if (event.key.length === 1 && event.key !== " " && !event.ctrlKey && !event.metaKey && !event.altKey) {
+            const now = event.timeStamp;
+            const key = event.key.toLocaleLowerCase();
+            const previous = now - typeahead.current.at < 700 ? typeahead.current.text : "";
+            const text = previous === key ? key : previous + key;
+            typeahead.current = { text, at: now };
+            const offset = text.length > 1 ? 0 : 1;
+            for (let step = offset; step < nodes.length + offset; step += 1) {
+              const index = (Math.max(current, text.length > 1 ? 0 : -1) + step) % nodes.length;
+              const label = nodes[index].querySelector(".launch-menu-label")?.textContent ?? "";
+              if (label.trim().toLocaleLowerCase().startsWith(text)) {
+                event.preventDefault();
+                focusItemAt(index);
+                break;
+              }
+            }
           }
         }}
         {...({ popover: "manual" } as { popover?: "manual" })}
       >
-        {items.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            className="launch-menu-item"
-            data-danger={item.danger ? "true" : undefined}
-            role="menuitem"
-            onClick={() => {
-              closeAndRestoreFocus();
-              void item.onSelect();
-            }}
-          >
-            {item.icon && <span className="launch-menu-icon">{item.icon}</span>}
-            <span className="launch-menu-copy">
-              <span className="launch-menu-label">{item.label}</span>
-              {item.description && (
-                <span className="launch-menu-description">{item.description}</span>
-              )}
-            </span>
-          </button>
+        {groups.map((group, index) => (
+          <div key={group.id} className="context-menu-group">
+            {index > 0 && <div className="context-menu-divider" role="separator" />}
+            {group.label && <div className="context-menu-group-label">{group.label}</div>}
+            {group.items.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                className="launch-menu-item"
+                data-danger={item.danger ? "true" : undefined}
+                role="menuitem"
+                title={item.description}
+                onClick={() => {
+                  closeAndRestoreFocus();
+                  void item.onSelect();
+                }}
+              >
+                {item.icon && <span className="launch-menu-icon">{item.icon}</span>}
+                <span className="launch-menu-copy">
+                  <span className="launch-menu-label">{item.label}</span>
+                  {item.description && (
+                    <span className="launch-menu-description">{item.description}</span>
+                  )}
+                </span>
+              </button>
+            ))}
+          </div>
         ))}
       </div>
     </div>

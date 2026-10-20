@@ -15,6 +15,8 @@ related:
 
 Skills are reusable instructions for AI agents. They capture repeatable workflows, checklists, and domain-specific guidance.
 
+In the app the page is **Agent skills** (`/skills`): open it from the links under the **Settings** title, from ⌘P (typing "Skills" still finds it) or with `g k`. This guide calls it the Skills page.
+
 ## Where Skills Live
 
 Shared skills live in the DevHub repo under `skills/shared/` and can be synced into local AI tools. Retired skills live under `skills/parked/` — they stay in git for reference, and sync **uninstalls** matching copies from tool directories (see [Retiring a skill](#retiring-a-skill)). Vendored third-party skills live under `skills/vendor/` ([Vendored skills](vendored-skills.md)).
@@ -179,7 +181,7 @@ From an agent, the same loop is `voice_list`, `voice_answer`, `voice_train` and 
 
 ## MCP tab
 
-Sidebar **Agents** → tab **MCP** manages the MCP catalog:
+**Agent skills** → tab **MCP servers** manages the MCP catalog:
 
 | Scope | Storage | Synced to tools |
 | ----- | ------- | --------------- |

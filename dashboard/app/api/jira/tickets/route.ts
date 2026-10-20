@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { withErrorHandler } from "@/lib/api-utils";
 import { jiraScreen } from "@/lib/integrations/screen-data";
 const getMyTickets = jiraScreen.tickets;
 import { getResolvedJiraEnv } from "@/lib/jira/env";
@@ -8,7 +9,7 @@ import {
   JIRA_TICKETS_TTL_MS,
 } from "@/lib/jira/tickets-cache";
 
-export async function GET() {
+export const GET = withErrorHandler<[request?: Request]>(async () => {
   if (!getResolvedJiraEnv()) {
     return NextResponse.json({ tickets: [], configured: false });
   }
@@ -28,4 +29,4 @@ export async function GET() {
       { status: 500 },
     );
   }
-}
+}, "jira.tickets.get");

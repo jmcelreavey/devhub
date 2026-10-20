@@ -3,6 +3,8 @@
 import type { StashConflictPayload } from "@/app/repos/types";
 import { useConfirm,usePrompt } from "@/components/shell/ConfirmDialog";
 import { ContextMenu,useContextMenu } from "@/components/shell/ContextMenu";
+import { usePrStatusMenu } from "@/components/github/PrStatusMenu";
+import { asPrChecksState } from "@/lib/github/pr-status-menu";
 import { SkeletonRows } from "@/components/ui/SkeletonRows";
 import { launchAgentJob } from "@/lib/agent-job";
 import { copyTextToClipboard } from "@/lib/clipboard";
@@ -23,11 +25,15 @@ import { layoutCommitGraph,type GraphLaneCommit } from "@/lib/repos/git-graph";
 import type { DiffLine,GraphCommitRaw } from "@/lib/repos/git-parsers";
 import { jiraBrowseUrl } from "@/lib/utils";
 import {
+Calendar,
 Check,
 Columns3,
+Hash,
+User,
 CornerDownLeft,
 Download,
 GitBranch,
+GitCommitHorizontal,
 GitMerge,
 Layers,
 RefreshCw,
@@ -1164,7 +1170,8 @@ export function HistoryPanel({
           {
             id: "cherry-onto",
             label: `Cherry-pick onto ${branch}`,
-            description: "Switches to that branch and applies the commit there",
+            description: "Switch branch and apply this commit",
+            icon: <GitCommitHorizontal size={12} aria-hidden />,
             disabled: acting !== null,
             onSelect: () =>
               void (async () => {
@@ -1175,7 +1182,8 @@ export function HistoryPanel({
           {
             id: "merge-into",
             label: `Merge ${branch} into current`,
-            description: "Merge that branch into the checked-out one",
+            description: "Merge into the current branch",
+            icon: <GitMerge size={12} aria-hidden />,
             disabled: acting !== null,
             onSelect: () =>
               void confirmedBranchesAction({
@@ -1191,7 +1199,8 @@ export function HistoryPanel({
           {
             id: "rebase-onto",
             label: `Rebase current onto ${branch}`,
-            description: "Replays the current branch's commits on top of that branch",
+            description: "Replay current commits on this branch",
+            icon: <CornerDownLeft size={12} aria-hidden />,
             danger: true,
             disabled: acting !== null,
             onSelect: () =>
@@ -1222,6 +1231,7 @@ export function HistoryPanel({
         {relation?.mainBranch ? (
           <BranchRelationStrip
             relation={relation}
+            repoName={repoName}
             acting={acting}
             pushing={pushing}
             unpushedCount={unpushedHashes.size}
@@ -1348,6 +1358,7 @@ export function HistoryPanel({
                       aria-hidden
                       style={{ visibility: on ? "visible" : "hidden" }}
                     />
+                    {key === "hash" ? <Hash size={11} aria-hidden /> : key === "refs" ? <GitBranch size={11} aria-hidden /> : key === "author" ? <User size={11} aria-hidden /> : <Calendar size={11} aria-hidden />}
                     {label}
                   </button>
                 );
@@ -1417,6 +1428,7 @@ export function HistoryPanel({
       {relation?.mainBranch ? (
         <BranchRelationStrip
           relation={relation}
+          repoName={repoName}
           acting={acting}
           pushing={pushing}
           unpushedCount={unpushedHashes.size}
@@ -1833,6 +1845,7 @@ export function HistoryPanel({
 
 function BranchRelationStrip({
   relation,
+  repoName,
   acting,
   pushing,
   unpushedCount,
@@ -1846,6 +1859,7 @@ function BranchRelationStrip({
   onSwitchToDefault,
 }: {
   relation: BranchRelation;
+  repoName: string;
   acting: string | null;
   pushing: boolean;
   unpushedCount: number;
@@ -1878,6 +1892,17 @@ function BranchRelationStrip({
     const timer = setInterval(() => setNow(Date.now()), 60_000);
     return () => clearInterval(timer);
   }, []);
+  const prMenu = usePrStatusMenu(
+    openPr
+      ? {
+          url: openPr.url,
+          number: openPr.number,
+          branch: relation.currentBranch,
+          localRepoName: repoName,
+          checks: asPrChecksState(openPr.checks),
+        }
+      : null,
+  );
   const fetchedMsAgo =
     relation.lastFetchAt && now !== null ? now - new Date(relation.lastFetchAt).getTime() : null;
   const fetchStale = fetchedMsAgo !== null && fetchedMsAgo > 60 * 60 * 1000;
@@ -1979,20 +2004,24 @@ function BranchRelationStrip({
             </a>
           )}
           {openPr && (
-            <a
-              className="repo-git-context-chip"
-              data-kind="pr"
-              data-checks={openPr.checks}
-              href={openPr.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              title={`PR #${openPr.number}: ${openPr.title} · checks ${openPr.checks}`}
-            >
-              PR #{openPr.number}
-              <span className="repo-git-pr-checks" aria-hidden>
-                {openPr.checks === "passing" ? "✓" : openPr.checks === "failing" ? "✕" : "◌"}
-              </span>
-            </a>
+            <>
+              <a
+                className="repo-git-context-chip"
+                data-kind="pr"
+                data-checks={openPr.checks}
+                href={openPr.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                title={`PR #${openPr.number}: ${openPr.title} · checks ${openPr.checks}. Right-click for PR actions`}
+                {...prMenu.bind}
+              >
+                PR #{openPr.number}
+                <span className="repo-git-pr-checks" aria-hidden>
+                  {openPr.checks === "passing" ? "✓" : openPr.checks === "failing" ? "✕" : "◌"}
+                </span>
+              </a>
+              {prMenu.menuNode}
+            </>
           )}
           {/* On the default branch there is nothing to compare against — "main
               vs main" reads like a bug. The counts below already guard on this. */}

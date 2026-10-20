@@ -19,13 +19,18 @@ function key(ref: IntegrationRef) {
   if (ref.kind !== "issue" || !/^[A-Z][A-Z0-9_]*-[1-9][0-9]*$/.test(ref.id)) throw new IntegrationError("invalid", "Choose a native Jira issue key.");
   return ref.id;
 }
-export async function jiraRequest(account: string, endpoint: string, context: IntegrationContext, body?: unknown) {
+export async function jiraRequest(account: string, endpoint: string, context: IntegrationContext, body?: unknown, method?: "PUT") {
   const client = jiraConnection(account);
-  return providerJson(apiBase(client) + endpoint, { headers: jsonHeaders(client), method: body ? "POST" : "GET", body: body ? JSON.stringify(body) : undefined }, context.signal);
+  return providerJson(apiBase(client) + endpoint, { headers: jsonHeaders(client), method: method ?? (body ? "POST" : "GET"), body: body ? JSON.stringify(body) : undefined }, context.signal);
 }
 function item(account: string, raw: z.infer<typeof IssueSchema>): IntegrationItem {
   return { ref: { provider: "jira", account, kind: "issue", id: raw.key }, title: raw.fields.summary, url: "https://" + jiraConnection(account).domain + "/browse/" + raw.key, revision: raw.fields.updated, status: { id: raw.fields.status.id, label: raw.fields.status.name, category: raw.fields.status.statusCategory?.key } };
 }
+const TRANSITIONS_TTL_MS = 20_000;
+const transitionCache = new Map<string, { at: number; value: Array<{ id: string; label: string; statusId?: string; statusLabel?: string }> }>();
+/** Called after a write: the list that was valid before the move no longer is. */
+export function invalidateJiraTransitions(account: string, key: string) { transitionCache.delete(account + ":" + key); }
+export function clearJiraTransitionCache() { transitionCache.clear(); }
 export const jiraProvider: IntegrationProvider = {
   id: "jira", apiVersion: 1, label: "Jira",
   capabilities: ["issue.read", "issue.search", "issue.transitions", "issue.create", "issue.transition"],
@@ -41,7 +46,13 @@ export const jiraProvider: IntegrationProvider = {
     return { items: result.issues.map((raw) => item(account, raw)), next: result.isLast ? undefined : result.nextPageToken };
   },
   async transitions(ref, context) {
+    // The picker, hover prefetch and the MCP listing all ask for the same list within seconds.
+    const cacheKey = ref.account + ":" + key(ref);
+    const hit = transitionCache.get(cacheKey);
+    if (hit && Date.now() - hit.at < TRANSITIONS_TTL_MS) return hit.value;
     const result = z.object({ transitions: z.array(z.object({ id: z.string(), name: z.string(), to: z.object({ id: z.string(), name: z.string().optional() }).optional() })) }).parse(await jiraRequest(ref.account, "/issue/" + key(ref) + "/transitions", context));
-    return result.transitions.map((transition) => ({ id: transition.id, label: transition.name, statusId: transition.to?.id, statusLabel: transition.to?.name }));
+    const value = result.transitions.map((transition) => ({ id: transition.id, label: transition.name, statusId: transition.to?.id, statusLabel: transition.to?.name }));
+    transitionCache.set(cacheKey, { at: Date.now(), value });
+    return value;
   },
 };

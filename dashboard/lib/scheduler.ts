@@ -37,6 +37,7 @@ export interface AgentJobSpec {
   prompt: string;
   cwd: string;
   model?: string;
+  effort?: string;
   worktree?: boolean;
   maxTurns?: number;
 }

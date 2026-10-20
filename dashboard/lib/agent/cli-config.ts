@@ -26,6 +26,8 @@ export interface AgentCliConfig {
   antigravityCliInstalled: boolean;
   apiConfigured: boolean;
   opencodeInstalled: boolean;
+  /** Live model ids reported by the provider when it exposes a catalog. */
+  models?: Partial<Record<AiProviderId, string[]>>;
 }
 
 export const AGENT_CLI_DEFAULTS: AgentCliConfig = {
@@ -39,6 +41,7 @@ export const AGENT_CLI_DEFAULTS: AgentCliConfig = {
   antigravityCliInstalled: false,
   apiConfigured: false,
   opencodeInstalled: false,
+  models: {},
 };
 
 let cache: AgentCliConfig | null = null;
@@ -92,6 +95,11 @@ function sanitize(raw: Partial<AgentCliConfig> | null | undefined): AgentCliConf
     antigravityCliInstalled: raw?.antigravityCliInstalled === true,
     apiConfigured: raw?.apiConfigured === true,
     opencodeInstalled: raw?.opencodeInstalled === true,
+    models: Object.fromEntries(
+      Object.entries(raw?.models ?? {}).filter((entry): entry is [string, string[]] =>
+        Array.isArray(entry[1]) && entry[1].every((model) => typeof model === "string"),
+      ),
+    ),
   };
 }
 

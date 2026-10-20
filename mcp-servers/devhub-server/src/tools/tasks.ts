@@ -4,12 +4,11 @@ import { z } from "zod";
 import type { Context } from "../context.ts";
 import { withDashboardErrors } from "../dashboard-client.ts";
 import { callerDepth } from "./agents.ts";
+import { registerTeamTaskTools } from "./team-tasks.ts";
 import { escapeHtml, uiResult, widgetDocument } from "../ui.ts";
 import { blocksToText, textToBlocks } from "../convert.ts";
-import {
-  buildEntityLinksSection,
-  parseEntityLinksFromMarkdown,
-} from "../../../../shared/entity-note/index.ts";
+import { parseEntityLinksFromMarkdown } from "../../../../shared/entity-note/index.ts";
+import { addTaskNoteRefs } from "../../../../shared/task-note/sections.ts";
 import {
   buildTaskNoteMarkdown,
   taskEntityRefs,
@@ -41,7 +40,39 @@ function taskHistoryLine(task: {
 }
 
 export function registerTasksTools(server: McpServer, ctx: Context): void {
+  registerTeamTaskTools(server, ctx);
   const { tasksStorage } = ctx;
+
+  server.registerTool("task_note_add", {
+    description: "Append a timestamped human note to a task (task ID or Jira key). Save alone never touches a running agent. Set updateAgent only with explicit consent to send live guidance or stop and continue its current stage. A saved noteId retries delivery without appending again. Requires the dashboard.",
+    inputSchema: {
+      id: z.string().trim().regex(/^[A-Za-z0-9_-]{1,128}$/).describe("Task ID or linked Jira ticket key"),
+      text: z.string().trim().min(1).max(4000),
+      updateAgent: z.boolean().optional(),
+      noteId: z.string().min(1).max(128).optional(),
+      confirmStop: z.boolean().optional(),
+    },
+  }, async ({ id, text, updateAgent, noteId, confirmStop }) => withDashboardErrors(async () => {
+    const result = await ctx.dashboard.post<{ saved: boolean; note: { id: string; text: string; at: string }; capability: { running: boolean }; agent: { mode: string; runId?: string; error?: string } }>("/api/tasks/note/add", { taskId: id, text, ...(updateAgent !== undefined ? { updateAgent } : {}), ...(noteId ? { noteId } : {}), ...(confirmStop !== undefined ? { confirmStop } : {}) });
+    return { content: [{ type: "text" as const, text: `Note saved to ${id}${result.agent.error ? `. ${result.agent.error}` : result.agent.mode === "none" ? "" : ` · ${result.agent.mode}`}` }], structuredContent: { ...result, target: id } };
+  }));
+
+  server.registerTool(
+    "task_reopen",
+    {
+      description: "Reopen a finished or abandoned task into Review or In progress, keeping its note and history. Already-open tasks are unchanged. Optionally address new cached PR feedback with an agent, which commits and pushes to the existing PR branch (hooks on, never forced; a failed push stops and shows in Needs action). Merged PRs need a follow-up task instead. Requires the dashboard.",
+      inputSchema: {
+        id: z.string().trim().regex(/^[A-Za-z0-9_-]{1,128}$/).describe("Task ID or linked Jira ticket key"),
+        date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+        reason: z.string().trim().max(400).optional(),
+        addressFeedback: z.boolean().optional().describe("Start an agent to address only new feedback. Confirm before setting true."),
+      },
+    },
+    async (input) => withDashboardErrors(async () => {
+      const result = await ctx.dashboard.post<{ task?: { id: string; text: string }; alreadyOpen?: boolean; column?: string }>("/api/tasks/reopen", input);
+      return { content: [{ type: "text", text: `Updated task: ${result.task?.id ?? input.id} — ${result.task?.text ?? input.id} (${result.alreadyOpen ? "already open" : `reopened in ${result.column ?? "In progress"}`})` }] };
+    }),
+  );
 
   server.registerTool(
     "tasks_list",
@@ -98,6 +129,7 @@ export function registerTasksTools(server: McpServer, ctx: Context): void {
         date: z.string().optional().describe("Date in YYYY-MM-DD format. Defaults to today."),
         due: z.string().optional().describe("Due date in YYYY-MM-DD format."),
         withNote: z.boolean().optional().describe("If true, also create the linked task-notes/ note"),
+        parentKey: z.string().regex(/^[A-Z][A-Z0-9_]*-[1-9][0-9]*$/).optional().describe("Parent Jira key for context only; never inferred as the task's own ticket."),
         draft: z
           .boolean()
           .optional()
@@ -115,9 +147,9 @@ export function registerTasksTools(server: McpServer, ctx: Context): void {
           .describe("EntityRefs to store on the task for hop-around"),
       },
     },
-    async ({ text, date, due, withNote, links, draft }) => {
+    async ({ text, date, due, withNote, links, draft, parentKey }) => {
       await tasksStorage.ready();
-      let task = tasksStorage.add(text, date, due, draft ? "draft" : undefined);
+      let task = tasksStorage.add(text, date, due, draft ? "draft" : undefined, parentKey);
       if (links?.length) {
         task = tasksStorage.update(task.id, { links }, date) ?? task;
       }
@@ -399,7 +431,14 @@ export function registerTasksTools(server: McpServer, ctx: Context): void {
         const missingRefs = taskEntityRefs(noteSource).filter(
           (ref) => !existingRefs.some((existingRef) => sameRef(existingRef, ref)),
         );
-        if (missingRefs.length) append.push(buildEntityLinksSection(missingRefs).trim());
+        let currentBlocks = (Array.isArray(existingNote.content) ? existingNote.content : [existingNote.content]) as unknown[];
+        let headerChanged = false;
+        if (missingRefs.length) {
+          // Links go into the note's metadata block (shown as pills), not a new "## Links" list.
+          const added = addTaskNoteRefs(currentBlocks, missingRefs);
+          currentBlocks = added.blocks;
+          headerChanged = added.changed;
+        }
 
         if (noteSummary && noteSummaryKey) {
           const heading = `## Implementation ${noteSummaryKey}`;
@@ -410,9 +449,8 @@ export function registerTasksTools(server: McpServer, ctx: Context): void {
           }
         }
 
-        if (append.length) {
-          const currentBlocks = Array.isArray(existingNote.content) ? existingNote.content : [existingNote.content];
-          ctx.storage.write(notePath, [...currentBlocks, ...textToBlocks(append.join("\n\n"))]);
+        if (append.length || headerChanged) {
+          ctx.storage.write(notePath, [...currentBlocks, ...(append.length ? textToBlocks(append.join("\n\n")) : [])]);
           noteChanged = true;
         }
       }
@@ -589,6 +627,7 @@ export function registerTasksTools(server: McpServer, ctx: Context): void {
           .describe("Day file the task lives in"),
         provider: z.string().trim().min(1).max(64).optional().describe("Optional agent_dispatch provider id"),
         model: z.string().trim().max(120).optional(),
+        effort: z.string().trim().max(32).optional().describe("Reasoning effort. Omit for the provider default."),
         cwd: z.string().trim().min(1).max(1_000).optional().describe("Checkout path when starting a new run"),
         origin: z
           .string()
@@ -609,6 +648,7 @@ export function registerTasksTools(server: McpServer, ctx: Context): void {
           date: input.date,
           provider: input.provider,
           model: input.model,
+          effort: input.effort,
           cwd: input.cwd,
           origin: input.origin,
         });
@@ -619,6 +659,36 @@ export function registerTasksTools(server: McpServer, ctx: Context): void {
           data.priorRunId ? `prior ${data.priorRunId}` : null,
           `handoff ${data.handoffChars} chars`,
         ].filter(Boolean);
+        return { content: [{ type: "text" as const, text: bits.join(" · ") }] };
+      }),
+  );
+
+  server.registerTool(
+    "tasks_agent_plan",
+    {
+      description:
+        "Start a PLAN-ONLY agent run for a DevHub task: one plan run in the task's linked repo that investigates and writes Plan / Acceptance / Open questions into the task note, then stops. Codex uses a read-only sandbox; Claude uses plan permissions. Other providers use planning mode where available, otherwise instructions only: repository writes are not guaranteed to be blocked. The injected MCP peer can only update this task's plan sections. It never starts auto mode or continues to implement; use storyboard_start_auto for plan-then-build, or tasks_agent_resume to implement. Refuses a closed task, a task on auto, or one whose latest run is still active. Requires the dashboard.",
+      inputSchema: {
+        taskId: z.string().trim().min(1).max(128).describe("DevHub task UUID"),
+        date: z
+          .string()
+          .regex(/^\d{4}-\d{2}-\d{2}$/, "YYYY-MM-DD")
+          .describe("Day file the task lives in"),
+        provider: z.string().trim().min(1).max(64).optional().describe("Optional agent_dispatch provider id"),
+        model: z.string().trim().max(120).optional(),
+        effort: z.string().trim().max(32).optional().describe("Reasoning effort. Omit for the provider default."),
+        cwd: z.string().trim().min(1).max(1_000).optional().describe("Checkout to read; defaults to the task's linked repo"),
+        origin: z
+          .string()
+          .url()
+          .optional()
+          .describe("Dashboard origin for the plan URL (defaults to the MCP dashboard base URL)"),
+      },
+    },
+    async (input) =>
+      withDashboardErrors(async () => {
+        const data = await dashboard.post<{ run: { id: string; state: string; providerLabel?: string; title?: string } }>("/api/tasks/agent-runs/plan", { ...input, depth: callerDepth() });
+        const bits = [`Started a plan-only run for task ${input.taskId} → ${data.run.id}`, data.run.state, data.run.providerLabel, "stops after the plan; write restrictions depend on provider"].filter(Boolean);
         return { content: [{ type: "text" as const, text: bits.join(" · ") }] };
       }),
   );
@@ -697,8 +767,8 @@ export function registerTasksTools(server: McpServer, ctx: Context): void {
       }),
   );
 
-  const reviewerLine = (r: { provider: string; model: string | null | "" }) =>
-    r.provider ? `${r.provider}${r.model ? ` / ${r.model}` : " (provider default model)"}` : "none: the implementing agent reviews its own diff";
+  const reviewerLine = (r: { provider: string; model: string | null | ""; effort?: string }) =>
+    r.provider ? `${r.provider}${r.model ? ` / ${r.model}` : " (provider default model)"}${r.effort ? ` · effort ${r.effort}` : ""}` : "none: the implementing agent reviews its own diff";
 
   server.registerTool(
     "tasks_implement_review_settings_get",
@@ -726,16 +796,18 @@ export function registerTasksTools(server: McpServer, ctx: Context): void {
           .optional()
           .describe("Provider id from agent_providers, e.g. codex. Empty string clears the reviewer."),
         model: z.string().trim().max(120).optional().describe("Provider-specific model id; omit for the provider's default."),
+        effort: z.string().trim().max(32).optional().describe("Reasoning effort. Empty string clears it."),
       },
     },
-    async ({ provider, model }) =>
+    async ({ provider, model, effort }) =>
       withDashboardErrors(async () => {
-        if (provider === undefined && model === undefined) {
-          return { content: [{ type: "text" as const, text: "Provide provider, model or both." }], isError: true };
+        if (provider === undefined && model === undefined && effort === undefined) {
+          return { content: [{ type: "text" as const, text: "Provide provider, model, effort, or a combination." }], isError: true };
         }
-        const data = await dashboard.put<{ provider: string; model: string }>("/api/tasks/implement/review-settings", {
+        const data = await dashboard.put<{ provider: string; model: string; effort?: string }>("/api/tasks/implement/review-settings", {
           ...(provider !== undefined ? { provider } : {}),
           ...(model !== undefined ? { model } : {}),
+          ...(effort !== undefined ? { effort } : {}),
         });
         return { content: [{ type: "text" as const, text: `Implement reviewer set: ${reviewerLine(data)}` }] };
       }),

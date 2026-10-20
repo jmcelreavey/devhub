@@ -28,7 +28,7 @@ describe("task note backlink", () => {
     render(<TaskRefBlockView taskId="old-id" date="2026-09-23" label="Old title" />);
     expect(mocks.useLive).toHaveBeenCalledWith("/api/tasks?taskId=old-id", expect.any(Object));
     expect(screen.getByText("Current task title")).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Open in Work" }).getAttribute("href")).toBe("/work?date=2026-09-24");
+    expect(screen.getByRole("link", { name: "Open in Tasks" }).getAttribute("href")).toBe("/work?date=2026-09-24");
 
     fireEvent.click(screen.getByRole("button", { name: "Mark task complete" }));
     await waitFor(() => expect(fetch).toHaveBeenCalledWith("/api/tasks", expect.objectContaining({

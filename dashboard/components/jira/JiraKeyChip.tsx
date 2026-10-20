@@ -1,14 +1,14 @@
 "use client";
-import { integrationFetch } from "@/lib/integrations/client-fetch";
-
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { CornerLeftUp } from "lucide-react";
 import { copyWithToast, copyTextAndToast } from "@/lib/pr-slack";
 import { useToast } from "@/lib/hooks/use-toast";
+import { useJiraTransition } from "@/lib/hooks/use-jira-transition";
 import { ContextMenu, useContextMenu } from "@/components/shell/ContextMenu";
 import { buildEntityRefMenuGroups } from "@/lib/entity-ref-menu";
 import { JiraTransitionModal } from "@/components/jira/JiraTransitionModal";
 import { jiraBrowseUrl } from "@/lib/utils";
+import { openInBrowser } from "@/lib/desktop/bridge";
 import type { EntityRef } from "@/lib/entity-note";
 import type { JiraTicketRef } from "@/lib/jira/client";
 
@@ -24,6 +24,7 @@ export function JiraParentChip({ parent, done = false }: { parent: JiraTicketRef
         quiet
         done={done}
         jiraKey={parent.key}
+        href={parent.url}
         label={`Copy parent ticket key ${parent.key}`}
         title={parent.summary ? `Copy ${parent.key} · parent: ${parent.summary}` : `Copy parent ${parent.key}`}
       />
@@ -39,6 +40,10 @@ interface JiraKeyChipProps {
   title?: string;
   /** Muted text until hovered, for references that should not compete with the row. */
   quiet?: boolean;
+  /** Browse URL on the real Jira domain; falls back to the build-time domain. */
+  href?: string;
+  /** An owning surface may supply the full ticket-row menu and its dialogs. */
+  menu?: { onOpen: (x: number, y: number, host: HTMLElement) => void; content: ReactNode };
 }
 
 /**
@@ -46,21 +51,20 @@ interface JiraKeyChipProps {
  * Jira entity menu (open / update state / copy) so the row menu doesn't
  * swallow the chip.
  */
-export function JiraKeyChip({ jiraKey, done = false, label, title, quiet = false }: JiraKeyChipProps) {
+export function JiraKeyChip({ jiraKey, done = false, label, title, quiet = false, href, menu: suppliedMenu }: JiraKeyChipProps) {
   const toast = useToast();
+  const move = useJiraTransition();
   const menu = useContextMenu<EntityRef>();
   const [transitionOpen, setTransitionOpen] = useState(false);
   const ref: EntityRef = {
     kind: "jira",
     id: jiraKey,
     label: jiraKey,
-    href: jiraBrowseUrl(jiraKey),
+    href: href ?? jiraBrowseUrl(jiraKey),
   };
   const groups = buildEntityRefMenuGroups(ref, {
-    onOpen: (target) => {
-      const dest = target.href ?? jiraBrowseUrl(jiraKey);
-      if (dest) window.open(dest, "_blank", "noopener,noreferrer");
-    },
+    // window.open is a silent no-op in the desktop webview; go through the shell opener.
+    onOpen: (target) => void openInBrowser(target.href ?? jiraBrowseUrl(jiraKey)),
     onCopy: (text, label) => void copyTextAndToast(text, label, toast),
     onUpdateJiraState: () => setTransitionOpen(true),
   });
@@ -75,7 +79,20 @@ export function JiraKeyChip({ jiraKey, done = false, label, title, quiet = false
         aria-label={label ?? `Jira ${jiraKey}`}
         title={title ?? `Copy ${jiraKey}`}
         onClick={copyWithToast(jiraKey, jiraKey, toast)}
-        onContextMenu={(e) => menu.openAt(e, ref)}
+        onContextMenu={(event) => {
+          if (!suppliedMenu) { menu.openAt(event, ref); return; }
+          event.preventDefault();
+          event.stopPropagation();
+          suppliedMenu.onOpen(event.clientX, event.clientY, event.currentTarget);
+        }}
+        onKeyDown={(event) => {
+          event.stopPropagation();
+          if (event.key !== "ContextMenu" && !(event.shiftKey && event.key === "F10")) return;
+          event.preventDefault();
+          const rect = event.currentTarget.getBoundingClientRect();
+          if (suppliedMenu) suppliedMenu.onOpen(rect.left + 12, rect.bottom - 4, event.currentTarget);
+          else menu.openAtPoint(rect.left + 12, rect.bottom - 4, ref, event.currentTarget);
+        }}
         style={{
           // The quiet variant takes its colours from CSS so :hover can win.
           ...(quiet ? {} : { background: "var(--accent-dim)", color: "var(--accent-text, var(--accent))", border: "none" }),
@@ -85,6 +102,7 @@ export function JiraKeyChip({ jiraKey, done = false, label, title, quiet = false
       >
         {jiraKey}
       </button>
+      {suppliedMenu ? suppliedMenu.content : <>
       <ContextMenu
         open={menu.target !== null}
         position={menu.position}
@@ -98,23 +116,12 @@ export function JiraKeyChip({ jiraKey, done = false, label, title, quiet = false
         title="Update Jira status"
         skipLabel="Cancel"
         onCancel={() => setTransitionOpen(false)}
-        onConfirm={async (transitionId) => {
+        onConfirm={(transitionId, to) => {
           setTransitionOpen(false);
-          if (!transitionId) return;
-          try {
-            const res = await integrationFetch(`/api/jira/ticket/${jiraKey}/transition`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ transitionId }),
-            });
-            if (!res) return;
-            if (!res.ok) throw new Error("Transition failed");
-            toast.success(`Updated ${jiraKey}`);
-          } catch {
-            toast.error(`Couldn't transition ${jiraKey}`);
-          }
+          if (transitionId) void move(jiraKey, { transitionId }, { to });
         }}
       />
+      </>}
     </>
   );
 }

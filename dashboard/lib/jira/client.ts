@@ -18,6 +18,7 @@ export interface JiraTicket {
   key: string;
   summary: string;
   status: string;
+  statusCategory?: string;
   priority: string;
   issuetype: string;
   project: string;
@@ -49,7 +50,7 @@ interface JiraAssigneeField {
 
 interface JiraIssueFields {
   summary?: string;
-  status?: JiraNamedField;
+  status?: JiraNamedField & { statusCategory?: JiraNamedField };
   priority?: JiraNamedField;
   issuetype?: JiraNamedField;
   project?: JiraNamedField;
@@ -59,8 +60,13 @@ interface JiraIssueFields {
   parent?: { key?: string; fields?: { summary?: string } } | null;
 }
 
-function mapJiraParent(parent: JiraIssueFields["parent"]): JiraTicketRef | null {
-  return parent?.key ? { key: parent.key, summary: parent.fields?.summary ?? "" } : null;
+function mapJiraParent(parent: JiraIssueFields["parent"], domain?: string): JiraTicketRef | null {
+  if (!parent?.key) return null;
+  return {
+    key: parent.key,
+    summary: parent.fields?.summary ?? "",
+    ...(domain ? { url: `https://${domain}/browse/${parent.key}` } : {}),
+  };
 }
 
 function mapJiraAssignee(fields: JiraIssueFields): JiraPerson | undefined {
@@ -133,6 +139,7 @@ export async function getMyTickets(): Promise<JiraTicket[]> {
     key: issue.key,
     summary: issue.fields.summary ?? "",
     status: issue.fields.status?.name ?? "Unknown",
+    ...(issue.fields.status?.statusCategory?.key ? { statusCategory: issue.fields.status.statusCategory.key } : {}),
     priority: issue.fields.priority?.name ?? "None",
     issuetype: issue.fields.issuetype?.name ?? "Task",
     project: issue.fields.project?.name ?? "",
@@ -140,7 +147,7 @@ export async function getMyTickets(): Promise<JiraTicket[]> {
     url: `https://${j.domain}/browse/${issue.key}`,
     updatedAt: issue.fields.updated ?? "",
     assignee: mapJiraAssignee(issue.fields),
-    parent: mapJiraParent(issue.fields.parent),
+    parent: mapJiraParent(issue.fields.parent, j.domain),
   }));
 }
 
@@ -191,6 +198,7 @@ export async function getMyAssignedTicketsTouchedInRange(
       key: issue.key,
       summary: issue.fields.summary ?? "",
       status: issue.fields.status?.name ?? "Unknown",
+      ...(issue.fields.status?.statusCategory?.key ? { statusCategory: issue.fields.status.statusCategory.key } : {}),
       priority: issue.fields.priority?.name ?? "None",
       issuetype: issue.fields.issuetype?.name ?? "Task",
       project: issue.fields.project?.name ?? "",
@@ -198,7 +206,7 @@ export async function getMyAssignedTicketsTouchedInRange(
       url: `https://${j.domain}/browse/${issue.key}`,
       updatedAt: issue.fields.updated ?? "",
       assignee: mapJiraAssignee(issue.fields),
-      parent: mapJiraParent(issue.fields.parent),
+      parent: mapJiraParent(issue.fields.parent, j.domain),
       resolutionName,
     };
   });
@@ -207,6 +215,8 @@ export async function getMyAssignedTicketsTouchedInRange(
 export interface JiraTicketRef {
   key: string;
   summary: string;
+  /** Browse URL on the configured Jira domain; absent on refs built client-side. */
+  url?: string;
 }
 
 export interface JiraTicketDetail {
@@ -228,13 +238,13 @@ interface JiraTicketPayload {
   };
 }
 
-function ticketDetailFrom(key: string, data: JiraTicketPayload): JiraTicketDetail {
+function ticketDetailFrom(key: string, data: JiraTicketPayload, domain?: string): JiraTicketDetail {
   return {
     key: data.key ?? key,
     status: { name: data.fields?.status?.name ?? "Unknown" },
     summary: data.fields?.summary ?? "",
     issuetype: data.fields?.issuetype?.name ?? "Task",
-    parent: mapJiraParent(data.fields?.parent),
+    parent: mapJiraParent(data.fields?.parent, domain),
   };
 }
 
@@ -256,7 +266,7 @@ async function fetchTicketPayload(key: string, fields: string, signal?: AbortSig
 
 export async function getTicket(key: string, signal?: AbortSignal): Promise<JiraTicketDetail | null> {
   const data = await fetchTicketPayload(key, "status,summary,issuetype,parent", signal);
-  return data && ticketDetailFrom(key, data);
+  return data && ticketDetailFrom(key, data, getResolvedJiraEnv()?.domain);
 }
 
 export interface JiraTicketWithDescription extends JiraTicketDetail {
@@ -268,7 +278,7 @@ export interface JiraTicketWithDescription extends JiraTicketDetail {
 export async function getTicketWithDescription(key: string, signal?: AbortSignal): Promise<JiraTicketWithDescription | null> {
   const data = await fetchTicketPayload(key, "status,summary,issuetype,parent,description", signal);
   if (!data) return null;
-  return { ...ticketDetailFrom(key, data), description: adfToPlainText(data.fields?.description ?? null).trim() || null };
+  return { ...ticketDetailFrom(key, data, getResolvedJiraEnv()?.domain), description: adfToPlainText(data.fields?.description ?? null).trim() || null };
 }
 
 /* -------------------------------------------------------------------------- */

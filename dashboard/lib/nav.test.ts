@@ -8,19 +8,67 @@ SECTION_TABS,
 activeNavHref,
 filterNavBySetup,
 groupSidebarNav,
+navDestinationFor,
+settingsLinks,
+type NavItem,
 } from "./nav";
 import { PLUGIN_NAV_ITEMS } from "./plugin-nav.generated";
 
 const hrefs = (items: ReturnType<typeof filterNavBySetup>) => items.map((i) => i.href);
 
+const labels = (items: NavItem[]) => items.map((i) => i.label);
+
 describe("NAV_ITEMS (sidebar IA)", () => {
-  it("has one shared Agents destination among 14 core destinations", () => {
-    expect(NAV_ITEMS).toHaveLength(14);
+  it("has one shared Agents destination among 12 core destinations", () => {
+    expect(NAV_ITEMS).toHaveLength(12);
+    expect(NAV_ITEMS.filter((item) => item.href === "/agents")).toHaveLength(1);
   });
 
-  it("gives the database client a library slot beside Repos", () => {
+  it("names the jobs: Workspace, Library, Tools, then the system footer", () => {
+    const grouped = groupSidebarNav(NAV_ITEMS, [], {
+      setup: { github: true, calendar: true, datadog: true },
+    });
+    expect(NAV_GROUPS.map((g) => g.label)).toEqual(["Workspace", "Library", "Tools", "System"]);
+    expect(labels(grouped.workspace)).toEqual(["Home", "Storyboard", "Tasks", "PRs", "Calendar"]);
+    expect(labels(grouped.library)).toEqual(["Notes", "Search", "Repos"]);
+    expect(labels(grouped.infra)).toEqual(["Datadog", "Databases"]);
+    expect(labels(grouped.system)).toEqual(["Agents", "Settings"]);
+  });
+
+  it("renames Work to Tasks and System to Settings without moving their URLs", () => {
+    expect(NAV_ITEMS.find((item) => item.href === "/work")?.label).toBe("Tasks");
+    expect(NAV_ITEMS.find((item) => item.href === "/status")?.label).toBe("Settings");
+    expect(labels(NAV_ITEMS)).not.toContain("Work");
+    expect(labels(NAV_ITEMS)).not.toContain("System");
+    expect(labels(NAV_ITEMS)).not.toContain("Infrastructure");
+  });
+
+  it("calls the first destination Home but keeps Today as a command-palette search term", () => {
+    expect(NAV_ITEMS.find((item) => item.href === "/")).toMatchObject({ label: "Home", icon: "today", keywords: "Today" });
+  });
+
+  it("keeps the open-task badge and unseen dot on the renamed Tasks row", () => {
+    // Both are keyed on the icon, so a rename must not touch it.
+    expect(NAV_ITEMS.find((item) => item.href === "/work")?.icon).toBe("tasks");
+  });
+
+  it("takes Briefing, QA, Review and Skills out of the sidebar but not out of the app", () => {
+    const sidebar = hrefs(NAV_ITEMS);
+    for (const [href, label] of [
+      ["/briefing", "Briefing"],
+      ["/qa", "QA lab"],
+      ["/review", "Weekly review"],
+      ["/skills", "Agent skills"],
+    ]) {
+      expect(sidebar).not.toContain(href);
+      expect(LEGACY_NAV_ITEMS.find((item) => item.href === href)?.label).toBe(label);
+      expect(hrefs(ALL_NAV_DESTINATIONS)).toContain(href);
+    }
+  });
+
+  it("gives the database client a Tools slot beside Datadog", () => {
     const db = NAV_ITEMS.find((item) => item.href === "/db");
-    expect(db?.group).toBe("library");
+    expect(db?.group).toBe("infra");
     // Desktop-only for the same reason Repos is: it reaches local files and
     // local CLIs. Ungated on purpose — a SQLite file needs no integration, so
     // gating it would hide the one part that works on a fresh machine.
@@ -65,29 +113,76 @@ describe("NAV_ITEMS (sidebar IA)", () => {
     expect(hrefs(ALL_NAV_DESTINATIONS)).not.toContain("/tickets");
   });
 
-  it("exposes Work, Library and System as the merged destinations", () => {
+  it("exposes Tasks, Library and Settings as the merged destinations", () => {
     const sidebar = hrefs(NAV_ITEMS);
-    expect(sidebar).toContain("/work");
+    expect(sidebar).toContain("/work"); // Tasks
     expect(sidebar).toContain("/notes"); // Library
-    expect(sidebar).toContain("/status"); // System
+    expect(sidebar).toContain("/status"); // Settings
   });
-  it("gives Datadog a first-class infrastructure sidebar slot", () => {
+  it("gives Storyboard an ungated workspace slot ahead of Tasks", () => {
+    const sidebar = hrefs(NAV_ITEMS);
+    const storyboard = NAV_ITEMS.find((item) => item.href === "/storyboard");
+    expect(storyboard?.group).toBe("workspace");
+    // Ungated: the sample board and task evidence work with no integration configured.
+    expect(storyboard?.gate).toBeUndefined();
+    expect(sidebar.indexOf("/storyboard")).toBe(sidebar.indexOf("/work") - 1);
+  });
+
+  it("gives Datadog a first-class Tools sidebar slot", () => {
     const datadog = NAV_ITEMS.find((item) => item.href === "/datadog");
     expect(datadog).toBeDefined();
     expect(datadog?.group).toBe("infra");
     expect(datadog?.gate).toBe("datadog");
     expect(hrefs(LEGACY_NAV_ITEMS)).not.toContain("/datadog");
   });
-  it("exposes a infrastructure nav group between Library and System", () => {
+  it("keeps the infra group id (plugin manifests use it) between Library and System", () => {
     expect(NAV_GROUPS.map((g) => g.id)).toEqual(["workspace", "library", "infra", "system"]);
   });
-  it("merges plugin Ops into the infrastructure sidebar group ahead of Datadog", () => {
-    if (!PLUGIN_NAV_ITEMS.some((i) => i.href === "/ops")) return;
-    const grouped = groupSidebarNav(NAV_ITEMS, PLUGIN_NAV_ITEMS, {
-      setup: { infra: true, datadog: true },
-    });
-    expect(grouped.infra.map((i) => i.href)).toEqual(["/ops", "/datadog"]);
-    expect(grouped.system.map((i) => i.href)).not.toContain("/ops");
+  it("merges a plugin's Ops into Tools ahead of Datadog and Databases", () => {
+    const ops: NavItem = { href: "/ops", label: "Ops", icon: "ops", group: "infra", gate: "infra" };
+    const grouped = groupSidebarNav(NAV_ITEMS, [ops], { setup: { infra: true, datadog: true } });
+    expect(hrefs(grouped.infra)).toEqual(["/ops", "/datadog", "/db"]);
+    expect(hrefs(grouped.system)).not.toContain("/ops");
+  });
+  it("keeps Databases off the mobile drawer, which only shows what a phone can reach", () => {
+    const grouped = groupSidebarNav(NAV_ITEMS, [], { includeDesktopOnly: false, setup: { datadog: true } });
+    expect(hrefs(grouped.infra)).toEqual(["/datadog"]);
+    expect(hrefs(grouped.library)).toEqual(["/notes", "/search"]);
+  });
+});
+
+describe("navDestinationFor", () => {
+  it("names a page by the longest matching destination", () => {
+    expect(navDestinationFor("/work")?.label).toBe("Tasks");
+    expect(navDestinationFor("/status")?.label).toBe("Settings");
+    expect(navDestinationFor("/review")?.label).toBe("Weekly review");
+    expect(navDestinationFor("/review/rep")?.label).toBe("Daily rep");
+    expect(navDestinationFor("/qa")?.label).toBe("QA lab");
+    expect(navDestinationFor("/skills")?.label).toBe("Agent skills");
+    expect(navDestinationFor("/briefing")?.label).toBe("Briefing");
+    expect(navDestinationFor("/db")?.label).toBe("Databases");
+    expect(navDestinationFor("/repos/devhub")?.label).toBe("Repos");
+  });
+
+  it("respects segment boundaries and has no opinion about unknown pages", () => {
+    expect(navDestinationFor("/worker")).toBeUndefined();
+    expect(navDestinationFor("/nowhere")).toBeUndefined();
+  });
+});
+
+describe("old names still find their pages", () => {
+  it("carries the retired labels as search keywords on the page that took them over", () => {
+    const keywords = (href: string) => ALL_NAV_DESTINATIONS.find((item) => item.href === href)?.keywords;
+    expect(keywords("/work")).toBe("Work");
+    expect(keywords("/status")).toBe("System");
+    expect(keywords("/review")).toBe("Review");
+    expect(keywords("/qa")).toBe("QA");
+    expect(keywords("/skills")).toBe("Skills");
+  });
+
+  it("lists every destination once, so palette rows and tab titles cannot disagree", () => {
+    const all = hrefs(ALL_NAV_DESTINATIONS);
+    expect(new Set(all).size).toBe(all.length);
   });
 });
 
@@ -173,6 +268,30 @@ describe("SECTION_TABS", () => {
   it("exposes Logs on the system strip for the desktop shell", () => {
     expect(SECTION_TABS.system.map((t) => t.href)).toContain("/logs");
   });
+
+  it("labels the sections inside Settings plainly: Status, Logs, Actions, Setup", () => {
+    const byHref = new Map(SECTION_TABS.system.map((t) => [t.href, t.label]));
+    expect(SECTION_TABS.system[0]).toMatchObject({ href: "/status", label: "Status" });
+    expect(byHref.get("/logs")).toBe("Logs");
+    expect(byHref.get("/actions")).toBe("Actions");
+    expect(byHref.get("/setup")).toBe("Setup");
+    expect([...byHref.values()]).not.toContain("System");
+  });
+});
+
+describe("settingsLinks", () => {
+  it("reaches Agent skills and the QA lab from Settings", () => {
+    expect(settingsLinks()).toEqual([
+      { href: "/skills", label: "Agent skills" },
+      { href: "/qa", label: "QA lab" },
+    ]);
+  });
+
+  it("only lists pages that really are routable destinations", () => {
+    for (const link of settingsLinks()) {
+      expect(hrefs(ALL_NAV_DESTINATIONS)).toContain(link.href);
+    }
+  });
 });
 
 describe("activeNavHref", () => {
@@ -201,5 +320,34 @@ describe("activeNavHref", () => {
 
   it("returns nothing for pages with no sidebar home", () => {
     expect(activeNavHref("/recall", sidebar)).toBeUndefined();
+  });
+
+  it("highlights Databases under Tools", () => {
+    expect(activeNavHref("/db", sidebar)).toBe("/db");
+    expect(NAV_ITEMS.find((item) => item.href === "/db")?.group).toBe("infra");
+  });
+
+  it("keeps a demoted page under the row it now lives beneath", () => {
+    expect(activeNavHref("/briefing", sidebar)).toBe("/");
+    expect(activeNavHref("/review", sidebar)).toBe("/work");
+    expect(activeNavHref("/review/rep", sidebar)).toBe("/work");
+    expect(activeNavHref("/qa", sidebar)).toBe("/status");
+    expect(activeNavHref("/skills", sidebar)).toBe("/status");
+  });
+
+  it("only lights a row the asking surface actually has", () => {
+    // The mobile shelf has Today, Notes and Tasks - nothing for Settings.
+    const shelf = ["/", "/notes", "/work"];
+    expect(activeNavHref("/review", shelf)).toBe("/work");
+    expect(activeNavHref("/briefing", shelf)).toBe("/");
+    expect(activeNavHref("/docs", shelf)).toBe("/notes");
+    expect(activeNavHref("/qa", shelf)).toBeUndefined();
+    expect(activeNavHref("/workflow", shelf)).toBeUndefined();
+  });
+
+  it("declares a parent that is a real sidebar row for every demoted page", () => {
+    const demoted = LEGACY_NAV_ITEMS.filter((item) => item.parent);
+    expect(demoted.length).toBeGreaterThan(0);
+    for (const item of demoted) expect(sidebar).toContain(item.parent);
   });
 });

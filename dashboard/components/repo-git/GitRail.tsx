@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import { ChevronDown, ChevronRight, Layers, Tag } from "lucide-react";
 import { ContextMenu, useContextMenu } from "@/components/shell/ContextMenu";
+import { usePrStatusMenu } from "@/components/github/PrStatusMenu";
+import { asPrChecksState } from "@/lib/github/pr-status-menu";
 import { useConfirm, usePrompt } from "@/components/shell/ConfirmDialog";
 import { useToast } from "@/lib/hooks/use-toast";
 import { openInBrowser } from "@/lib/desktop/bridge";
@@ -13,6 +15,51 @@ import {
   type BranchMenuTarget,
 } from "./branchMenuGroups";
 import { CHECKOUT_AUTOSTASH, fetchGitJson, postGitAction, repoApi, switchedToast, type RepoGitTabId } from "./shared";
+
+function RailPrBadge({
+  pr,
+  localRepoName,
+}: {
+  pr: { headBranch: string; number: number; title: string; url: string; checks: string };
+  localRepoName: string;
+}) {
+  const menu = usePrStatusMenu({
+    url: pr.url,
+    number: pr.number,
+    branch: pr.headBranch,
+    localRepoName,
+    checks: asPrChecksState(pr.checks),
+  });
+  return (
+    <>
+      <span
+        className="repo-git-rail-pr"
+        data-checks={pr.checks}
+        tabIndex={0}
+        title={`PR #${pr.number}: ${pr.title} · checks ${pr.checks}. Right-click for PR actions`}
+        onClick={(event) => {
+          event.stopPropagation();
+          event.preventDefault();
+          void openInBrowser(pr.url);
+        }}
+        {...menu.bind}
+        onKeyDown={(event) => {
+          menu.bind.onKeyDown(event);
+          if (event.defaultPrevented) return;
+          if (event.key === "Enter") {
+            event.preventDefault();
+            event.stopPropagation();
+            void openInBrowser(pr.url);
+          }
+        }}
+      >
+        #{pr.number}
+      </span>
+      {menu.menuNode}
+    </>
+  );
+}
+
 export interface RailSummary {
   currentBranch: string;
   upstream: string | null;
@@ -378,19 +425,7 @@ export function GitRail({
               data-drop-branch={b.current ? undefined : b.name}
             >
               <span className="truncate font-mono">{b.name}</span>
-              {pr && (
-                <span
-                  className="repo-git-rail-pr"
-                  data-checks={pr.checks}
-                  title={`PR #${pr.number}: ${pr.title} · checks ${pr.checks} — click to open`}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    void openInBrowser(pr.url);
-                  }}
-                >
-                  #{pr.number}
-                </span>
-              )}
+              {pr && <RailPrBadge pr={pr} localRepoName={repoName} />}
               <span className="repo-git-rail-counts" aria-label="Ahead and behind upstream">
                 {gone && <span data-dir="gone" title={`Upstream ${b.upstream ?? ""} was deleted on the remote`.trim()}>⌫</span>}
                 {aheadLabel && (

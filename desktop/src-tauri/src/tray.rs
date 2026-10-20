@@ -144,6 +144,30 @@ pub(crate) fn install(_app: &tauri::AppHandle) -> tauri::Result<()> {
 #[allow(dead_code)] // called from macOS-only sites; kept so callers need no cfg
 pub(crate) fn set_visible(_app: &tauri::AppHandle, _visible: bool) {}
 
+/// macOS keeps a monochrome template; Windows uses the same colour icon as the window.
+pub(crate) fn set_icon(
+    _app: &tauri::AppHandle,
+    _halloween: bool,
+    _png: &[u8],
+) -> Result<(), String> {
+    #[cfg(any(target_os = "macos", windows))]
+    if let Some(tray) = _app.tray_by_id("devhub-status") {
+        #[cfg(target_os = "macos")]
+        let bytes: &[u8] = if _halloween {
+            include_bytes!("../icons/halloween/trayTemplate@2x.png")
+        } else {
+            include_bytes!("../icons/trayTemplate@2x.png")
+        };
+        #[cfg(windows)]
+        let bytes = _png;
+        let image = tauri::image::Image::from_bytes(bytes).map_err(|e| e.to_string())?;
+        tray.set_icon(Some(image)).map_err(|e| e.to_string())?;
+        #[cfg(target_os = "macos")]
+        tray.set_icon_as_template(true).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     #[test]

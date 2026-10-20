@@ -12,7 +12,7 @@ const ref = z.object({
 }).strict();
 const branch = z.string().trim().min(1).max(255).refine((value) => !/[\x00-\x20~^:?*\[\\]/.test(value) && !value.includes("..") && !value.startsWith("-"), "Use a valid branch name.");
 const proposal = z.discriminatedUnion("action", [
-  z.object({ action: z.literal("issue.create"), provider: z.literal("jira"), account, projectKey: z.string().regex(/^[A-Z][A-Z0-9_]*$/), title, body: body.min(1).max(5000), parentKey: z.string().regex(/^[A-Z][A-Z0-9_]*-[1-9][0-9]*$/).nullable().optional(), assignToMe: z.boolean().optional(), sprintId: z.number().int().positive().nullable().optional() }).strict(),
+  z.object({ action: z.literal("issue.create"), provider: z.literal("jira"), account, projectKey: z.string().regex(/^[A-Z][A-Z0-9_]*$/), title, body: body.min(1).max(5000), parentKey: z.string().regex(/^[A-Z][A-Z0-9_]*-[1-9][0-9]*$/).nullable().optional(), taskId: z.string().regex(/^[a-zA-Z0-9_-]{1,200}$/).optional(), assignToMe: z.boolean().optional(), sprintId: z.number().int().positive().nullable().optional() }).strict(),
   z.object({ action: z.literal("issue.transition"), provider: z.literal("jira"), account, ref, transitionId: z.string().regex(/^[0-9]+$/) }).strict(),
   z.object({ action: z.literal("pr.create"), provider: z.literal("github"), account, repo: z.string().regex(/^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/), head: branch, base: branch, title, body, draft: z.boolean().optional() }).strict(),
   z.object({ action: z.literal("pr.update"), provider: z.literal("github"), account, ref, title, body }).strict(),
@@ -30,6 +30,22 @@ const proposal = z.discriminatedUnion("action", [
 });
 
 export function registerIntegrationTools(server: McpServer, ctx: Context): void {
+  server.registerTool("integrations_slack_status", {
+    description: "Read Slack Socket Mode connection status, masked settings, settings revision and active task profile. Never returns tokens or starts a connection. Configure Slack in DevHub Setup.",
+  }, async () => withDashboardErrors(async () => ({
+    content: [{ type: "text", text: JSON.stringify(await ctx.dashboard.get("/api/integrations/slack/status")) }],
+  })));
+  server.registerTool("integrations_slack_usage", {
+    description: "Read today's Slack bot usage: questions answered, how many were free keyword rules, Jev routing calls with their estimated cost, and cheap-model calls. Read-only; never returns message text, tokens or Slack content.",
+  }, async () => withDashboardErrors(async () => ({
+    content: [{ type: "text", text: JSON.stringify(await ctx.dashboard.get("/api/integrations/slack/usage")) }],
+  })));
+  server.registerTool("integrations_slack_test", {
+    description: "Send one short test to the Slack bot's saved channel. Read integrations_slack_status for the current settings revision. Requires a UUID requestId; reuse it after uncertain transport to avoid duplicate sends. Does not change settings, enable alerts or run task actions. Check the channel if delivery is unknown; no automatic retry.",
+    inputSchema: { revision: z.string().regex(/^[a-f0-9]{64}$/), requestId: z.string().uuid() },
+  }, async ({ revision, requestId }) => withDashboardErrors(async () => ({
+    content: [{ type: "text", text: JSON.stringify(await ctx.dashboard.post("/api/integrations/slack/test", { revision, requestId }, 30_000)) }],
+  })));
   server.registerTool("integrations_list", {
     description: "List integration providers, capabilities and account references, optionally with a task's linked items. Never returns credential values. Requires the dashboard.",
     inputSchema: { taskId: z.string().min(1).max(100).optional() },
@@ -37,7 +53,7 @@ export function registerIntegrationTools(server: McpServer, ctx: Context): void 
     content: [{ type: "text", text: JSON.stringify(await ctx.dashboard.get("/api/integrations", taskId ? { taskId } : undefined)) }],
   })));
   server.registerTool("integrations_alert_destinations", {
-    description: "List configured alert destinations and recent deliveries for the active work profile. Includes consent revisions and credential variable names, never secret values. Cannot enable or change consent.",
+    description: "List configured alert destinations and recent deliveries for the active work profile. Includes event kinds (pr-reviewed and pr-ready), the per-destination includePrDetails opt-in, consent revisions and credential variable names, never secret values. PR details and the owner mention require fresh consent in DevHub Integrations. Cannot enable or change consent.",
   }, async () => withDashboardErrors(async () => ({
     content: [{ type: "text", text: JSON.stringify(await ctx.dashboard.get("/api/integrations/alerts")) }],
   })));
@@ -58,13 +74,19 @@ export function registerIntegrationTools(server: McpServer, ctx: Context): void 
     content: [{ type: "text", text: JSON.stringify(await ctx.dashboard.get("/api/integrations/writes")) }],
   })));
   server.registerTool("integrations_propose", {
-    description: "Request a Jira ticket/transition or GitHub PR create/update/publish proposal. Does not write to the provider. Review with integrations_review, then the human must confirm the exact action in DevHub Integrations. Chat and MCP cannot confirm here.",
+    description: "Request a Jira ticket/transition or GitHub PR create/update/publish proposal. Does not write to the provider. Review with integrations_review, then confirm with integrations_confirm once the user has said in chat to go ahead (or they click Confirm in DevHub Integrations).",
     inputSchema: { input: proposal },
   }, async ({ input }) => withDashboardErrors(async () => ({
     content: [{ type: "text", text: JSON.stringify(await ctx.dashboard.post("/api/integrations/writes", { action: "propose", input }, 60_000)) }],
   })));
+  server.registerTool("integrations_confirm", {
+    description: "Execute a reviewed proposal. Use it when the user has told you in chat to go ahead: pass the digest from integrations_review and their own words approving it, which are kept in the audit trail. Never use it without an explicit instruction for this action. The digest must still match the live destination and content, so changed items need another review.",
+    inputSchema: { id: z.string().uuid(), digest: z.string().regex(/^[a-f0-9]{64}$/), approvedBy: z.string().trim().min(1).max(500).describe("The user's words approving this exact action, quoted or closely paraphrased") },
+  }, async ({ id, digest, approvedBy }) => withDashboardErrors(async () => ({
+    content: [{ type: "text", text: JSON.stringify(await ctx.dashboard.post("/api/integrations/writes", { action: "confirm", id, digest, confirmed: true, via: "chat", quote: approvedBy }, 60_000)) }],
+  })));
   server.registerTool("integrations_review", {
-    description: "Prepare the provider identity, destination and exact content for a requested proposal. Does not execute it. The human confirms in DevHub within 15 minutes; stale previews need another review. No automatic retry of an unknown outcome.",
+    description: "Prepare the provider identity, destination and exact content for a requested proposal. Does not execute it. Confirm within 15 minutes, either with integrations_confirm when the user has approved it in chat, or in DevHub; stale previews need another review. No automatic retry of an unknown outcome.",
     inputSchema: { id: z.string().uuid() },
   }, async ({ id }) => withDashboardErrors(async () => ({
     content: [{ type: "text", text: JSON.stringify(await ctx.dashboard.post("/api/integrations/writes", { action: "review", id }, 60_000)) }],

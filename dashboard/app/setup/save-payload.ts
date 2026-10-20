@@ -7,6 +7,7 @@ import { SECRET_FIELD_MASK } from "./shared";
 const ALWAYS_SAVE_STEP_IDS = new Set(["jira", "datadog", "agent"]);
 
 export function shouldSaveBeforeNext(stepId: string, configured: boolean): boolean {
+  if (stepId === "slack") return false;
   if (ALWAYS_SAVE_STEP_IDS.has(stepId)) return true;
   return !configured;
 }

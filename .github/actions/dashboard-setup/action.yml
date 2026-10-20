@@ -18,6 +18,7 @@ runs:
         cache-dependency-path: |
           dashboard/package-lock.json
           mcp-servers/devhub-server/package-lock.json
+          gateway/package-lock.json
 
     - name: Cache dashboard node_modules
       id: node-cache
@@ -40,6 +41,18 @@ runs:
       run: |
         npm i -g @aikidosec/safe-chain@1.1.10
         safe-chain setup-ci
+
+    - name: Cache gateway node_modules
+      id: gateway-cache
+      uses: actions/cache@v4
+      with:
+        path: gateway/node_modules
+        key: gateway-node-modules-${{ runner.os }}-${{ hashFiles('gateway/package-lock.json') }}
+
+    - name: Install gateway dependencies
+      shell: bash
+      if: steps.gateway-cache.outputs.cache-hit != 'true'
+      run: npm ci --prefix gateway --ignore-scripts
 
     - name: Install dashboard dependencies
       shell: bash

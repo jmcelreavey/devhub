@@ -1,23 +1,25 @@
 import { HAS_PLUGIN_BRAND } from "@/lib/brand-mark";
 import { isDesktop, setDesktopIcon } from "./bridge";
+import { getThemeSelectionFromDom, subscribeThemeSelection } from "@/lib/theme-presets";
 
 /** Matches IconPicker storage sentinels. */
 const DEVHUB_VALUE = "__devhub__";
 const BOTTLE_VALUE = "__bottle__";
 
-export type DesktopIconKind = "default" | "plugin";
+export type DesktopIconKind = "default" | "plugin" | "halloween";
 
 /**
  * Which OS icon the current in-app logo corresponds to.
  *
- * Lucide / seasonal picks are chrome, not a brand — leave the Dock alone.
- * `__devhub__` must always return `"default"`, even when a plugin brand is
- * installed. That is the whole bug: the picker switched, the Dock did not.
+ * Hollow temporarily overrides every brand. Otherwise decorative picks keep
+ * the last brand, and `__devhub__` restores the bundled mark even with a plugin.
  */
 export function desktopIconKind(
   stored: string,
   hasPluginBrand: boolean = HAS_PLUGIN_BRAND,
+  preset: string = "graphite",
 ): DesktopIconKind | null {
+  if (preset === "hollow") return "halloween";
   if (stored === DEVHUB_VALUE) return "default";
   if (stored === BOTTLE_VALUE || stored === "") {
     return hasPluginBrand ? "plugin" : "default";
@@ -37,13 +39,25 @@ async function fetchPng(url: string): Promise<Uint8Array | null> {
   }
 }
 
+let syncVersion = 0;
+let baseKind: DesktopIconKind = "default";
+
+/** Sync the bootstrapped theme on mount and follow manual, seasonal and cross-tab changes. */
+export function subscribeDesktopAppIcon(stored: string): () => void {
+  const sync = () => { void syncDesktopAppIcon(stored); };
+  sync();
+  return subscribeThemeSelection(sync);
+}
+
 /** No-op in a browser tab. Failures are cosmetic — never break the picker. */
 export async function syncDesktopAppIcon(stored: string): Promise<void> {
   if (typeof window === "undefined" || !isDesktop()) return;
-  const kind = desktopIconKind(stored);
-  if (!kind) return;
+  const version = ++syncVersion;
+  baseKind = desktopIconKind(stored) ?? baseKind;
+  const kind = desktopIconKind(stored, HAS_PLUGIN_BRAND, getThemeSelectionFromDom().preset) ?? baseKind;
   if (kind === "plugin") {
     const png = await fetchPng("/plugin-desktop-icon.png");
+    if (version !== syncVersion) return;
     if (!png) {
       await setDesktopIcon("default");
       return;
@@ -51,5 +65,5 @@ export async function syncDesktopAppIcon(stored: string): Promise<void> {
     await setDesktopIcon("plugin", png);
     return;
   }
-  await setDesktopIcon("default");
+  await setDesktopIcon(kind);
 }

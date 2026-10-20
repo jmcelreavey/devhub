@@ -1,0 +1,200 @@
+/* Board needs the full content area; other pages keep --page-max via .page-wrapper alone. */
+.page:global(.page-wrapper) {
+  max-width: none;
+  width: 100%;
+  min-width: 0;
+}
+.page { min-width: 0; }
+.page :is(button, select, input) { max-width: 100%; }
+/* Native select: drop the OS arrow (glued to the edge) and draw our own, inset, in a theme token. */
+.page select:not([data-pill]) {
+  appearance: none; -webkit-appearance: none;
+  padding-right: 36px;
+  background-image: linear-gradient(45deg, transparent 50%, var(--text-muted) 50%), linear-gradient(135deg, var(--text-muted) 50%, transparent 50%);
+  background-position: calc(100% - 19px) 50%, calc(100% - 14px) 50%;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+  text-overflow: ellipsis;
+}
+.page select:not([data-pill]):hover { background-image: linear-gradient(45deg, transparent 50%, var(--text) 50%), linear-gradient(135deg, var(--text) 50%, transparent 50%); }
+.boardSettings { position: relative; font-size: 12px; color: var(--text-muted); }
+.boardSettings summary { cursor: pointer; list-style: none; }
+.boardSettings summary::-webkit-details-marker { display: none; }
+.boardSettings[open] summary { color: var(--text); background: var(--bg-elevated); }
+.settingsPanel { position: absolute; z-index: 5; right: 0; top: calc(100% + 8px); width: min(520px, calc(100vw - 48px)); display: grid; gap: 12px; padding: 16px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-surface); }
+.field { display: grid; gap: 6px; min-width: 0; max-width: 32rem; font-size: 12px; font-weight: 500; color: var(--text-muted); }
+.field :global(.input) { box-sizing: border-box; height: 38px; min-width: 0; width: 100%; max-width: 100%; padding: 8px 12px; line-height: 20px; }
+.headerActions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; font-size: 12px; color: var(--text-subtle); }
+.headerActions :global(.btn), .toolbar :global(.btn) { min-height: 38px; padding: 8px 12px; font-size: 12px; line-height: 20px; }
+
+.notes { font-size: 12px; color: var(--text-muted); line-height: 1.6; padding-left: 18px; }
+
+/* Toolbar */
+.toolbar { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px 16px; margin: 20px 0 16px; }
+.search { flex: 1 1 260px; max-width: 420px; min-width: 0; }
+.searchWrap { margin-bottom: 0; }
+/* Direct children only: the Board settings panel sits inside the toolbar and has fields of its own. */
+.toolbar > .field { width: 180px; }
+.check { display: flex; gap: 8px; align-items: center; min-height: 38px; font-size: 12px; color: var(--text-muted); cursor: pointer; }
+.check input { width: 16px; height: 16px; accent-color: var(--accent); }
+.toolbar .boardSettings { margin-left: auto; }
+.muted { margin: 0; color: var(--text-muted); font-size: 12px; line-height: 1.5; }
+
+/* Board: horizontal scroll belongs to the board, never the page. */
+.board { display: flex; align-items: flex-start; gap: 10px; overflow-x: auto; padding: 2px 2px 14px; scrollbar-width: thin; scrollbar-color: var(--scrollbar-thumb) transparent; }
+.column { flex: 1; min-width: 272px; display: grid; gap: 10px; align-content: start; padding: 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-surface); }
+.columnHead { margin: 0; font-size: 13px; font-weight: 600; }
+.columnToggle { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 32px; padding: 0; border: 0; background: none; color: var(--text); font: inherit; cursor: pointer; text-align: left; border-radius: var(--radius-sm, 8px); }
+.columnToggle:is(:hover, :focus-visible) { background: var(--bg-elevated); }
+.columnToggle:is(:hover, :focus-visible) .columnLabel { color: var(--accent-text, var(--accent)); }
+.chevron { flex-shrink: 0; color: var(--text-subtle); transition: transform 180ms cubic-bezier(.22,1,.36,1); }
+.columnToggle[aria-expanded="true"] .chevron { transform: rotate(90deg); }
+.columnLabel { font-weight: 600; }
+.columnCount { display: inline-flex; flex-shrink: 0; align-items: center; justify-content: center; min-width: 22px; height: 20px; margin-left: auto; padding: 0 7px; border-radius: 999px; background: var(--bg-elevated); color: var(--text); font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.columnCards { display: grid; gap: 10px; min-width: 0; }
+
+/* Empty (and manually collapsed) columns: a slim strip; click to expand. */
+/* Strips share one length so the row reads as a set; the longest label ("Ready for review") sets it. */
+.column[data-collapsed] { flex: 0 0 40px; min-width: 40px; min-height: 200px; padding: 0; grid-template-rows: 1fr; }
+.column[data-empty] .columnCount { background: transparent; color: var(--text-muted); font-weight: 400; }
+.column[data-collapsed] .columnToggle { flex-direction: column; gap: 12px; height: 100%; min-height: 198px; padding: 8px 4px; }
+.column[data-collapsed] .columnCount { margin: auto 0 0; }
+.column[data-collapsed] .columnLabel { flex-shrink: 0; writing-mode: vertical-rl; font-size: 12px; letter-spacing: 0.02em; white-space: nowrap; }
+.column[data-collapsed] .chevron { transform: none; }
+.column[data-collapsed]:is(:hover, :focus-within) { border-color: var(--accent); }
+
+/* Attention stays on occupied lanes; labels and counts carry the meaning without colour. */
+.column[data-status="needs-you"] { --column-attention: var(--warning); }
+.column[data-status="blocked"] { --column-attention: var(--danger); }
+.column:is([data-status="needs-you"], [data-status="blocked"]):not([data-empty], [data-drop]) {
+  border-color: color-mix(in srgb, var(--column-attention) 55%, var(--border));
+  background: color-mix(in srgb, var(--column-attention) 5%, var(--bg-surface));
+}
+.column:is([data-status="needs-you"], [data-status="blocked"]):not([data-empty]) .columnCount {
+  color: var(--column-attention);
+  background: color-mix(in srgb, var(--column-attention) 14%, var(--bg-surface));
+}
+/* Reference material, separate from the draggable status lanes. */
+.reviewsColumn { border-style: dashed; background: transparent; }
+
+/* Drag and drop: the column under a dragged card lights up if it takes the drop. */
+.column[data-drop="ok"] { opacity: 1; border-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, var(--bg-surface)); box-shadow: inset 0 0 0 1px var(--accent); }
+.column[data-drop="no"] { border-style: dashed; cursor: no-drop; }
+.card[draggable="true"] { cursor: grab; }
+.card[data-dragging] { opacity: 0.45; }
+
+/* Cards */
+.card { display: grid; min-width: 0; overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius-sm, 8px); background: var(--bg-elevated); }
+.card[data-focused] { outline: 2px solid var(--accent); outline-offset: -2px; }
+.card[data-task-only] { border-style: dashed; }
+/* Stuck work stands out: waiting on John, failing, or an idle agent. */
+.card[data-attention] { border-color: var(--warning); box-shadow: inset 3px 0 0 var(--warning); }
+.card[data-attention="failing"] { border-color: var(--danger); box-shadow: inset 3px 0 0 var(--danger); }
+.attention { margin: 0; padding: 6px 8px; background: color-mix(in srgb, var(--warning) 14%, transparent); font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+.attention[data-reason="failing"] { background: color-mix(in srgb, var(--danger) 14%, transparent); }
+.shot { position: relative; display: block; width: 100%; height: 110px; padding: 0; border: 0; overflow: hidden; background: var(--bg-surface); cursor: zoom-in; }
+.shotCount { position: absolute; right: 6px; bottom: 6px; display: inline-flex; align-items: center; gap: 3px; padding: 1px 6px; border-radius: 999px; background: color-mix(in srgb, var(--bg) 85%, transparent); color: var(--text-muted); font-size: 10px; font-weight: 600; font-variant-numeric: tabular-nums; }
+/* No backdrop-filter on the badge: WebKit (the desktop app's webview) can drop the image layer under it, leaving a blank box. */
+.shotChip { display: inline-flex; align-items: center; gap: 4px; margin: 10px 12px 0; padding: 2px 8px; border: 1px solid var(--border); border-radius: 999px; background: var(--bg-surface); color: var(--text-muted); font-size: 11px; cursor: zoom-in; justify-self: start; width: fit-content; }
+.shotChip:hover { color: var(--text); }
+.shot img { width: 100%; height: 100%; object-fit: cover; object-position: top; display: block; }
+.body { display: grid; gap: 8px; padding: 10px 12px; min-width: 0; }
+.title { font-size: 13px; font-weight: 600; line-height: 1.4; color: var(--text); overflow-wrap: anywhere; text-decoration: none; }
+a.title:hover { color: var(--accent-text, var(--accent)); text-decoration: underline; text-underline-offset: 3px; }
+.body :global(.pill) { max-width: 100%; }
+.summary { display: grid; gap: 2px; font-size: 12px; line-height: 1.5; color: var(--text-muted); }
+.summary p { margin: 0; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+.counts, .jev, .tierLine { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; font-size: 11px; color: var(--text-subtle); }
+.counts span { padding: 1px 8px; border-radius: 999px; background: var(--bg-surface); color: var(--text-muted); }
+.counts span[data-tone="warn"], .jev [data-tone="warn"] { color: var(--warning); }
+.jev [data-tone="ok"] { color: var(--success); }
+.jev a { display: inline-flex; align-items: center; gap: 3px; color: var(--accent-text, var(--accent)); }
+.jevLabel { font-weight: 700; color: var(--text-muted); }
+.foot { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 11px; color: var(--text-subtle); }
+.foot :global(.btn) { min-height: 26px; padding: 2px 10px; font-size: 12px; }
+/* Start on auto stays the card's one primary action, but sits quiet (outline) until
+   the card is hovered, focused or selected, so a column of To do cards isn't a wall
+   of orange. Touch screens have no hover, so they keep the full button. */
+@media (hover: hover) {
+  .card:not(:hover):not(:focus-within):not([data-focused]) .startAuto:not(:disabled) {
+    background: transparent;
+    color: var(--accent-text, var(--accent));
+    border-color: var(--accent);
+  }
+}
+
+@media (max-width: 767px) {
+  .board { display: grid; overflow: visible; }
+  .column, .column[data-collapsed] { flex: none; min-width: 0; }
+  .column[data-collapsed] { min-height: 0; }
+  .column[data-collapsed] .columnToggle { flex-direction: row; min-height: 44px; padding: 6px 10px; }
+  .column[data-collapsed] .columnCount { margin: 0 0 0 auto; }
+  .column[data-collapsed] .columnLabel { writing-mode: horizontal-tb; font-size: 13px; }
+  .toolbar > .field, .search { width: 100%; max-width: none; }
+  .toolbar :global(.btn), .headerActions :global(.btn), .field :global(.input) { min-height: 44px; }
+  .settingsPanel { right: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .chevron { transition: none; }
+}
+:global(body[data-motion="off"]) .chevron { transition: none; }
+
+/* Orchestrator (Graphite Neon tokens only; no motion on healthy state) */
+.orchestrator { display: inline-flex; align-items: center; gap: 6px; min-height: 28px; padding: 2px 10px; border: 1px solid var(--border-muted, var(--border)); border-radius: 999px; background: var(--bg-elevated); color: var(--text-muted); font-size: 12px; white-space: nowrap; }
+.orchestrator[data-state="active"] { color: var(--accent-text, var(--accent)); border-color: color-mix(in oklab, var(--accent) 45%, var(--border)); }
+.orchestrator[data-state="unavailable"] { color: var(--warning); }
+.orchestratorGroup { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.orchestratorGroup :global(.task-agent-chip) { font-size: 12px; padding: 3px 10px; }
+.orchestratorNotice { flex-basis: 100%; max-width: 60ch; font-size: 12px; line-height: 1.5; }
+.orchestratorStep { font-size: 12px; color: var(--text-subtle); }
+
+/* Model tiers (settings panel) and per-card tier line. */
+.tierPicker { display: grid; gap: 8px; }
+.tierRow { display: grid; grid-template-columns: 48px minmax(0, 1fr) minmax(0, 1.4fr) 92px; gap: 8px; align-items: end; }
+.tierRow > * { min-width: 0; }
+.tierEffort { display: grid; }
+.tierName { font-weight: 600; padding-bottom: 8px; }
+.tierSteps { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 6px; }
+@media (max-width: 480px) {
+  .tierRow { grid-template-columns: 48px repeat(2, minmax(0, 1fr)); }
+  .tierEffort { grid-column: 2 / -1; }
+  .tierEffort:empty { display: none; }
+}
+
+/* Per-run log on a card: step, tier, model, approximate cost. */
+.stepLog { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; font-size: 11px; color: var(--text-muted); }
+.stepLog li { display: flex; flex-wrap: wrap; gap: 0 6px; align-items: baseline; min-width: 0; }
+.tierReason { flex-basis: 100%; color: var(--text-subtle); font-size: 10.5px; }
+.stepLog li[data-status="failed"] { color: var(--danger); }
+.stepLog b { color: var(--text); font-weight: 600; }
+.stepModel { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex: 1; }
+
+
+/* Card face: title, one progress line, one action. Everything else sits in Details, collapsed. */
+.progress { margin: 0; font-size: 12px; line-height: 1.5; color: var(--text-muted); overflow-wrap: anywhere; }
+.preview { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.progress[data-waiting="queued"] { color: var(--text-subtle); }
+.details { font-size: 12px; }
+.noteUtilities { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 8px; }
+.noteUtilities > .details { flex: 1; min-width: 0; }
+.noteUtilities:has(> .details[open]) > .details { flex-basis: 100%; }
+.noteUtilities :global(.row-menu-kebab) { opacity: 1; }
+.noteTrigger { flex-shrink: 0; }
+.noteUtilities > .details > summary { min-height: 24px; display: flex; align-items: center; gap: 4px; }
+.details > summary { cursor: pointer; width: max-content; color: var(--text-subtle); font-size: 11px; list-style: none; }
+.details > summary::-webkit-details-marker { display: none; }
+.details > summary::before { content: "▸ "; }
+.details[open] > summary::before { content: "▾ "; }
+.detailsBody { display: grid; gap: 8px; padding-top: 8px; }
+.detailRow { display: grid; gap: 2px; }
+.linkButton { padding: 0; border: 0; background: none; color: var(--accent-text, var(--accent)); font: inherit; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+.detailRow .check { min-height: 0; }
+.settingsPanel > .check { min-height: 28px; }
+.tierLine b { color: var(--text); font-weight: 600; }
+/* Where a card dragged within its own column will land. */
+.dropLine { height: 2px; margin: -5px 4px; border-radius: 2px; background: var(--accent); }
+
+@media (pointer: coarse) {
+  .columnToggle, .card button, .foot :global(.btn), .noteUtilities > .details > summary { min-height: 44px; }
+  .noteUtilities :global(.row-menu-kebab) { min-width: 44px; }
+}

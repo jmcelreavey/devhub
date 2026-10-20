@@ -27,7 +27,7 @@ Everything lives in one place: the **Appearance** button (the palette icon) in t
 | Theme | Character | Signature |
 | ----- | --------- | --------- |
 | Graphite Neon (Default) | Charcoal and lime workbench | Shift Dock, measuring grid, lime ring |
-| Hollow (Halloween) 🎃 | Bruised ink and stained paper | Haunted arch, fog, spectral trail |
+| Hollow (Halloween) 🎃 | Bruised ink and stained paper | Halloween Shift Dock, fog, spectral trail |
 | Ember Dusk | Copper ink and warm paper | Ember mark, hearth light, flame-shaped follower |
 | Abyss | Ocean ink and blue glass | Sonar mark, depth contours, concentric follower |
 | Tokyo Night | Plum ink and violet light | Lantern mark, upper-edge wash, lantern follower |
@@ -101,6 +101,8 @@ Hollow (Halloween) 🎃 is an optional spooky Halloween theme: bruised near-blac
 - **If you pick another theme during October**, that choice sticks for the rest of the month.
 - **When October ends**, DevHub puts your previous theme back, unless you chose a different one yourself. Your mode (System, Light or Dark) is left alone.
 
+The Halloween logo is its own mark: the Shift Dock rows in two purples, with the docked hub drawn as a jack-o'-lantern (green stem, carved face cut out of the pumpkin). It is flat artwork with no glow or backdrop, and no theme paints effects on or behind any logo, so switching icons or themes never leaves anything behind. It has separate light and dark assets, and Hollow also uses it as the browser tab icon. In the desktop app, Hollow also overrides the Dock, window and tray icons on startup and when the theme changes. Switching away restores the selected DevHub or plugin icon; macOS keeps a monochrome tray template. Regenerate the assets with `node dashboard/scripts/render-brand-icons.mjs --halloween-only`.
+
 The bookkeeping is in `localStorage` (`devhub:hollow-season`), so it belongs to one browser (or the desktop app) at one address. Open DevHub from a different browser or port and that counts as a first open.
 
 To switch Hollow (Halloween) off, open **Appearance** and pick any other theme. While it's selected, open the shared **Theme effects** section for the October notice and its switches. Nothing is appended beneath the theme list:
@@ -112,7 +114,7 @@ To switch Hollow (Halloween) off, open **Appearance** and pick any other theme. 
 | Creatures | Watching eyes, spiders and a shadow passing through the fog. | On |
 | Rare events | A passing presence every few minutes. Needs Atmosphere, Creatures and motion. | On |
 | Interaction | Cobweb sway, cracks and heading glitch. | On |
-| Haunted mark | A candlelit arch while content arrives; static under reduced motion. | On |
+| Haunted mark | The Halloween Shift Dock while content arrives; static under reduced motion. | On |
 | Sealed & settled | A spectral seal for completed tasks and merged PRs. | On |
 | Spectral follower | Mouse trail, separately switchable from Interaction. | On, or the previous Interaction choice |
 | Jump scares | Off unless you ask. Type `boo` outside a text field. | Off |

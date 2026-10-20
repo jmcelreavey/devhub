@@ -35,7 +35,7 @@ describe("implement review prefs", () => {
 
   it("saves a provider and model and reports them to the plan payload", async () => {
     await saveImplementReviewPrefs({ provider: "codex", model: "gpt-6-astra" });
-    expect(readImplementReviewPrefs()).toEqual({ provider: "codex", model: "gpt-6-astra" });
+    expect(readImplementReviewPrefs()).toEqual({ provider: "codex", model: "gpt-6-astra", effort: "" });
     expect(reviewerForPlan(readImplementReviewPrefs())).toEqual({ provider: "codex", model: "gpt-6-astra" });
   });
 
@@ -47,13 +47,13 @@ describe("implement review prefs", () => {
   it("keeps the model when only the model changes", async () => {
     await saveImplementReviewPrefs({ provider: "codex", model: "gpt-6-astra" });
     await saveImplementReviewPrefs({ model: "gpt-6-sol" });
-    expect(readImplementReviewPrefs()).toEqual({ provider: "codex", model: "gpt-6-sol" });
+    expect(readImplementReviewPrefs()).toEqual({ provider: "codex", model: "gpt-6-sol", effort: "" });
   });
 
   it("clears the model when the provider changes, since model ids are provider-specific", async () => {
     await saveImplementReviewPrefs({ provider: "codex", model: "gpt-6-astra" });
     await saveImplementReviewPrefs({ provider: "claude" });
-    expect(readImplementReviewPrefs()).toEqual({ provider: "claude", model: "" });
+    expect(readImplementReviewPrefs()).toEqual({ provider: "claude", model: "", effort: "" });
   });
 
   it("lets a blank provider switch the feature back off, dropping the model with it", async () => {
@@ -72,8 +72,17 @@ describe("implement review prefs", () => {
     expect(normalizeImplementReviewPrefs({ provider: " codex ", model: "  gpt-6-astra  " })).toEqual({
       provider: "codex",
       model: "gpt-6-astra",
+      effort: "",
     });
     expect(normalizeImplementReviewPrefs({ provider: "codex", model: "m".repeat(500) }).model).toHaveLength(120);
+  });
+
+  it("keeps a chosen effort and drops it when the provider changes", async () => {
+    await saveImplementReviewPrefs({ provider: "codex", model: "gpt-6-astra", effort: "xhigh" });
+    expect(reviewerForPlan(readImplementReviewPrefs())).toEqual({ provider: "codex", model: "gpt-6-astra", effort: "xhigh" });
+    await saveImplementReviewPrefs({ provider: "claude" });
+    expect(readImplementReviewPrefs()).toEqual({ provider: "claude", model: "", effort: "" });
+    expect(normalizeImplementReviewPrefs({ provider: "codex", effort: "not a level" }).effort).toBe("");
   });
 
   it("ignores a corrupt or wrong-version file", () => {

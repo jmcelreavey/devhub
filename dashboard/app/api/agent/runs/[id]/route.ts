@@ -54,6 +54,7 @@ const FollowupSchema = z.object({
   requestId: z.string().min(1).max(200).optional(),
   prompt: z.string().trim().min(1, "prompt is required").max(32_000, "prompt too long"),
   model: z.string().trim().max(120).optional(),
+  effort: z.string().trim().max(32).regex(/^([A-Za-z0-9][A-Za-z0-9_-]{0,31})?$/).optional(),
   maxTurns: z.number().int().min(1).max(500).optional(),
   depth: z.number().int().min(0).max(20).default(0),
 });
@@ -86,6 +87,7 @@ export const POST = withErrorHandler(async (req: NextRequest, { params }: RouteC
       cwd: run.spec.cwd,
       title: clip(`↳ ${run.spec.title}`, 80),
       model: parsed.data.model ?? run.spec.model,
+      effort: parsed.data.effort ?? run.spec.reasoningEffort,
       maxTurns: parsed.data.maxTurns,
       depth: parsed.data.depth,
       parentRunId: run.spec.id,
@@ -95,7 +97,7 @@ export const POST = withErrorHandler(async (req: NextRequest, { params }: RouteC
     return NextResponse.json({ run: toAgentRunSummary(next) }, { status: 201 });
   } catch (err) {
     if (err instanceof AgentDispatchError) {
-      return NextResponse.json({ error: err.message }, { status: err.status });
+      return NextResponse.json({ error: err.message, code: err.code }, { status: err.status });
     }
     throw err;
   }

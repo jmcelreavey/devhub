@@ -1,6 +1,4 @@
 "use client";
-import { integrationFetch } from "@/lib/integrations/client-fetch";
-
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { mutate } from "swr";
@@ -23,10 +21,15 @@ import {
 import styles from "./JiraTicketRow.module.css";
 import { useTagMenuGroup, withTagsGroup } from "@/lib/hooks/use-tag-menu";
 import { useToast } from "@/lib/hooks/use-toast";
+import { useJiraTransition } from "@/lib/hooks/use-jira-transition";
 import { ImplementTaskDialog } from "@/components/tasks/ImplementTaskDialog";
 import { PlanTaskDialog } from "@/components/tasks/PlanTaskDialog";
 import type { Task } from "@/lib/tasks/types";
 import { todayISO } from "@/lib/utils";
+import { JiraBoardAction } from "./JiraBoardAction";
+import { useTaskDetail } from "@/components/storyboard/TaskDetailProvider";
+import { useLive } from "@/lib/hooks/use-fetch";
+import type { TaskProfileOverview } from "@/lib/tasks/profile-types";
 
 function ticketNotePath(key: string): string {
   return `tickets/${key}`;
@@ -44,9 +47,13 @@ function formatUpdatedShort(iso: string): string {
 }
 
 /** Same actions as the wide Jira ticket row — compact QueueRow hosts this too. */
-export function useJiraTicketMenu(ticket: JiraTicket, onTransitioned?: () => void) {
+export function useJiraTicketMenu(ticket: JiraTicket, onTransitioned?: () => void, boardIntake = false, transitionProfile?: string) {
   const toast = useToast();
+  const move = useJiraTransition();
   const router = useRouter();
+  const detail = useTaskDetail();
+  const profile = useLive<TaskProfileOverview>(boardIntake ? "/api/tasks/profiles" : null);
+  const profileId = profile.data ? profile.data.active ?? "legacy" : undefined;
   const [transitionOpen, setTransitionOpen] = useState(false);
   const menu = useContextMenu<JiraTicket>();
   const notePath = ticketNotePath(ticket.key);
@@ -59,27 +66,29 @@ export function useJiraTicketMenu(ticket: JiraTicket, onTransitioned?: () => voi
   } | null>(null);
 
   const createTask = async (action: "create" | "plan" | "implement") => {
-    if (creatingTask) return;
+    if (creatingTask || (boardIntake && (!profileId || profile.error))) return;
     setCreatingTask(true);
     try {
       const date = todayISO();
-      const res = await fetch(action === "plan" ? "/api/tasks/capture" : "/api/tasks", {
+      const res = await fetch(boardIntake ? "/api/tasks/jira-intake" : action === "plan" ? "/api/tasks/capture" : "/api/tasks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+        body: JSON.stringify(boardIntake ? { key: ticket.key, summary: ticket.summary, url: ticket.url, profile: profileId } : {
           text: `${ticket.key} ${ticket.summary}`,
           date,
           links: [{ kind: "jira", id: ticket.key, label: ticket.key, href: ticket.url }],
         }),
       });
       if (!res.ok) throw new Error("Task creation failed");
-      const body = (await res.json()) as Task | { task: Task; date: string };
+      const body = (await res.json()) as Task | { task: Task; date: string; created?: boolean };
       const task = "task" in body ? body.task : body;
       const taskDate = "task" in body ? body.date : date;
+      const alreadyLinked = "created" in body && body.created === false;
       void mutate((key) => typeof key === "string" && key.startsWith("/api/tasks"));
       void mutate("/api/sidebar/counts");
-      toast.success(`Task created from ${ticket.key}`, {
-        action: { label: "View tasks", onClick: () => router.push("/tasks") },
+      if (boardIntake) void mutate((key) => typeof key === "string" && key.startsWith("/api/storyboard"));
+      toast.success(alreadyLinked ? `${ticket.key} is already on the board` : `Task created from ${ticket.key}`, {
+        action: { label: boardIntake ? "Open task" : "View tasks", onClick: () => boardIntake ? detail?.openTask(task.id) : router.push("/tasks") },
       });
       if (action !== "create") setTaskAction({ task, date: taskDate, action });
     } catch {
@@ -111,7 +120,8 @@ export function useJiraTicketMenu(ticket: JiraTicket, onTransitioned?: () => voi
   const groups: ContextMenuGroup[] = withTagsGroup(
     [
       {
-        id: "ticket",
+        id: "copy",
+        label: "Copy",
         items: [
           {
             id: "copy-key",
@@ -125,6 +135,18 @@ export function useJiraTicketMenu(ticket: JiraTicket, onTransitioned?: () => voi
             icon: <Copy size={12} aria-hidden />,
             onSelect: () => void copyTextAndToast(ticket.parent!.key, "parent key", toast),
           }] : []),
+          {
+            id: "copy-url",
+            label: "Copy browse URL",
+            icon: <Link2 size={12} />,
+            onSelect: () => void copyTextAndToast(ticket.url, "browse URL", toast),
+          },
+        ],
+      },
+      {
+        id: "ticket",
+        label: "Ticket",
+        items: [
           {
             id: "open-jira",
             label: "Open in Jira",
@@ -143,12 +165,6 @@ export function useJiraTicketMenu(ticket: JiraTicket, onTransitioned?: () => voi
             icon: <FileText size={12} />,
             onSelect: () => void openNote(),
           },
-          {
-            id: "copy-url",
-            label: "Copy browse URL",
-            icon: <Link2 size={12} />,
-            onSelect: () => void copyTextAndToast(ticket.url, "browse URL", toast),
-          },
         ],
       },
       {
@@ -157,7 +173,7 @@ export function useJiraTicketMenu(ticket: JiraTicket, onTransitioned?: () => voi
         items: [
           {
             id: "create-task",
-            label: creatingTask ? "Creating task…" : "Create task",
+            label: creatingTask ? "Creating task…" : boardIntake ? "Add to board" : "Create task",
             icon: <ListPlus size={12} aria-hidden />,
             disabled: creatingTask,
             onSelect: () => void createTask("create"),
@@ -182,7 +198,10 @@ export function useJiraTicketMenu(ticket: JiraTicket, onTransitioned?: () => voi
       },
     ],
     tagsGroup,
-  );
+  ).sort((left, right) => {
+    const order: Record<string, number> = { ticket: 0, task: 1, copy: 2 };
+    return (order[left.id] ?? 3) - (order[right.id] ?? 3);
+  });
 
   const menuUi = (
     <>
@@ -217,24 +236,9 @@ export function useJiraTicketMenu(ticket: JiraTicket, onTransitioned?: () => voi
         skipLabel="Cancel"
         suggest={ticket.status}
         onCancel={() => setTransitionOpen(false)}
-        onConfirm={async (transitionId) => {
+        onConfirm={(transitionId, to) => {
           setTransitionOpen(false);
-          if (!transitionId) return;
-          try {
-            const res = await integrationFetch(`/api/jira/ticket/${ticket.key}/transition`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ transitionId }),
-            });
-            if (!res) return;
-            if (!res.ok) throw new Error("Transition failed");
-            toast.success(`Updated ${ticket.key}`);
-            void mutate("/api/jira/tickets");
-            void mutate("/api/sidebar/counts");
-            onTransitioned?.();
-          } catch {
-            toast.error(`Couldn't transition ${ticket.key}`);
-          }
+          if (transitionId) void move(ticket.key, { transitionId }, { to, onChanged: onTransitioned, profile: transitionProfile });
         }}
       />
     </>
@@ -261,6 +265,7 @@ export function JiraTicketRow({
   showAssignee = true,
   showDetails = false,
   onTransitioned,
+  boardIntake = false,
 }: {
   ticket: JiraTicket;
   density?: "compact" | "comfortable";
@@ -268,8 +273,9 @@ export function JiraTicketRow({
   showAssignee?: boolean;
   showDetails?: boolean;
   onTransitioned?: () => void;
+  boardIntake?: boolean;
 }) {
-  const { menu, noteExists, menuUi } = useJiraTicketMenu(ticket, onTransitioned);
+  const { menu, noteExists, menuUi } = useJiraTicketMenu(ticket, onTransitioned, boardIntake);
 
   return (
     <div className={styles.row} data-density={density} role="listitem" {...menu.bindRow(ticket)}>
@@ -285,6 +291,7 @@ export function JiraTicketRow({
         {ticket.summary}
       </a>
       <div className={styles.actions}>
+        {boardIntake ? <JiraBoardAction ticket={ticket} /> : null}
         {noteExists ? (
           <span className="row-note-glyph" title="Note exists" aria-hidden>
             <FileText size={12} />

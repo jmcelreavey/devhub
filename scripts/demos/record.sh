@@ -13,6 +13,7 @@
 # Usage:  npm run demos:record [-- readme|walkthroughs|all|serve]
 #         readme (default) — the README GIF
 #         walkthroughs     — the docs MP4s and README GIFs (needs ffmpeg); DEMO_ONLY=today,notes limits it
+#         social           — separate 28s LinkedIn MP4s and GIF; capture-only watermark opt-out
 #         serve            — build the fixture, start the dashboard and wait, for working on a walk
 # Env:    DEVHUB_DEMO_FIXTURE (default /tmp/devhub-demo-fixture — its path shows on screen)
 #         DEVHUB_DEMO_REF     (default HEAD — the commit to record)
@@ -27,7 +28,7 @@ REF="${DEVHUB_DEMO_REF:-HEAD}"
 PORT="${DEVHUB_DEMO_PORT:-1350}"
 MODE="${1:-readme}"
 SERVER="${DEVHUB_DEMO_SERVER:-start}"
-case "$MODE" in readme | walkthroughs | overview | all | serve) ;; *) echo "unknown mode: $MODE" >&2; exit 2 ;; esac
+case "$MODE" in readme | walkthroughs | overview | social | all | serve) ;; *) echo "unknown mode: $MODE" >&2; exit 2 ;; esac
 MARKER="$FIXTURE/.devhub-demo-fixture"
 APP="$FIXTURE/devhub"
 OUT="$REPO_ROOT/docs/assets/demos/dashboard.gif"
@@ -42,7 +43,7 @@ if [ ! -d "$HOME/Library/Caches/ms-playwright" ] && [ ! -d "$HOME/.cache/ms-play
   echo "Playwright browsers are missing — run: npx --prefix dashboard playwright install chromium" >&2
   exit 1
 fi
-if { [ "$MODE" = walkthroughs ] || [ "$MODE" = all ]; } && ! command -v ffmpeg >/dev/null; then
+if { [ "$MODE" = walkthroughs ] || [ "$MODE" = all ] || [ "$MODE" = social ]; } && ! command -v ffmpeg >/dev/null; then
   echo "ffmpeg is required for walkthroughs (brew install ffmpeg)" >&2
   exit 1
 fi
@@ -275,6 +276,12 @@ if [ "$MODE" = serve ]; then
   echo "Fixture dashboard: http://127.0.0.1:$PORT  (Ctrl-C to stop)"
   wait "$SERVER_PID"
   exit 0
+fi
+
+if [ "$MODE" = social ]; then
+  (cd "$REPO_ROOT/dashboard" &&
+    DEMO_URL="http://127.0.0.1:$PORT" DEVHUB_DEMO_FIXTURE="$FIXTURE" DEMO_SOCIAL_EXPORT=1 \
+      ./node_modules/.bin/tsx scripts/record-social.ts)
 fi
 
 if [ "$MODE" = overview ]; then

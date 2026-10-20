@@ -95,6 +95,19 @@ export function applyHeightPatchAndCompact(
  */
 export const TODAY_GRID_COLLAPSED_HEIGHT = 3;
 
+/**
+ * Cards whose collapsed state is a single header row (no summary line under
+ * it) sit in two rows instead of three: 2 × 20px + 10px margin = 50px, which
+ * holds the 24px controls with 8px padding either side.
+ */
+const TODAY_GRID_COLLAPSED_HEIGHT_OVERRIDES: Partial<Record<TodayGridSlotId, number>> = {
+  briefing: 2,
+};
+
+export function collapsedHeightForSlot(slot: TodayGridSlotId): number {
+  return TODAY_GRID_COLLAPSED_HEIGHT_OVERRIDES[slot] ?? TODAY_GRID_COLLAPSED_HEIGHT;
+}
+
 export function applyCollapsedHeights(
   layouts: ResponsiveLayouts<TodayGridBreakpoint>,
   collapsedSlots: ReadonlySet<TodayGridSlotId>,
@@ -102,7 +115,7 @@ export function applyCollapsedHeights(
   if (collapsedSlots.size === 0) return layouts;
   const patch: Partial<Record<TodayGridSlotId, number>> = {};
   for (const id of collapsedSlots) {
-    patch[id] = TODAY_GRID_COLLAPSED_HEIGHT;
+    patch[id] = collapsedHeightForSlot(id);
   }
   return applyHeightPatchAndCompact(layouts, patch, collapsedSlots);
 }

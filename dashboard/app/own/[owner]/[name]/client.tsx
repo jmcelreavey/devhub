@@ -17,6 +17,7 @@ import { EmptyState, FetchError, PageHeader } from "@/components";
 import { LabMarkdown } from "@/components/capability/LabMarkdown";
 import { useLive } from "@/lib/hooks/use-fetch";
 import { useToast } from "@/lib/hooks/use-toast";
+import { usePrStatusMenu } from "@/components/github/PrStatusMenu";
 import {
   PR_RADAR_FILTERS,
   filterPrRadar,
@@ -329,7 +330,9 @@ function PrRadar({ brief, owner, name }: { brief: OwnerBrief; owner: string; nam
             )}
           </div>
           <div className="space-y-2">
-            {prs.map((pr) => <PrRow key={pr.number} pr={pr} owner={owner} name={name} />)}
+            {prs.map((pr) => (
+              <PrRow key={pr.number} pr={pr} owner={owner} name={name} localRepoName={brief.repo.localRepoName} />
+            ))}
           </div>
         </div>
       ))}
@@ -579,10 +582,17 @@ function PanelTitle({ title, detail }: { title: string; detail: string }) {
   return <div className="flex items-center justify-between gap-3"><h2 className="text-sm font-semibold text-text">{title}</h2><span className="badge badge-muted">{detail}</span></div>;
 }
 
-function PrRow({ pr, owner, name }: { pr: RepoPrRadarRow; owner: string; name: string }) {
+function PrRow({ pr, owner, name, localRepoName }: { pr: RepoPrRadarRow; owner: string; name: string; localRepoName: string | null }) {
   const [blast, setBlast] = useState<BlastPayload | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const statusMenu = usePrStatusMenu({
+    url: pr.url,
+    repo: `${owner}/${name}`,
+    number: pr.number,
+    localRepoName,
+    checks: pr.checks,
+  });
 
   async function expand() {
     if (blast || loading) return;
@@ -616,14 +626,14 @@ function PrRow({ pr, owner, name }: { pr: RepoPrRadarRow; owner: string; name: s
             </a>
             <div className="mt-1 flex flex-wrap gap-1.5 text-[11px] text-text-subtle">
               <span>{pr.author.login}</span><span>·</span><span>{pr.domains.join(", ") || "unmapped"}</span>
-              {pr.isDraft && <span className="badge badge-muted">draft</span>}
-              {pr.review.mineRequested && <span className="badge badge-warning">waiting on you</span>}
-              {pr.review.nobodyLooking && <span className="badge badge-warning">nobody looking</span>}
-              {pr.stale && <span className="badge badge-warning">stale</span>}
-              {pr.uncoveredPaths.length > 0 && <span className="badge badge-muted">no CODEOWNER</span>}
+              {pr.isDraft && <span className="badge badge-muted" tabIndex={0} {...statusMenu.bind}>draft</span>}
+              {pr.review.mineRequested && <span className="badge badge-warning" tabIndex={0} {...statusMenu.bind}>waiting on you</span>}
+              {pr.review.nobodyLooking && <span className="badge badge-warning" tabIndex={0} {...statusMenu.bind}>nobody looking</span>}
+              {pr.stale && <span className="badge badge-warning" tabIndex={0} {...statusMenu.bind}>stale</span>}
+              {pr.uncoveredPaths.length > 0 && <span className="badge badge-muted" tabIndex={0} {...statusMenu.bind}>no CODEOWNER</span>}
             </div>
           </div>
-          <span className={`badge ${pr.checks === "failing" ? "badge-danger" : pr.checks === "passing" ? "badge-success" : "badge-muted"}`}>{pr.checks}</span>
+          <span className={`badge ${pr.checks === "failing" ? "badge-danger" : pr.checks === "passing" ? "badge-success" : "badge-muted"}`} tabIndex={0} {...statusMenu.bind}>{pr.checks}</span>
         </div>
       </summary>
       <div className="mt-3 border-t pt-3 text-xs" style={{ borderColor: "var(--border)" }}>
@@ -650,6 +660,7 @@ function PrRow({ pr, owner, name }: { pr: RepoPrRadarRow; owner: string; name: s
           </>
         )}
       </div>
+      {statusMenu.menuNode}
     </details>
   );
 }

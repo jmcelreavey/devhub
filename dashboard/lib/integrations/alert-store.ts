@@ -9,11 +9,14 @@ import { DestinationSchema, EventKind, isQuiet, type Destination, type AlertEntr
 import { credential } from "./accounts";
 import { sendAlert, alertRequest, credentialFingerprint, type Delivery } from "./alert-send";
 import { IntegrationError } from "./types";
+import { readSlackSettings } from "./slack/settings";
+import { PrAnnouncementSchema, SlackOwnerIdSchema, freshPrAlert, isPrAlert, type PrAnnouncement } from "./pr-announcement";
 
 interface AlertState { version: 1; destinations: Destination[]; outbox: AlertEntry[]; nextSendAt: number }
 const EntrySchema = z.object({
   id: z.string(), destinationId: z.string().uuid(), consentRevision: z.number().int(), eventId: z.string(), taskId: z.string(),
   workProfile: z.string(), kind: z.union([EventKind, z.literal("test")]), createdAt: z.string().datetime(), state: z.enum(["pending", "sending", "sent", "unknown", "failed", "cancelled"]),
+  announcement: PrAnnouncementSchema.optional(),
   attempts: z.number().int().nonnegative(), nextAttempt: z.number(), receipt: z.string().optional(), detail: z.string().optional(),
 });
 const StateSchema = z.object({ version: z.literal(1), destinations: z.array(z.unknown()), outbox: z.array(EntrySchema), nextSendAt: z.number() });
@@ -38,6 +41,7 @@ async function persist(root: string, state: AlertState) {
 }
 export async function saveDestination(input: DestinationInput, revision: number, profile: string, root = alertRoot(), now = new Date()) {
   const value = DestinationSchema.parse(input);
+  if (value.enabled && value.includePrDetails && !SlackOwnerIdSchema.safeParse(readSlackSettings().allowedUserId).success) throw new IntegrationError("invalid", "Set the owner’s Slack user ID in Setup → Slack before sharing PR details.");
   if (value.workProfile !== profile) throw new IntegrationError("invalid", "Select the active work profile before changing its alerts.");
   return withPluginMutationLock(root, async () => {
     const state = readAlerts(root);
@@ -94,7 +98,7 @@ export async function decideDelivery(id: string, retry: boolean, profile: string
     await persist(root, state);
   });
 }
-export interface AlertEvent { id: string; at: string; taskId: string; kind: AlertKind }
+export interface AlertEvent { id: string; at: string; taskId: string; kind: AlertKind; announcement?: PrAnnouncement }
 export function classifyAlert(summary: string): AlertKind | null {
   if (summary.startsWith("Verification failed") || summary.startsWith("Verification interrupted")) return "check-failed";
   if (summary.startsWith("Approval requested:")) return "approval-ready";
@@ -103,24 +107,31 @@ export function classifyAlert(summary: string): AlertKind | null {
   if (/^(plan|implement) run: (completed|done)$/.test(summary) || /^(plan|implement|review|discuss|verify) run: needs-attention$/.test(summary)) return "question";
   return null;
 }
-export async function processAlerts(events: AlertEvent[], profile: string, options: { root?: string; now?: Date; send?: (d: Destination, e: AlertEntry) => Promise<Delivery> } = {}) {
+export async function processAlerts(events: AlertEvent[], profile: string, options: { root?: string; now?: Date; deferPrAlerts?: boolean; send?: (d: Destination, e: AlertEntry) => Promise<Delivery> } = {}) {
   const root = options.root ?? alertRoot(); const now = options.now ?? new Date();
   // Held through the bounded POST: after revocation returns no queued send can start.
   return withPluginMutationLock(root, async () => {
     const state = readAlerts(root);
     for (const item of state.outbox) if (item.state === "sending") { item.state = "unknown"; item.detail = "DevHub stopped during delivery. Check the channel before retrying."; }
+    const currentPrEvents = new Set(events.filter((event) => freshPrAlert(event.at, now.getTime())).map((event) => event.id));
+    for (const item of state.outbox) if (item.workProfile === profile && item.state === "pending" && isPrAlert(item.kind) && (!freshPrAlert(item.createdAt, now.getTime()) || (!options.deferPrAlerts && !currentPrEvents.has(item.eventId)))) {
+      item.state = "cancelled"; item.detail = "PR announcement is no longer current.";
+    }
     const known = new Set(state.outbox.map((e) => e.id));
     for (const destination of state.destinations.filter((d) => d.enabled && d.workProfile === profile)) {
       for (const event of events) {
+        if (isPrAlert(event.kind) && !freshPrAlert(event.at, now.getTime())) continue;
         if (Date.parse(event.at) < Date.parse(destination.consentAt) || !destination.events.includes(event.kind)) continue;
         const id = createHash("sha256").update(JSON.stringify([profile, destination.id, event.id])).digest("hex");
         if (known.has(id)) continue;
         known.add(id);
-        state.outbox.push({ id, destinationId: destination.id, consentRevision: destination.revision, eventId: event.id, taskId: event.taskId, kind: event.kind, workProfile: profile, createdAt: event.at, state: "pending", attempts: 0, nextAttempt: 0 });
+        const announcement = destination.provider === "slack" && destination.includePrDetails && isPrAlert(event.kind) && event.announcement
+          ? PrAnnouncementSchema.parse(event.announcement) : undefined;
+        state.outbox.push({ id, destinationId: destination.id, consentRevision: destination.revision, eventId: event.id, taskId: event.taskId, kind: event.kind, ...(announcement ? { announcement } : {}), workProfile: profile, createdAt: event.at, state: "pending", attempts: 0, nextAttempt: 0 });
       }
     }
     await persist(root, state);
-    const entry = state.outbox.find((e) => e.workProfile === profile && e.state === "pending" && e.nextAttempt <= now.getTime() && state.destinations.some((d) => d.id === e.destinationId && !isQuiet(d, now)));
+    const entry = state.outbox.find((e) => e.workProfile === profile && e.state === "pending" && !(options.deferPrAlerts && isPrAlert(e.kind)) && e.nextAttempt <= now.getTime() && state.destinations.some((d) => d.id === e.destinationId && !isQuiet(d, now)));
     if (!entry || state.nextSendAt > now.getTime()) return;
     const destination = state.destinations.find((d) => d.id === entry.destinationId);
     if (!destination?.enabled || destination.revision !== entry.consentRevision) { entry.state = "cancelled"; await persist(root, state); return; }

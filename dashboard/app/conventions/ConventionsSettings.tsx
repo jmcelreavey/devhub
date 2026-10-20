@@ -4,6 +4,8 @@ import { useState } from "react";
 import { FetchError, SkeletonRows } from "@/components";
 import { useLive } from "@/lib/hooks/use-fetch";
 import { useToast } from "@/lib/hooks/use-toast";
+import { EffortSelect, rememberedEffortFor } from "@/components/agents/EffortSelect";
+import { effortOptionsForModel } from "@/lib/ai/effort";
 import type { AiProviderId } from "@/lib/ai/preference";
 import type { ConventionsPrefs } from "@/lib/conventions/types";
 import { postConventions, type SettingsPayload } from "./api";
@@ -45,6 +47,14 @@ export function ConventionsSettings({ onClose }: { onClose: () => void }) {
   // The provider whose model a blank field would fall back to.
   const effective: AiProviderId | null = draft.provider || data.resolved;
   const defaultModel = effective ? data.defaultModels[effective] : "";
+  const effortModel = draft.model || defaultModel;
+  const effortOptions = effortOptionsForModel({ provider: effective, model: effortModel });
+  const keepEffort = (provider: string, model: string) => {
+    if (!effortOptionsForModel({ provider, model })?.some((option) => option.id === draft.effort)) {
+      return rememberedEffortFor(provider, model);
+    }
+    return draft.effort;
+  };
   const resolvedLabel = data.providers.find((p) => p.id === data.resolved)?.label ?? "none installed";
 
   const save = async (): Promise<void> => {
@@ -107,12 +117,16 @@ export function ConventionsSettings({ onClose }: { onClose: () => void }) {
         </Field>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className={`grid gap-4 ${effortOptions ? "sm:grid-cols-3" : "sm:grid-cols-2"}`}>
         <Field label="Provider" hint={`Default follows Setup → AI Provider (today: ${resolvedLabel}).`}>
           <select
             className="input w-full text-sm"
             value={draft.provider}
-            onChange={(e) => patch({ provider: e.target.value as ConventionsPrefs["provider"] })}
+            onChange={(e) => {
+              const provider = e.target.value as ConventionsPrefs["provider"];
+              const modelName = draft.model || (provider || data.resolved ? data.defaultModels[(provider || data.resolved) as AiProviderId] : "");
+              patch({ provider, effort: keepEffort(provider || data.resolved || "", modelName || "") });
+            }}
           >
             <option value="">Default</option>
             {data.providers.map((p) => (
@@ -130,11 +144,26 @@ export function ConventionsSettings({ onClose }: { onClose: () => void }) {
           <input
             className="input w-full text-sm font-mono"
             value={draft.model}
-            onChange={(e) => patch({ model: e.target.value })}
+            onChange={(e) => {
+              const model = e.target.value;
+              patch({ model, effort: keepEffort(effective || "", model || defaultModel) });
+            }}
             placeholder={defaultModel || "provider default"}
             spellCheck={false}
           />
         </Field>
+        {effortOptions && (
+          <Field label="Effort" hint="Default sends nothing and leaves the provider's own effort.">
+            <EffortSelect
+              labelled={false}
+              className="input w-full text-sm"
+              provider={effective}
+              model={effortModel}
+              value={draft.effort}
+              onChange={(effort) => patch({ effort })}
+            />
+          </Field>
+        )}
       </div>
 
       <div className="flex gap-2">

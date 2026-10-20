@@ -129,6 +129,32 @@ describe("CommandPalette", () => {
       window.removeEventListener("devhub:whats-new", show);
     }
   });
+  it.each([
+    ["Work", "/work", "Go to Tasks"],
+    ["System", "/status", "Go to Settings"],
+    ["Review", "/review", "Go to Weekly review"],
+    ["QA", "/qa", "Go to QA lab"],
+    ["Briefing", "/briefing", "Go to Briefing"],
+    ["Skills", "/skills", "Go to Agent skills"],
+  ])("still finds '%s' and Enter lands on %s", async (term, href, label) => {
+    setupFetch();
+    const { input } = await openPalette();
+    await searchFor(input, term);
+    expect(screen.getAllByRole("option")[0]).toHaveTextContent(label);
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(mocks.tabs.openHref).toHaveBeenCalledWith(href, { newTab: false });
+  });
+
+  it.each(["Tasks", "Settings", "Weekly review", "QA lab", "Agent skills"])(
+    "lists the renamed page as '%s'",
+    async (name) => {
+      setupFetch();
+      const { input } = await openPalette();
+      await searchFor(input, name);
+      expect(screen.getByRole("option", { name: new RegExp(`Go to ${name}`) })).toBeInTheDocument();
+    },
+  );
+
   it("ignores an older content response arriving after the newer search", async () => {
     const oldRequest = deferredResponse();
     const newRequest = deferredResponse();

@@ -1,20 +1,19 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
+import { ArrowRight, ExternalLink } from "lucide-react";
 import { ModalShell } from "@/components/shell/ModalShell";
+import { SeverityPill } from "@/components/ui/Severity";
 import { SkeletonRows } from "@/components/ui/SkeletonRows";
 import { FetchError } from "@/components/ui/FetchError";
-import type { WriteProposal, WriteInput } from "@/lib/integrations/write-types";
+import { statusTone } from "@/components/jira/JiraWidget";
+import { describeWrite } from "@/lib/integrations/write-view";
+import type { WriteProposal } from "@/lib/integrations/write-types";
 
-function sourceLabel(source: string): string {
-  if (source === "DevHub") return source;
-  try {
-    const [sender, profile] = JSON.parse(source) as [{ provider: string; user: string; channel: string; team?: string }, string];
-    return [sender.provider, "user " + sender.user, "conversation " + sender.channel, sender.team ? "workspace " + sender.team : "", "profile " + profile].filter(Boolean).join(" · ");
-  } catch { return "Chat request"; }
-}
+/** Posts one write step. `direct` is a person's own click: the server runs it immediately and records it. */
 export async function writeRequest(input: unknown): Promise<WriteProposal> {
-  const response = await fetch("/api/integrations/writes", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) });
+  const direct = typeof input === "object" && input !== null && (input as { action?: string }).action === "direct";
+  const response = await fetch("/api/integrations/writes", { method: "POST", headers: { "Content-Type": "application/json", ...(direct ? { "x-devhub-intent": "direct" } : {}) }, body: JSON.stringify(input) });
   const data = await response.json();
   if (!response.ok) throw new Error(data.error || "Could not update this action. Refresh its status before trying again.");
   return data.proposal;
@@ -58,24 +57,50 @@ export function WriteReview({ initial, onClose }: { initial: WriteProposal; onCl
     finally { pending.current = false; setBusy(false); }
   }
   const finished = !["requested", "pending"].includes(proposal.state);
-  return <ModalShell open onClose={() => { if (!busy) void cancel(); }} dismissOnBackdrop={false} title={finished ? proposal.state === "succeeded" ? "Action completed" : proposal.state === "unknown" ? "Outcome unknown" : "Action was not completed" : "Review this action"} wrapTitle focusTitle maxWidth="max-w-2xl"
-    description={finished || uncertain ? "Check the recorded outcome before starting another action." : busy && loaded ? "Updating this action. Keep this dialog open while its status is recorded." : "Nothing has been sent yet. Confirming sends this exact action once."}
-    footer={<div className="flex flex-wrap justify-end gap-2"><button className="btn btn-ghost" disabled={busy} onClick={() => void cancel()}>{finished || uncertain ? "Close" : "Cancel action"}</button>{!finished && !uncertain && loaded && !error && <button className="btn btn-primary" disabled={busy} onClick={() => void confirm()}>{busy ? "Sending…" : proposal.prepared?.summary ?? "Confirm action"}</button>}</div>}>
-    {busy && !loaded && <SkeletonRows count={4} />}
+  const view = describeWrite(proposal);
+  const receiptUrl = proposal.receipt?.item?.url;
+  const resultUrl = receiptUrl?.startsWith("https://") ? receiptUrl : view.link?.href;
+  const outcome = proposal.state === "succeeded" ? null : proposal.state === "unknown" ? "Outcome unknown" : proposal.state === "cancelled" ? "Cancelled" : proposal.state === "failed" ? "Not completed" : null;
+  // The provider's own sentence is only worth a panel when it says something the heading does not.
+  const detail = proposal.detail && proposal.detail !== view.heading && proposal.detail !== proposal.prepared?.summary ? proposal.detail : "";
+  const description = finished || uncertain
+    ? proposal.state === "succeeded" ? "Sent and recorded in Recent actions." : "Check the recorded outcome before starting another action."
+    : busy && loaded ? "Sending. Keep this open while the result is recorded." : "Nothing has been sent yet.";
+  return <ModalShell open onClose={() => { if (!busy) void cancel(); }} dismissOnBackdrop={false} title={view.heading} wrapTitle focusTitle maxWidth="max-w-lg"
+    description={description}
+    footer={<div className="flex flex-wrap justify-end gap-2"><button className="btn btn-ghost" disabled={busy} onClick={() => void cancel()}>{finished || uncertain ? "Close" : "Cancel"}</button>{!finished && !uncertain && loaded && !error && <button className="btn btn-primary" disabled={busy} onClick={() => void confirm()}>{busy ? "Sending…" : view.confirmLabel}</button>}</div>}>
+    {busy && !loaded && <SkeletonRows count={3} />}
     {error && <FetchError message={error} onRetry={uncertain ? undefined : () => void review()} />}
-    {finished && <p role="status" className={"tone-panel " + (proposal.state === "succeeded" ? "tone-panel--muted" : "tone-panel--warning")}>{proposal.detail}</p>}
+    {outcome && <p role="status" className="tone-panel tone-panel--warning"><strong>{outcome}.</strong> {detail}</p>}
+    {!outcome && detail && <p role="status" className="tone-panel tone-panel--muted">{detail}</p>}
     {proposal.prepared && <div className="space-y-4 break-words">
-      <p><strong>{proposal.prepared.summary}</strong></p>
-      <dl className="space-y-3">
-        <div><dt className="text-text-subtle">Requested from</dt><dd>{sourceLabel(proposal.source)}</dd></div>
-        <div><dt className="text-text-subtle">Account</dt><dd>{proposal.input.provider} · {proposal.input.account} · {proposal.prepared.actor}</dd></div>
-        <div><dt className="text-text-subtle">Destination</dt><dd className="break-all">{proposal.prepared.destination}</dd></div>
-        {Object.entries(proposal.prepared.details).map(([key, value]) => <div key={key}><dt className="text-text-subtle">{key.replace(/([A-Z])/g, " $1").replace(/^./, (c) => c.toUpperCase())}</dt><dd className="whitespace-pre-wrap break-words">{value === null ? "None" : typeof value === "boolean" ? value ? "Yes" : "No" : typeof value === "object" ? JSON.stringify(value, null, 2) : String(value)}</dd></div>)}
+      {view.subject && <div>
+        <p className="font-mono text-xs text-text-subtle">{view.subject.label}</p>
+        {view.subject.title && <p className="font-medium">{view.subject.url?.startsWith("https://") ? <a className="underline-offset-2 hover:underline" href={view.subject.url} target="_blank" rel="noopener noreferrer">{view.subject.title}<span className="sr-only"> (opens in a new tab)</span></a> : view.subject.title}</p>}
+      </div>}
+      {view.change && <p className="flex flex-wrap items-center gap-2">
+        <span className="sr-only">Changes from </span><Change kind={view.change.kind} value={view.change.from} />
+        <ArrowRight size={14} aria-hidden className="text-text-subtle" />
+        <span className="sr-only"> to </span><Change kind={view.change.kind} value={view.change.to} />
+      </p>}
+      {view.body && <div><p className="text-sm text-text-subtle">{view.body.label}</p><p className="max-h-40 overflow-y-auto whitespace-pre-wrap text-sm">{view.body.text}</p></div>}
+      <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
+        {view.facts.map((fact) => <div key={fact.label} className="contents"><dt className="text-text-subtle">{fact.label}</dt><dd>{fact.value}</dd></div>)}
       </dl>
-      {!finished && <p className="text-sm text-text-subtle">Expires {new Date(proposal.expiresAt).toLocaleTimeString()}. Changed accounts, branches or remote items require a fresh review.</p>}
-      {proposal.receipt?.item?.url?.startsWith("https://") && <a className="btn btn-ghost" href={proposal.receipt.item.url} target="_blank" rel="noopener noreferrer">Open in {proposal.input.provider === "jira" ? "Jira" : "GitHub"}</a>}
+      <details className="text-sm">
+        <summary className="cursor-pointer text-text-subtle">Details</summary>
+        <dl className="mt-2 space-y-2">
+          {view.technical.map((row) => <div key={row.label}><dt className="text-text-subtle">{row.label}</dt><dd className="break-all font-mono text-xs">{row.value}</dd></div>)}
+          {!finished && <div><dt className="text-text-subtle">Expires</dt><dd>{new Date(proposal.expiresAt).toLocaleTimeString()}. If the account, branch or ticket changes first, you will be asked to review again.</dd></div>}
+        </dl>
+      </details>
+      {resultUrl && <a className="btn btn-ghost inline-flex items-center gap-1.5" href={resultUrl} target="_blank" rel="noopener noreferrer">{view.link?.label ?? "Open result"}<ExternalLink size={13} aria-hidden /></a>}
     </div>}
   </ModalShell>;
+}
+function Change({ kind, value }: { kind: "status" | "branch" | "text"; value: string }) {
+  if (kind === "status") return <SeverityPill tone={statusTone(value)}>{value}</SeverityPill>;
+  return <code className="rounded bg-bg-elevated px-1.5 py-0.5 text-xs">{value}</code>;
 }
 export function openWriteReview(proposal: WriteProposal): Promise<WriteProposal | null> {
   return new Promise((resolve) => {
@@ -83,7 +108,4 @@ export function openWriteReview(proposal: WriteProposal): Promise<WriteProposal 
     const root = createRoot(container);
     root.render(<WriteReview initial={proposal} onClose={(result) => { root.unmount(); container.remove(); resolve(result); }} />);
   });
-}
-export async function proposeAndReview(input: WriteInput) {
-  return openWriteReview(await writeRequest({ action: "propose", input }));
 }

@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Mock · Storyboard as a view over task notes (M5)</title>
+<style>
+:root{--bg:#ece5d8;--card:#f5f0e6;--border:#cfc5b3;--text:#2a2420;--muted:#7a6f63;--accent:#7a1c1c;--warn:#d97706;--danger:#dc2626;--ok:#2f7d4a}
+*{box-sizing:border-box}body{margin:0;font:13px/1.4 -apple-system,system-ui,sans-serif;background:var(--bg);color:var(--text)}
+header{padding:16px 24px;border-bottom:1px solid var(--border)}h1{font:600 20px Georgia,serif;margin:0 0 4px}header p{margin:0;color:var(--muted)}
+.note{margin:12px 24px;padding:10px 12px;border:1px dashed var(--border);border-radius:8px;color:var(--muted)}
+.board{display:flex;gap:12px;padding:12px 24px;align-items:flex-start}
+.lane{flex:1 1 0;min-width:240px;background:rgba(255,255,255,.25);border:1px solid var(--border);border-radius:10px;padding:8px;display:grid;gap:8px}
+.lane h2{font-size:13px;margin:2px 4px;display:flex;justify-content:space-between}.lane h2 span{color:var(--muted);font-weight:400}
+.strip{flex:0 0 32px;min-width:32px;opacity:.6;writing-mode:vertical-rl;text-align:center;padding:12px 0;border:1px solid var(--border);border-radius:10px;font-weight:600}
+.card{background:var(--card);border:1px solid var(--border);border-radius:8px;overflow:hidden;display:grid}
+.card.att{border-color:var(--warn);box-shadow:inset 3px 0 0 var(--warn)}.card.fail{border-color:var(--danger);box-shadow:inset 3px 0 0 var(--danger)}
+.shot{height:110px;background:linear-gradient(135deg,#d8cfbf,#bfb39f);position:relative;display:flex;align-items:flex-end}
+.shot small{background:rgba(0,0,0,.55);color:#fff;padding:2px 6px;margin:6px;border-radius:4px;font-size:11px}
+.body{padding:8px 10px;display:grid;gap:6px}.title{font-weight:600}.sum{color:var(--muted)}
+.vn{display:flex;gap:6px;flex-wrap:wrap}.vn span{font-size:11px;padding:1px 6px;border-radius:999px;background:#e2d9c8}
+.tiers{display:flex;gap:4px;font-size:11px;color:var(--muted)}.tiers b{color:var(--text)}
+.bar{display:flex;justify-content:space-between;align-items:center;padding:4px 8px;font-size:12px;font-weight:600;background:rgba(217,119,6,.14)}
+.fail .bar{background:rgba(220,38,38,.14)}button{font:inherit;font-size:12px;border:0;border-radius:6px;padding:2px 10px;background:var(--accent);color:#fff;cursor:pointer}
+.foot{display:flex;justify-content:space-between;color:var(--muted);font-size:11px}
+</style></head><body>
+<header><h1>Storyboard — board as a view over task notes</h1><p>Mock only (M5). Each card <em>is</em> a task note: summary, visual-note tags and latest screenshot come straight from the note, so board and notes cannot drift.</p></header>
+<div class="note">Source of truth: <code>notes/tasks/&lt;id&gt;.md</code> + its visual notes. Lane = note <code>stage</code> front-matter. Moving a card edits the note's stage; opening a card opens the note. Screenshot = newest image attached to the note (Jev QA capture or manual).</div>
+<div class="board">
+ <section class="lane"><h2>Plan <span>2</span></h2>
+  <article class="card"><div class="shot"><small>mock-v2.png · 2h ago</small></div><div class="body"><div class="title">Auto mode (M1)</div><div class="sum">Orchestrator picks steps; John only answers Needs-you questions.</div><div class="vn"><span>3 decisions</span><span>1 open question</span></div><div class="foot"><span>note · updated 18:20</span><span>tiers: —</span></div></div></article>
+  <article class="card att"><div class="bar">Waiting on you <button>Answer</button></div><div class="shot"><small>no screenshot yet</small></div><div class="body"><div class="title">Model tiers (M3)</div><div class="sum">Cheap / mid / heavy defaults chosen at Implement.</div><div class="vn"><span>needs-you</span></div></div></article>
+ </section>
+ <section class="lane"><h2>Build <span>1</span></h2>
+  <article class="card fail"><div class="bar">CI failing <button>Retry</button></div><div class="shot"><small>board-dense.png · 12m ago</small></div><div class="body"><div class="title">Storyboard attention cards</div><div class="sum">Highlight stuck cards with one-click unblock.</div><div class="vn"><span>2 screenshots</span><span>1 bug</span></div><div class="tiers">Plan <b>cheap</b> · Implement <b>mid</b> · Verify <b>cheap</b> · ≈ $0.84</div></div></article>
+ </section>
+ <section class="lane"><h2>Review · Jev <span>1</span></h2>
+  <article class="card"><div class="shot"><small>▶ demo.webm · 0:42</small></div><div class="body"><div class="title">Notes UX pass</div><div class="sum">Jev demo recorded; 0 blocking bugs, 2 nits.</div><div class="vn"><span>before/after video</span><span>2 nits</span></div><div class="tiers">Review <b>heavy</b> · ≈ $0.31</div></div></article>
+ </section>
+ <div class="strip">PR · 0</div><div class="strip">Shipped · 0</div>
+</div>
+<div class="note">Open questions: (1) do cards without a note get one auto-created, or stay as evidence-only cards in Unsorted? (2) screenshot source priority: Jev capture &gt; manual &gt; preview. (3) keep evidence cards as a secondary "Evidence" tab inside the note drawer.</div>
+<div class="note"><strong>Decisions</strong> (answers to the open questions above; implemented in <code>dashboard/lib/storyboard/notes-board.ts</code>)
+<ol>
+<li><strong>Cards without a note</strong> show as task-only cards built from the task record, with a one-click <em>Create note</em> that scaffolds the note through the existing task-note path. Nothing is created automatically; evidence with no task is dropped.</li>
+<li><strong>Screenshot priority:</strong> newest Jev QA capture (after beats before), then the newest image in the note's Screenshots section, then none. No preview scraping.</li>
+<li><strong>No separate Evidence tab.</strong> Clicking a card opens the task note; runs and QA links (bugs, before/after video, receipt) live on the card.</li>
+</ol>
+Also decided: columns are the note status (<code>todo, planning, in-progress, needs-you, blocked, draft-pr, ready-for-review, done</code>), not the <code>stage</code> front-matter this mock first showed. Moving a card means changing the status with the same <code>set_status</code> the note uses. Done shows the last 14 days by default.</div>
+</body></html>

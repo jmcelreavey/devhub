@@ -24,6 +24,12 @@ describe("notes-assets paths", () => {
     expect(toNoteAssetMarkdownPath(api)).toBe("garden/foo bar/a.png");
   });
 
+  it("leaves content-addressed note media URLs untouched", () => {
+    const url = `/api/notes-media/${"a".repeat(64)}.png`;
+    expect(toNoteAssetMarkdownPath(url)).toBe(url);
+    expect(toNoteAssetApiUrl(url)).toBe(url);
+  });
+
   it("rejects traversal and json paths", () => {
     expect(() => assertNoteAssetRelPath("../etc/passwd")).toThrow(/traversal/i);
     expect(() => assertNoteAssetRelPath("daily/note.json")).toThrow(/\.json/i);

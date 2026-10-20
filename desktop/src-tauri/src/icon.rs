@@ -14,6 +14,7 @@ use tauri::{AppHandle, Manager};
 /// webview gets to name — the one file that makes "switch back to default"
 /// actually mean default.
 const DEFAULT_ICON_PNG: &[u8] = include_bytes!("../icons/icon.png");
+const HALLOWEEN_ICON_PNG: &[u8] = include_bytes!("../icons/halloween/icon.png");
 
 const PNG_MAGIC: &[u8] = b"\x89PNG\r\n\x1a\n";
 const MAX_PNG_BYTES: usize = 2 * 1024 * 1024;
@@ -23,6 +24,7 @@ const MAX_PNG_BYTES: usize = 2 * 1024 * 1024;
 pub enum DesktopIconKind {
     Default,
     Plugin,
+    Halloween,
 }
 
 pub fn validate_png(png: &[u8]) -> Result<(), String> {
@@ -59,6 +61,7 @@ fn png_for_kind(
 ) -> Result<Vec<u8>, String> {
     match kind {
         DesktopIconKind::Default => Ok(DEFAULT_ICON_PNG.to_vec()),
+        DesktopIconKind::Halloween => Ok(HALLOWEEN_ICON_PNG.to_vec()),
         DesktopIconKind::Plugin => {
             if let Some(bytes) = png {
                 validate_png(bytes)?;
@@ -73,7 +76,7 @@ fn apply_window_icons(app: &AppHandle, png: &[u8]) -> Result<(), String> {
     validate_png(png)?;
     let image = Image::from_bytes(png).map_err(|e| e.to_string())?;
     for (_, window) in app.webview_windows() {
-        let _ = window.set_icon(image.clone());
+        window.set_icon(image.clone()).map_err(|e| e.to_string())?;
     }
     Ok(())
 }
@@ -122,8 +125,9 @@ fn apply_kind(app: &AppHandle, _kind: &DesktopIconKind, png: &[u8]) -> Result<()
     #[cfg(target_os = "macos")]
     match _kind {
         DesktopIconKind::Default => reset_macos_dock_to_bundle()?,
-        DesktopIconKind::Plugin => set_macos_dock_icon(png)?,
+        DesktopIconKind::Plugin | DesktopIconKind::Halloween => set_macos_dock_icon(png)?,
     }
+    crate::tray::set_icon(app, matches!(_kind, DesktopIconKind::Halloween), png)?;
     Ok(())
 }
 
@@ -135,7 +139,7 @@ fn log_icon(app: &AppHandle, kind: &DesktopIconKind, bytes: usize) {
     }
 }
 
-/// Apply the DevHub Shift Dock mark or a plugin PNG to the running shell.
+/// Apply the default, Halloween or plugin mark to the running shell.
 ///
 /// `png` is ignored for `default` — the Shift Dock mark is compiled in, and the Dock
 /// tile is restored from the bundle `.icns`. Plugin bytes come from the
@@ -158,6 +162,8 @@ mod tests {
     #[test]
     fn default_icon_is_a_png() {
         assert!(validate_png(DEFAULT_ICON_PNG).is_ok());
+        assert!(validate_png(HALLOWEEN_ICON_PNG).is_ok());
+        assert!(Image::from_bytes(HALLOWEEN_ICON_PNG).is_ok());
     }
 
     #[test]

@@ -1,92 +1,16 @@
 import { NextResponse } from "next/server";
-import { githubScreen } from "@/lib/integrations/screen-data";
-const { prs: fetchMyGithubPrs, recentlyReviewed: fetchRecentlyReviewedPrs, archived: isRepoArchived } = githubScreen;
-import {
-  readGithubPrsListCache,
-  readStaleGithubPrsListCache,
-  writeGithubPrsListCache,
-  type GithubPrRow,
-} from "@/lib/github/prs";
-import { sortReviewRequestedPrs } from "@/lib/github/review-requested-sort";
-import { isGithubCliAuthenticated, mapGithubCliError } from "@/lib/gh-exec";
-import { getGithubLogin } from "@/lib/standup/github-merged";
-import { reviewNoteActivityByPath } from "@/lib/notes/review-index-server";
-import { pMap } from "@/lib/p-limit";
-import { SUBPROCESS_CONCURRENCY } from "@/lib/standup/config";
-
-function sortReviews(rows: GithubPrRow[]): GithubPrRow[] {
-  return sortReviewRequestedPrs(rows, reviewNoteActivityByPath());
-}
+import { loadGithubPrsList } from "@/lib/github/prs-list";
+import { mapGithubCliError } from "@/lib/gh-exec";
+import { withErrorHandler } from "@/lib/api-utils";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
-  const configured = await isGithubCliAuthenticated();
-  if (!configured) {
-    return NextResponse.json({ configured: false, authored: [], reviews: [], recentlyReviewed: [] });
-  }
-
-  const cached = readGithubPrsListCache();
-  if (cached) {
-    return NextResponse.json({
-      ...cached,
-      reviews: sortReviews(cached.reviews),
-      cached: true,
-      configured: true,
-    });
-  }
-
+export const GET = withErrorHandler<[request?: Request]>(async () => {
   try {
-    const { authored, reviews } = await fetchMyGithubPrs();
-
-    const uniqueRepos = [...new Set([...authored, ...reviews].map((r) => r.repo))];
-    const archivedSet = new Set<string>();
-    // Capped: one `gh repo view` subprocess per repo, and the buckets can now
-    // hold 100 rows each.
-    await pMap(uniqueRepos, SUBPROCESS_CONCURRENCY, async (repo) => {
-      if (await isRepoArchived(repo)) archivedSet.add(repo);
-    });
-    const filterArchived = (rows: GithubPrRow[]) => rows.filter((r) => !archivedSet.has(r.repo));
-
-    const filteredAuthored = filterArchived(authored);
-    const filteredReviews = sortReviews(filterArchived(reviews));
-
-    const excludeUrls = new Set([
-      ...filteredAuthored.map((r) => r.url),
-      ...filteredReviews.map((r) => r.url),
-    ]);
-
-    let recentlyReviewed = [] as Awaited<ReturnType<typeof fetchRecentlyReviewedPrs>>;
-    const login = await getGithubLogin();
-    if (login) {
-      recentlyReviewed = await fetchRecentlyReviewedPrs(login, excludeUrls);
-    }
-
-    const payload = {
-      configured: true,
-      authored: filteredAuthored,
-      reviews: filteredReviews,
-      recentlyReviewed,
-      cached: false,
-    };
-    writeGithubPrsListCache(payload);
-    return NextResponse.json(payload);
+    return NextResponse.json(await loadGithubPrsList());
   } catch (error) {
     console.error("[api:github:prs]", error);
     const mapped = mapGithubCliError(error);
-    // Upstream faults only (504 included) — a 401/404 means the request itself
-    // was wrong, and papering over that with old data hides the real problem.
-    const stale = mapped.status >= 500 ? readStaleGithubPrsListCache() : null;
-    if (stale) {
-      return NextResponse.json({
-        ...stale,
-        reviews: sortReviews(stale.reviews),
-        cached: true,
-        stale: true,
-        configured: true,
-        warning: mapped.error,
-      });
-    }
     return NextResponse.json({ error: mapped.error }, { status: mapped.status });
   }
-}
+}, "github.prs.get");

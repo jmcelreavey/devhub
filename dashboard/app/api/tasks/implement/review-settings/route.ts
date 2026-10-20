@@ -29,9 +29,10 @@ const PutSchema = z
       .regex(/^$|^[a-z0-9][a-z0-9._-]*$/i, "provider must be a provider id like codex")
       .optional(),
     model: z.string().trim().max(MAX_REVIEW_MODEL_LENGTH).optional(),
+    effort: z.string().trim().max(32).regex(/^([A-Za-z0-9][A-Za-z0-9_-]{0,31})?$/).optional(),
   })
-  .refine((value) => value.provider !== undefined || value.model !== undefined, {
-    message: "Provide provider, model or both.",
+  .refine((value) => value.provider !== undefined || value.model !== undefined || value.effort !== undefined, {
+    message: "Provide provider, model, effort, or a combination.",
   });
 
 export const PUT = withErrorHandler(async (req: NextRequest) => {

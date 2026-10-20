@@ -17,4 +17,8 @@ export interface TaskProfileOverview {
   /** Root-level day-files still waiting to be moved into a profile. */
   legacyFiles: number;
   overlay: ProfileOverlay[];
+  /** The repo-wide fallback for machines that never chose (tasks/profiles.json). It can't be deleted. */
+  defaultProfile?: string | null;
+  /** Tasks per profile: open (what the picker shows) and total (what a delete would move). */
+  counts?: Record<string, { open: number; total: number }>;
 }

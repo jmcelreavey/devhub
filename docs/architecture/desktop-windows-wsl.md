@@ -280,7 +280,7 @@ stays in the server log.
   and scheduled jobs keep running until "Quit DevHub" in the tray menu.
 - The tray offers Open, Hide, Restart Backend, Rebuild from Checkout…, Open
   Logs Folder and Check for Updates. Restart Backend relaunches the shell and
-  its owned backend. Rebuild from Checkout opens System → Maintenance; it does
+  its owned backend. Rebuild from Checkout opens Settings → Maintenance; it does
   not run `npm` on Windows.
 - View → Rebuild Dashboard (native `npm`) and Attach to Dev Server stay hidden.
   **Rebuild from checkout** (Maintenance, and the same tray item) is the Windows

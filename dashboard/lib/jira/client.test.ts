@@ -88,7 +88,7 @@ describe("getMyTickets", () => {
 
     const tickets = await getMyTickets();
     expect(tickets).toEqual([
-      expect.objectContaining({ key: "PTF-1", summary: "Native share", status: "Open", parent: { key: "PTF-10", summary: "Sharing improvements" } }),
+      expect.objectContaining({ key: "PTF-1", summary: "Native share", status: "Open", parent: { key: "PTF-10", summary: "Sharing improvements", url: "https://example.atlassian.net/browse/PTF-10" } }),
     ]);
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const request = fetchMock.mock.calls[0] as unknown as [string, RequestInit];

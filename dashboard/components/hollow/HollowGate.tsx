@@ -3,6 +3,7 @@
 import { useEffect, useSyncExternalStore } from "react";
 import dynamic from "next/dynamic";
 import { useTheme } from "@/components/shell/ThemeToggle";
+import { hollowActivityPaused } from "./hollow-activity";
 import { refreshHollowEffects, useHollowEffects, useHollowMotion } from "@/components/hollow/useHollowEffects";
 import {
   HOLLOW_PRESET_ID,
@@ -48,6 +49,8 @@ function ActiveHollow({ effects }: { effects: HollowEffectsState }) {
       effects,
       preview && motion,
     );
+    // Preference/motion changes run cleanup too; preserve the editing pause.
+    document.documentElement.toggleAttribute("data-hollow-paused", hollowActivityPaused());
     window.addEventListener("storage", refreshHollowEffects);
     return () => {
       window.removeEventListener("storage", refreshHollowEffects);
@@ -68,8 +71,29 @@ function SelectedHollow() {
   return effects.master ? <ActiveHollow effects={effects} /> : null;
 }
 
+export const HOLLOW_FAVICON_ID = "hollow-favicon";
+const HOLLOW_FAVICON_HREF = "/hollow/brand-mark-dark.svg";
+
+/**
+ * The tab icon follows the Halloween mark while Hollow is selected. Appended
+ * last so it wins over the stock icons; removed the moment the preset changes.
+ */
+function useHollowFavicon(active: boolean) {
+  useEffect(() => {
+    if (!active) return;
+    const link = document.createElement("link");
+    link.id = HOLLOW_FAVICON_ID;
+    link.rel = "icon";
+    link.type = "image/svg+xml";
+    link.href = HOLLOW_FAVICON_HREF;
+    document.head.appendChild(link);
+    return () => link.remove();
+  }, [active]);
+}
+
 export function HollowGate() {
   const { preset } = useTheme();
+  useHollowFavicon(preset === HOLLOW_PRESET_ID);
   useEffect(() => {
     if (preset !== HOLLOW_PRESET_ID) {
       applyHollowDom(document.documentElement, preset, HOLLOW_EFFECT_DEFAULTS, false);

@@ -1,6 +1,7 @@
 /**
  * Server-side note asset I/O (Node fs). Shared by dashboard and notes MCP.
  */
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -109,4 +110,38 @@ export function readNoteAssetBytes(notesRoot: string, relPath: string): Buffer |
   const resolved = resolveNoteAssetUnderRoot(notesRoot, normalized);
   if (!fs.existsSync(resolved) || fs.statSync(resolved).isDirectory()) return null;
   return fs.readFileSync(resolved);
+}
+
+/** Largest local file `importLocalAsset` will copy into the vault (screen recordings are the big ones). */
+export const IMPORT_LOCAL_ASSET_MAX_BYTES = 64 * 1024 * 1024;
+
+/**
+ * Copy a local screenshot or recording into the notes tree under `destDir`, named
+ * `<content hash>-<name>` so importing the same file twice is a no-op. Returns the
+ * notes-relative path to reference from a note. Only allowed asset extensions are copied.
+ */
+export function importLocalAsset(
+  notesRoot: string,
+  destDir: string,
+  localFile: string,
+): { path: string; size: number } {
+  if (!path.isAbsolute(localFile)) throw new Error('localFile must be an absolute path');
+  const real = fs.realpathSync(localFile);
+  const stat = fs.statSync(real);
+  if (!stat.isFile()) throw new Error('localFile is not a file');
+  const base = path.basename(real);
+  if (!isAllowedNoteAssetExtension(base)) {
+    throw new Error(`Unsupported asset type. Allowed: ${[...ALLOWED_NOTE_ASSET_EXTENSIONS].join(', ')}`);
+  }
+  if (stat.size > IMPORT_LOCAL_ASSET_MAX_BYTES) {
+    throw new Error(`File is larger than ${IMPORT_LOCAL_ASSET_MAX_BYTES / 1024 / 1024} MB`);
+  }
+  const data = fs.readFileSync(real);
+  const hash = crypto.createHash('sha256').update(data).digest('hex').slice(0, 10);
+  const safeName = base.replace(/[^A-Za-z0-9._-]+/g, '-');
+  const rel = normalizeNoteAssetRelPath(`${destDir}/${hash}-${safeName}`);
+  const existing = readNoteAssetBytes(notesRoot, rel);
+  if (existing && existing.equals(data)) return { path: rel, size: data.length };
+  const written = writeNoteAssetBytes(notesRoot, rel, data);
+  return { path: written.path, size: written.size };
 }

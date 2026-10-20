@@ -5,6 +5,7 @@ import { validateAgentCwd } from "@/lib/agent-runs/dispatch";
 import { execExternal } from "@/lib/exec-external";
 import { listTaskAgentRuns, latestImplementationRun, taskRunRole, upsertTaskAgentRun, patchTaskAgentRun, mapAgentRunStateToTaskStatus } from "@/lib/tasks/task-agent-runs";
 import { contentHash, evidenceReady, invalidateEvidence, readWorkflow, recordWorkflowRun, updateWorkflow } from "./store";
+import { readOrchestration } from "@/lib/storyboard/orchestration-store";
 import { worktreeFingerprint } from "./fingerprint";
 import type { TaskWorkflow } from "./types";
 
@@ -16,6 +17,7 @@ export const WorkflowAction = z.discriminatedUnion("action", [
   z.object({ ...base, action: z.literal("decide"), proposalId: z.string().uuid(), approve: z.boolean() }),
   z.object({ ...base, action: z.literal("status"), status: z.enum(["active", "paused", "abandoned"]) }),
   z.object({ ...base, action: z.literal("seen") }),
+  z.object({ ...base, action: z.literal("unseen") }),
   z.object({ ...base, action: z.literal("begin"), proposalId: z.string().uuid() }),
   z.object({ ...base, action: z.literal("receipt"), proposalId: z.string().uuid(), succeeded: z.boolean(), detail: z.string().trim().min(1).max(2000) }),
 ]);
@@ -34,7 +36,13 @@ export function implementationForTask(taskId: string) {
   const linked = latestImplementationRun(listTaskAgentRuns(taskId));
   const run = linked ? readAgentRun(linked.runId) : null;
   if (!run) throw new Error("Start an implementation run before recording evidence.");
-  return { run, cwd: validateAgentCwd(run.spec.cwd) };
+  // Auto mode pins one checkout for the whole task. Later draft-PR retries are also "implement" runs and can start elsewhere,
+  // which changed the fingerprint and marked finished checks and reviews out of date.
+  const pinned = readOrchestration(taskId)?.auto?.work;
+  const pinnedCwd = pinned?.worktree?.path ?? pinned?.cwd;
+  let cwd: string | null = null;
+  if (pinnedCwd) { try { cwd = validateAgentCwd(pinnedCwd); } catch { cwd = null; } }
+  return { run, cwd: cwd ?? validateAgentCwd(run.spec.cwd) };
 }
 
 /** Read-time recovery never reruns an uncertain command. */
@@ -63,8 +71,14 @@ export async function refreshWorkflowEvidence(taskId: string): Promise<TaskWorkf
 }
 
 export async function actOnWorkflow(input: WorkflowActionInput): Promise<{ workflow: TaskWorkflow; checkId?: string }> {
-  if (input.action === "seen" || input.action === "status") {
+  if (input.action === "seen" || input.action === "unseen" || input.action === "status") {
     const workflow = await updateWorkflow(input.taskId, input.revision, (state) => {
+      if (input.action === "unseen") {
+        // The write bumps revision past this, so the latest update reads as new again.
+        if (state.seenRevision < state.revision) return;
+        state.seenRevision = state.revision;
+        return "Marked unread";
+      }
       if (input.action === "seen") {
         if (state.seenRevision === state.revision) return;
         state.seenRevision = state.revision + 1;
@@ -85,7 +99,7 @@ export async function actOnWorkflow(input: WorkflowActionInput): Promise<{ workf
       if (state.checks.some((check) => check.outcome === "running" && Date.parse(check.startedAt) > Date.now() - 660000)) throw new Error("Verification is already running.");
       for (const check of state.checks) if (check.outcome === "running") check.outcome = "interrupted";
       checkId = randomUUID();
-      state.checks.push({ id: checkId, runId: run.spec.id, fingerprint, command: "npm run verify", startedAt: new Date().toISOString(), exitCode: null, outcome: "running" });
+      state.checks.push({ id: checkId, runId: run.spec.id, cwd, fingerprint, command: "npm run verify", startedAt: new Date().toISOString(), exitCode: null, outcome: "running" });
       state.stage = "verify";
       state.status = "active";
       return "Verification started";
@@ -146,12 +160,13 @@ export async function executeWorkflowCheck(taskId: string, checkId: string): Pro
   });
   const savedCheck = claimedState.checks.find((check) => check.id === checkId);
   if (!claimed || !savedCheck) return;
-  const run = readAgentRun(savedCheck.runId);
-  if (!run) throw new Error("Implementation run disappeared before checks started.");
-  const cwd = validateAgentCwd(run.spec.cwd);
+  let cwd: string | undefined;
   let exitCode: number | null = 0;
   let detail: string | undefined;
   try {
+    const checkCwd = savedCheck.cwd ?? readAgentRun(savedCheck.runId)?.spec.cwd;
+    if (!checkCwd) throw new Error("Implementation run disappeared before checks started.");
+    cwd = validateAgentCwd(checkCwd);
     await execExternal("npm", ["run", "verify"], { cwd, timeoutMs: 600000, maxBuffer: 8 * 1024 * 1024, label: "workflow:verify" });
   } catch (error) {
     const code = (error as { code?: unknown }).code;
@@ -160,15 +175,19 @@ export async function executeWorkflowCheck(taskId: string, checkId: string): Pro
     detail = exitCode === null ? "Verification was interrupted or could not start. Inspect the checkout and retry." : "Verification failed. Fix the failing checks in the checkout and retry.";
   }
   let fingerprint: string | undefined;
-  try { fingerprint = await worktreeFingerprint(cwd); } catch { detail = "Could not inspect the worktree after verification."; }
+  let currentCwd: string | undefined;
+  try {
+    if (cwd) fingerprint = await worktreeFingerprint(cwd);
+    currentCwd = implementationForTask(taskId).cwd;
+  } catch { detail = "Could not inspect the worktree after verification."; }
   await updateWorkflow(taskId, undefined, (state) => {
     const check = state.checks.find((item) => item.id === checkId);
     if (!check || check.outcome !== "running") return;
-    const unchanged = check.runId === latestImplementationRun(listTaskAgentRuns(taskId))?.runId && check.fingerprint === fingerprint;
+    const unchanged = cwd !== undefined && cwd === currentCwd && check.fingerprint === fingerprint;
     check.finishedAt = new Date().toISOString();
     check.exitCode = exitCode;
     check.outcome = exitCode === 0 && unchanged ? "passed" : exitCode === null || !unchanged ? "interrupted" : "failed";
-    check.detail = unchanged ? detail : "Code changed during verification. Run checks again.";
+    check.detail = unchanged || fingerprint === undefined ? detail : "Code changed during verification. Run checks again.";
     if (!["paused", "abandoned", "complete"].includes(state.status)) {
       state.stage = check.outcome === "passed" ? "review" : "implement";
       state.status = check.outcome === "passed" ? "waiting-user" : "blocked";

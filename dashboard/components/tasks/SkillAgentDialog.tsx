@@ -16,6 +16,11 @@ interface Props {
   initialProvider?: SkillAgentLaunchTarget; onProviderChange?: (provider: SkillAgentLaunchTarget) => void;
   launchButtonLabel?: string; resumeSessionId?: string; parentRunId?: string;
   stage?: AgentStage; onLaunched?: () => void;
+  kind?: "agent" | "review"; worktree?: boolean;
+  cancelLabel?: string; promptDisclosureLabel?: string;
+  requireExplicitDismissal?: boolean;
+  allowAuto?: boolean;
+  autoByDefault?: boolean;
 }
 
 /** Reuse the same handoff sheet while keeping the task's readiness checks. */
@@ -26,18 +31,33 @@ export function SkillAgentDialog(props: Props) {
 function TaskLaunch(props: Props) {
   const [requestId] = useState(() => crypto.randomUUID());
   const active = useRef(true);
-  useEffect(() => () => { active.current = false; }, []);
+  useEffect(() => {
+    active.current = true;
+    return () => { active.current = false; };
+  }, []);
   const close = () => { active.current = false; props.onClose(); };
   return <AgentLaunchForm
     intent={{
       requestId, title: props.title, runTitle: props.summary, prompt: props.getPrompt(), cwd: props.cwd, repoName: props.repoName,
       provider: props.initialProvider === "default" ? undefined : props.initialProvider,
-      taskId: props.taskId, taskDate: props.taskDate, stage: props.parentRunId ? "resume" : props.stage ?? "implement",
+      taskId: props.taskId, taskDate: props.taskDate,
+      kind: props.kind,
+      stage: props.parentRunId ? "resume" : props.stage ?? (props.kind ? undefined : "implement"),
       parentRunId: props.parentRunId, resumeSessionId: props.resumeSessionId,
-      worktree: !props.parentRunId && props.stage !== "plan",
+      worktree: props.worktree ?? (!props.parentRunId && props.stage !== "plan"),
     }}
     current={() => active.current}
     close={close}
+    description={props.description}
+    cancelLabel={props.cancelLabel}
+    launchButtonLabel={props.launchButtonLabel}
+    promptDisclosureLabel={props.promptDisclosureLabel}
+    requireExplicitDismissal={props.requireExplicitDismissal}
+    allowAuto={props.allowAuto}
+    autoByDefault={props.autoByDefault}
+    // New plan, implement and PR runs for a task take a model tier; a follow-up keeps its session's agent.
+    tierStep={props.taskId && !props.parentRunId && !props.kind ? (props.stage === "plan" ? "plan" : props.stage === "create-pr" ? "draft-pr" : "implement") : undefined}
+    showWorktreeOption={props.kind !== "agent"}
     banner={props.banner}
     disabled={props.launchDisabled}
     disabledReason={props.launchDisabledReason}

@@ -58,6 +58,7 @@ export default defineConfig({
       "../shared/task-note/**/*.test.ts",
       "../shared/tasks/**/*.test.ts",
       "../shared/mcp-history/**/*.test.ts",
+      "../shared/process/**/*.test.ts",
       "../mcp-servers/devhub-server/src/**/*.test.ts",
     ],
     /** Playwright owns e2e/; vitest must not pick those specs up. */

@@ -279,17 +279,21 @@ export async function readRepoInfo(name: string, repoPath: string): Promise<Repo
   };
 }
 
-export async function listRepos(): Promise<RepoInfo[]> {
+/** Names for mention resolution, without spawning git status for every repository. */
+export function listRepoNames(): string[] {
   const scanDir = getReposScanDir();
   if (!fs.existsSync(scanDir)) return [];
+  return fs.readdirSync(scanDir, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory() && fs.existsSync(path.join(scanDir, entry.name, ".git")))
+    .map((entry) => entry.name);
+}
 
-  const entries = fs.readdirSync(scanDir, { withFileTypes: true });
+export async function listRepos(): Promise<RepoInfo[]> {
+  const scanDir = getReposScanDir();
   // Unbounded on purpose: measured against an 8-wide pool over ~56 repos, the
   // full fan-out of `git status` finished in ~60% of the time.
   const repos = await Promise.all(
-    entries
-      .filter((e) => e.isDirectory() && fs.existsSync(path.join(scanDir, e.name, ".git")))
-      .map((e) => readRepoInfo(e.name, path.join(scanDir, e.name))),
+    listRepoNames().map((name) => readRepoInfo(name, path.join(scanDir, name))),
   );
 
   return repos.sort(compareReposByMtime);

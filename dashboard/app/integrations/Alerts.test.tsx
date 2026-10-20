@@ -9,6 +9,11 @@ vi.mock("@/lib/hooks/use-fetch", () => ({ useLive: () => ({ data: { profile: "wo
 beforeEach(() => { mutate.mockClear(); destinations = [{ id: "11111111-1111-4111-8111-111111111111", label: "Work chat", provider: "telegram", credentialRef: "DEVHUB_TELEGRAM_TOKEN", chatId: "7", workProfile: "work", events: ["approval-ready"], enabled: true, revision: 1, consentAt: "2026-10-10T10:00:00Z" }]; });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 describe("alert test controls", () => {
+  it("links to the one Slack bot settings form without changing Telegram alerts", () => {
+    render(<Alerts />);
+    expect(screen.getByRole("link", { name: "Connect the Slack bot" })).toHaveAttribute("href", "/setup#slack");
+    expect(screen.getByRole("button", { name: "Send test message" })).toBeEnabled();
+  });
   it.each(["telegram", "slack"] as const)("shows an explicit %s test send and success without sending on render", async (provider) => {
     destinations[0].provider = provider;
     const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify({ delivery: { state: "sent", detail: "Accepted." } })));

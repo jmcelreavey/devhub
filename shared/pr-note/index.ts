@@ -106,6 +106,6 @@ export function buildPrNoteMarkdown(pr: PrNoteSource): string {
     "",
     "## Follow-ups",
     "",
-    "- [ ] ",
+    "- ",
   ]);
 }

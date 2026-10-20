@@ -41,9 +41,14 @@ export const TOOL_ANNOTATIONS: Readonly<Record<string, ToolHints>> = {
   integrations_alert_destinations: ro,
   integrations_alert_test: { ...wrx, idempotentHint: true },
   integrations_chat_status: ro,
+  integrations_slack_status: { ...ro, openWorldHint: false },
+  integrations_slack_usage: { ...ro, openWorldHint: false },
+  integrations_slack_test: { ...wrx, idempotentHint: true },
   integrations_proposals: ro,
   integrations_propose: wr,
   integrations_review: wrx,
+  // Executes a reviewed Jira/GitHub write the user approved in chat: external and not repeatable.
+  integrations_confirm: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
   editor_selection: ro,
   editor_discussions: ro,
   editor_discuss: wrx,
@@ -66,6 +71,27 @@ export const TOOL_ANNOTATIONS: Readonly<Record<string, ToolHints>> = {
   notes_write_asset: { ...wr, idempotentHint: true },
   notes_create_meeting: wr,
   notes_create_task: wr,
+  storyboard_board: ro,
+  storyboard_attention: ro,
+  storyboard_card_action: wrx, // retry spawns an agent run
+  storyboard_model_tiers_get: ro,
+  storyboard_model_tiers_set: { ...wr, idempotentHint: true },
+  storyboard_jev_review: ro,
+  storyboard_jev_run: wrx,
+  storyboard_start_auto: wrx, // spawns a plan agent run
+  storyboard_auto_status: ro,
+  storyboard_auto_retry: wrx, // re-runs a step: spawns agent runs
+  storyboard_rerun: wrx,
+  storyboard_reset: dxx, // can discard local worktrees and branches
+  storyboard_set_ui: { ...wr, idempotentHint: true },
+  storyboard_position: wr, // writes one task note's rank (or a few, the first time)
+  storyboard_preview_status: ro,
+  storyboard_set_mode: wrx, // resuming auto spawns an agent run
+  storyboard_answer_repo: wrx, // spawns a plan agent run
+  task_note_pills: ro,
+  task_note_add: wrx,
+  task_notes_by_tag: ro,
+  task_note_update: { ...wr, idempotentHint: true }, // upserts by title/url/file; `read` and repeats change nothing
   notes_create_pr: wr,
   notes_devhub_open: wr, // opens a tab; no data mutated
   notes_cursor_open: wr,
@@ -84,16 +110,20 @@ export const TOOL_ANNOTATIONS: Readonly<Record<string, ToolHints>> = {
   docs_delete: dx,
   // ── tasks ──────────────────────────────────────────────────────────────
   tasks_list: ro,
+  task_ask_teammate: wrx,
+  task_handoff: dx,
   tasks_history: ro,
   tasks_weekly: ro,
   tasks_create: wr,
   tasks_update: { ...wr, idempotentHint: true },
+  task_reopen: { ...wrx, idempotentHint: true },
   tasks_delete: dx,
   tasks_context_sync: { ...wr, idempotentHint: true }, // dedup + merge, never drops
   tasks_agent_runs: wr, // list is read-only; upsert path mutates
   tasks_agent_handoff_get: ro,
   tasks_agent_handoff_set: { ...wr, idempotentHint: true },
   tasks_agent_resume: wrx, // starts follow-up or new implement run; confirm in clients
+  tasks_agent_plan: wrx, // starts one plan-only agent run (read-only prompt); confirm in clients
   tasks_implement_ready: rox, // may fetch Jira description; warn-only checklist
   tasks_implement_review_settings_get: ro,
   tasks_implement_review_settings_set: { ...wr, idempotentHint: true }, // upsert prefs
@@ -193,6 +223,7 @@ export const TOOL_ANNOTATIONS: Readonly<Record<string, ToolHints>> = {
   repos_git_range: ro,
   repos_git_ci: rox, // gh / GitHub API
   repos_git_worktrees: wr, // list is a read; remove refuses dirty worktrees unless force
+  repos_worktree_cleanup: dx, // bulk folder removal; never forced, confirm:true, skips dirty/busy trees
   // ── datadog ────────────────────────────────────────────────────────────
   datadog_oncall: rox,
   datadog_recent_alerts: rox,

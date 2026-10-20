@@ -1,0 +1,25 @@
+/* Worktrees tab: quiet rows, controls that appear when you reach for them. */
+.bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 28px; font-size: 12px; color: var(--text-subtle); }
+.bar :global(.btn) { min-height: 24px; padding: 2px 8px; font-size: 12px; }
+.barActions { display: flex; align-items: center; gap: 4px; }
+.sep { color: var(--text-subtle); }
+.row { display: flex; align-items: flex-start; gap: 8px; border-radius: 6px; padding: 8px; border: 1px solid var(--border-muted); }
+.row[data-selected] { border-color: var(--accent); background: var(--accent-dim); }
+.check { margin-top: 2px; width: 14px; height: 14px; flex-shrink: 0; accent-color: var(--accent); cursor: pointer; }
+.icon { margin-top: 3px; flex-shrink: 0; color: var(--text-subtle); }
+.pill { font-size: 11px; }
+a.pill { cursor: pointer; text-decoration: none; }
+a.pill:hover { color: var(--text); background: var(--bg-elevated); }
+.delete {
+  display: inline-grid; place-items: center; flex-shrink: 0; align-self: center;
+  width: 26px; height: 26px; border: 0; border-radius: 6px; background: transparent;
+  color: var(--text-subtle); cursor: pointer;
+}
+.delete:hover:not(:disabled) { color: var(--danger); background: var(--bg-elevated); }
+.delete:disabled { cursor: default; opacity: 0.5; }
+.list { display: block; }
+/* Checkbox and delete show on hover or focus; the checkbox stays once anything is selected. */
+@media (hover: hover) {
+  .row:not(:hover):not(:focus-within) .delete:not([data-busy]) { opacity: 0; }
+  .list:not([data-selecting]) .row:not(:hover):not(:focus-within) .check { opacity: 0; }
+}

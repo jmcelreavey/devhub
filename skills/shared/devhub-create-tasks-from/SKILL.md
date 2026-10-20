@@ -44,7 +44,7 @@ Payload fields:
 | `notePath` | Vault-relative note path (no extension) |
 | `title` | Note title from first heading |
 | `markdown` | Plan body as markdown |
-| `workItems` | Parsed PR/work slices (`id`, `title`, `summary`, `repoHint`, `description`) |
+| `workItems` | Parsed PR/work slices (`id`, `title`, `summary`, `repoHint`, `description`, optional `images`) |
 | `repos` | Repo EntityRef ids from the note + dialog overrides |
 | `parentKey` | Optional parent Jira key (epic/story); omit to create a parent |
 | `projectKey` | Jira project (from the selected Jira project) |
@@ -107,8 +107,10 @@ created under this parent (or under the creation parent per project Jira hierarc
 
 ### 3. Create Jira sub-tasks (one per work item)
 
-Use Atlassian MCP `createJiraIssue` when available; otherwise `POST /api/jira/issue`
-on the DevHub dashboard (`DEVHUB_BASE_URL`).
+Use Atlassian MCP `createJiraIssue` when available and authenticated. Otherwise use
+DevHub `integrations_propose` with `issue.create`. A proposal is not a created
+ticket: a person must confirm it in Integrations. Never invent a child key or use
+the parent's key in its place.
 
 For each `workItems[]` entry:
 
@@ -125,16 +127,18 @@ For each `workItems[]` entry:
   sub-tasks — they inherit sprint and team from the parent.
 - Sub-tasks inherit Foxes team and active sprint from the parent automatically.
 
-Record each created key as you go.
+Record each returned child key as you go. If creation is pending, follow the
+pending-proposal path in step 4 instead.
 
 ### 4. Create DevHub tasks
 
-For each work item + Jira key:
+When Jira has returned the work item's own child key:
 
 ```text
 tasks_create {
   text: "<JIRA-KEY>: <short summary>",
   withNote: true,
+  parentKey: "<PARENT-KEY>",
   links: [
     { kind: "note", id: "<notePath>", label: "<title>" },
     { kind: "jira", id: "<JIRA-KEY>", label: "<JIRA-KEY>" },
@@ -143,6 +147,35 @@ tasks_create {
 }
 ```
 
+When Jira keys are not available yet:
+
+1. Create the DevHub task first with `text: "<short summary>"`, `withNote: true`
+   and `parentKey: "<PARENT-KEY>"`. Do not prefix the summary with any Jira key.
+   Link the source note and repo as usual; the parent may be a context link
+   labelled `Parent <PARENT-KEY>`, never the task's own ticket.
+2. Pass the returned task id to `integrations_propose`:
+
+   ```text
+   integrations_propose { input: {
+     action: "issue.create", provider: "jira", account: "default",
+     projectKey: "<PROJECT>", parentKey: "<PARENT-KEY>",
+     taskId: "<DEVHUB-TASK-ID>", title: "<short summary>", body: "<description>"
+   } }
+   ```
+
+3. Report the proposal as awaiting confirmation. On success, DevHub writes the
+   returned child key into that same task's text and Jira link. Do not create a
+   replacement task, guess a key, or copy the parent's status onto the task.
+
+Omit `parentKey` when there is no confirmed parent yet. If creating the parent
+itself needs confirmation, stop at that proposal and wait for its real key before
+proposing children. A pending proposal id is not a Jira key.
+
+- Work items can carry nested content and screenshots (toggle lists with images). Right
+  after `tasks_create`, `notes_append` the item's `description` markdown to the task note
+  unchanged, including its `![](…)` image lines. Images are `/api/notes-media/…` or
+  notes-relative asset paths, shared by every note, so they render in the task view
+  without copying files. Do not rewrite or drop those lines.
 - After creation, `tasks_update` or `tasks_context_sync` to add the gist URL as a
   link if there is no `gist` EntityKind — append to the task note `## Links` instead:
   `Plan: <gist url>`.
@@ -162,12 +195,14 @@ adding links. Never drop plan prose.
 
 ### 6. Update parent Jira description
 
-`editJiraIssue` on the parent (Atlassian MCP) or dashboard API:
+`editJiraIssue` on the parent (authenticated Atlassian MCP):
 
 - Add a **Plan** link (gist).
 - List sub-task keys with one-line summaries.
 
-Append; do not replace existing description content.
+Append; do not replace existing description content. If Atlassian is unavailable,
+report this follow-up rather than bypassing confirmation or sending unsupported
+proposal actions. Only list confirmed child keys; pending proposals stay pending.
 
 ### 7. Report back
 
@@ -181,7 +216,7 @@ Include the gist URL and parent key.
 | Read plan payload | curl plan URL from launch prompt |
 | Read / update note | `notes_read`, `notes_append`, `notes_write`, `entity_links_read` |
 | Publish gist | `share_publish` |
-| Create Jira | `createJiraIssue` (Atlassian MCP) or `POST /api/jira/issue` |
+| Create Jira | `createJiraIssue` (authenticated Atlassian MCP) or `integrations_propose` (`issue.create`, with `taskId`) |
 | Update Jira parent | `editJiraIssue` (Atlassian MCP) |
 | Create tasks | `tasks_create`, `tasks_context_sync` |
 | Repos | `repos_list` to resolve local folder names |
@@ -192,6 +227,7 @@ Include the gist URL and parent key.
 - Each DevHub task opens with correct links and a task note.
 - Parent Jira ticket lists sub-tasks and the gist.
 - No duplicate tickets for the same work item.
+- Pending proposals have a keyless DevHub task and its `taskId`; parent keys are context only.
 
 ## Rules
 

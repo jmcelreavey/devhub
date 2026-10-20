@@ -5,7 +5,7 @@ import type { SkillsListResponse } from "@/lib/skills/api-types";
 import { BootScreen } from "@/components/today/TodayBootScreen";
 import Client from "./client";
 
-export const metadata = { title: "Skills" };
+export const metadata = { title: "Agent skills" };
 
 
 export default function SkillsPage() {

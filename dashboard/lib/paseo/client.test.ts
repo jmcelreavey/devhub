@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({ configs: [] as { clientId: string }[], close: vi.fn(async () => undefined), connect: vi.fn(async () => undefined), fetchAgent: vi.fn() }));
+const net = vi.hoisted(() => ({ open: false }));
+vi.mock("node:net", () => ({ connect: () => { const handlers: Record<string, () => void> = {}; setTimeout(() => handlers[net.open ? "connect" : "error"]?.(), 0); return { once(event: string, callback: () => void) { handlers[event] = callback; return this; }, destroy() {} }; } }));
 vi.mock("@getpaseo/client", () => ({ createPaseoApi: () => ({}) }));
 vi.mock("./agent-setup", () => ({
   describeAgentSetup: () => ({
@@ -20,7 +22,7 @@ vi.mock("@getpaseo/client/internal/daemon-client", () => ({
 }));
 import { paseoAgentWebUrl, paseoUrl, withPaseo } from "./client";
 
-beforeEach(() => { vi.clearAllMocks(); mocks.configs.length = 0; vi.stubGlobal("fetch", vi.fn(async () => new Response(null, { status: 503 }))); });
+beforeEach(() => { net.open = false; vi.clearAllMocks(); mocks.configs.length = 0; vi.stubGlobal("fetch", vi.fn(async () => new Response(null, { status: 503 }))); });
 afterEach(() => vi.unstubAllGlobals());
 describe("Paseo connections", () => {
   it("opens the specific chat when its workspace contains multiple agents", async () => {
@@ -38,7 +40,11 @@ describe("Paseo connections", () => {
     await expect(withPaseo(async () => { throw new Error("operation failed"); })).rejects.toThrow("operation failed");
     mocks.connect.mockRejectedValueOnce(new Error("authentication"));
     await expect(withPaseo(async () => 1)).rejects.toThrow("Paseo isn't set up or isn't running");
-    expect(mocks.close).toHaveBeenCalledTimes(2);
+    // Port open but the handshake failed: it is running, so don't tell anyone to set it up.
+    net.open = true;
+    mocks.connect.mockRejectedValueOnce(new Error("timeout"));
+    await expect(withPaseo(async () => 1)).rejects.toThrow("Paseo is running but didn't answer in time");
+    expect(mocks.close).toHaveBeenCalledTimes(3);
   });
   it("refuses non-loopback daemons and invalid transports", () => {
     expect(() => paseoUrl({ NODE_ENV: "test", DEVHUB_PASEO_URL: "ws://example.com/ws" })).toThrow("loopback");

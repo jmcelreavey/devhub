@@ -17,7 +17,7 @@ import { matchesTaskSearch } from "@/lib/tasks/task-text";
 import styles from "./Work.module.css";
 
 function WorkLoading() {
-  return <div role="status" aria-label="Loading work"><SkeletonRows count={4} height={52} variant="list" /></div>;
+  return <div role="status" aria-label="Loading tasks"><SkeletonRows count={4} height={52} variant="list" /></div>;
 }
 
 const TicketsPage = dynamic(() => import("@/app/tickets/client"), { ssr: false, loading: WorkLoading });
@@ -39,16 +39,23 @@ const WORK_TABS = [
 export default function WorkPage() {
   const searchParams = useSearchParams();
   const tab = parseWorkTab(searchParams.get("tab"));
-  const [taskQuery, setTaskQuery] = useState("");
+  // Pills deep-link here: ?q=text, or ?tag=x for tasks tagged #x.
+  const [taskQuery, setTaskQuery] = useState(() => searchParams.get("q") ?? (searchParams.get("tag") ? `#${searchParams.get("tag")}` : ""));
   const tabsRef = useRef<HTMLDivElement>(null);
   const { data: setup, error: setupError, mutate: refreshSetup } = useLive<SetupGateStatus>("/api/setup/status", { refreshInterval: 0 });
   const { data: taskData, error: taskError, mutate: refreshTasks } = useLive<{ tasks?: Task[] }>("/api/tasks");
+  // Only needed while searching a #tag: tags that live in task notes.
+  const { data: noteTagData } = useLive<{ tags: Record<string, string[]> }>(taskQuery.includes("#") ? "/api/tasks/note-tags" : null, { refreshInterval: 0 });
+  const noteTags = noteTagData?.tags;
   const taskLoading = taskData === undefined && !taskError;
   const tasks = taskData?.tasks ?? [];
   const open = tasks.filter(isTaskOpen).length;
+  // The Jira tab's own list loads it too (same key), so this adds no request while that tab is open.
+  const { data: jiraData, error: jiraError } = useLive<{ configured?: boolean; tickets?: unknown[] }>(setup?.jira ? "/api/jira/tickets" : null);
+  const jiraCount = jiraData?.configured && !jiraError ? jiraData.tickets?.length : undefined;
   const visibleTabs = WORK_TABS.filter((item) => item.id !== "jira" || setup?.jira || tab === "jira");
   const hasSearchMatches = tasks.some((task) =>
-    (isTaskOpen(task) || task.done || task.abandonedAt) && matchesTaskSearch(task, taskQuery),
+    (isTaskOpen(task) || task.done || task.abandonedAt) && matchesTaskSearch(task, taskQuery, noteTags),
   );
 
   function changeTab(next: WorkTab) {
@@ -74,8 +81,8 @@ export default function WorkPage() {
 
   return (
     <div className="page-wrapper">
-      <PageHeader title="Work" subtitle="Your task queue, Jira tickets and work history." />
-      <div ref={tabsRef} className={styles.tabs} role="tablist" aria-label="Work views">
+      <PageHeader title="Tasks" subtitle="Your task queue, Jira tickets and task history." />
+      <div ref={tabsRef} className={styles.tabs} role="tablist" aria-label="Task views">
         {visibleTabs.map(({ id, label, icon: Icon }, index) => (
           <button key={id} id={`work-tab-${id}`} type="button" role="tab"
             aria-selected={tab === id} aria-controls={`work-panel-${id}`}
@@ -84,6 +91,7 @@ export default function WorkPage() {
             <Icon size={15} aria-hidden />
             {label}
             {id === "tasks" && taskData && !taskError && <span className={styles.count} aria-label={`${open} open tasks`}>{open}</span>}
+            {id === "jira" && jiraCount !== undefined && <span className={styles.count} aria-label={`${jiraCount} Jira tickets`}>{jiraCount}</span>}
           </button>
         ))}
       </div>
@@ -114,7 +122,7 @@ export default function WorkPage() {
                   {taskQuery.trim() && !hasSearchMatches && (
                     <p className={styles.empty} role="status">No tasks match “{taskQuery}”. Clear the search or try another term.</p>
                   )}
-                  <TaskList searchQuery={taskQuery} />
+                  <TaskList searchQuery={taskQuery} noteTags={noteTags} />
                 </>
               ) : null}
             </section>

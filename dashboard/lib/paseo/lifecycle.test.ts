@@ -23,6 +23,12 @@ function entry(item: Entry["item"]): Entry {
 const mine = entry({ type: "user_message", text: "do it", clientMessageId: "devhub-run-1" });
 
 describe("paseoTurnOutcome", () => {
+  it("keeps a steered run active and includes the result after its owner note", () => {
+    const steered = { ...run, status: { ...run.status, steeringMessageIds: ["note-1"] } };
+    const entries = [mine, entry({ type: "assistant_message", text: "Working" }), entry({ type: "user_message", text: "Note from John", clientMessageId: "note-1" }), entry({ type: "assistant_message", text: "Updated result" })];
+    expect(paseoTurnOutcome(steered, { ...idle, status: "running" }, entries).state).toBe("running");
+    expect(paseoTurnOutcome(steered, idle, entries)).toMatchObject({ state: "completed", resultText: "Working\n\nUpdated result" });
+  });
   it("joins streamed assistant chunks and records usage", () => {
     const chunks = ["554", "608e init | yes", " | 19"].map((text) => entry({ type: "assistant_message", text, messageId: "msg_1" }));
     expect(paseoTurnOutcome(run, idle, [mine, ...chunks])).toMatchObject({
@@ -35,9 +41,9 @@ describe("paseoTurnOutcome", () => {
     expect(paseoTurnOutcome(run, idle, [mine, ...items]).resultText).toBe("I'll check.\n\nDONE");
   });
 
-  it("never infers success from idle alone", () => {
-    expect(paseoTurnOutcome(run, idle, [mine]).state).toBe("needs-attention");
-    expect(paseoTurnOutcome(run, idle, []).state).toBe("needs-attention");
+  it("never infers success from idle alone, and never leaves an idle agent holding a slot", () => {
+    expect(paseoTurnOutcome(run, idle, [mine])).toMatchObject({ state: "failed", finishedAt: expect.any(Number) });
+    expect(paseoTurnOutcome(run, idle, [])).toMatchObject({ state: "failed", finishedAt: expect.any(Number) });
   });
 
   it("reports this turn's error, not the next turn's", () => {
@@ -51,7 +57,12 @@ describe("paseoTurnOutcome", () => {
     expect(paseoTurnOutcome(run, { ...idle, status: "initializing" }, []).state).toBe("starting");
     expect(paseoTurnOutcome(run, { ...idle, status: "running", pendingPermissions: [{ id: "p" }] } as unknown as PaseoAgent, []).state).toBe("needs-attention");
     expect(paseoTurnOutcome(run, { ...idle, status: "error", lastError: "boom" }, [])).toMatchObject({ state: "failed", error: "boom" });
-    expect(paseoTurnOutcome(run, { ...idle, status: "closed" }, []).state).toBe("needs-attention");
+    expect(paseoTurnOutcome(run, { ...idle, status: "closed" }, [])).toMatchObject({ state: "failed", error: "The Paseo agent was closed before DevHub saw a result." });
+  });
+
+  it("keeps the result of a turn that finished before its agent was closed", () => {
+    const finished = [mine, entry({ type: "assistant_message", text: "all done" })];
+    expect(paseoTurnOutcome(run, { ...idle, status: "closed" }, finished)).toMatchObject({ state: "completed", resultText: "all done" });
   });
 
   it("finishes the submitted turn while a later turn runs, without borrowing its usage", () => {
@@ -102,6 +113,15 @@ describe("task workspace pins", () => {
     expect(taskPinReleased(plan, [plan, taskRun("implement", 2, { conversationId: undefined })], index({}))).toBe(false);
     expect(taskPinReleased(plan, [plan, implement], index({}))).toBe(true);
     expect(taskPinReleased(implement, [plan, implement], index({}))).toBe(false);
+  });
+
+  it("keeps only the newest chat of a task pinned, whatever step it is", () => {
+    const retry = taskRun("implement", 3);
+    const review = taskRun("review", 4);
+    expect(taskPinReleased(implement, [plan, implement, retry], index({}))).toBe(true);
+    expect(taskPinReleased(retry, [plan, implement, retry], index({}))).toBe(false);
+    expect(taskPinReleased(retry, [implement, retry, review], index({}))).toBe(true);
+    expect(taskPinReleased(review, [implement, retry, review], index({}))).toBe(false);
   });
 
   it("releases every chat once the task is done, abandoned or deleted", () => {

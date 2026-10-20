@@ -51,6 +51,29 @@ describe("TaskComposer", () => {
     expect((input as HTMLInputElement).value).toBe("");
   });
 
+  it("saves a pasted URL on Enter without naming it, and Skip doesn't bring the prompt back", async () => {
+    const onAdded = vi.fn();
+    render(<TaskComposer onAdded={onAdded} />);
+
+    const input = screen.getByLabelText("Add a task");
+    input.focus();
+    fireEvent.change(input, { target: { value: "Read https://example.com/a" } });
+    expect(screen.getByRole("button", { name: "Skip" })).toBeTruthy();
+    // The optional name prompt doesn't steal focus, so typing carries on in the task.
+    expect(document.activeElement).toBe(input);
+    fireEvent.click(screen.getByRole("button", { name: "Skip" }));
+    fireEvent.change(input, { target: { value: "Read https://example.com/a now" } });
+    expect(screen.queryByRole("button", { name: "Skip" })).toBeNull();
+    fireEvent.keyDown(input, { key: "Enter" });
+    await waitFor(() => expect(onAdded).toHaveBeenCalledTimes(1));
+    expect(postBody().text).toBe("Read https://example.com/a now");
+
+    fireEvent.change(input, { target: { value: "See https://example.com/b" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    await waitFor(() => expect(onAdded).toHaveBeenCalledTimes(2));
+    expect(JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body)).text).toBe("See https://example.com/b");
+  });
+
   it("captures a draft on shift+enter and sends no links when none are set", async () => {
     const onAdded = vi.fn();
     render(<TaskComposer onAdded={onAdded} />);
@@ -62,5 +85,82 @@ describe("TaskComposer", () => {
     await waitFor(() => expect(onAdded).toHaveBeenCalled());
     expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/tasks/capture");
     expect(postBody()).toEqual({ text: "Idea" });
+  });
+
+  describe("capture mode", () => {
+    const capture = { endpoint: "/api/tasks/capture", formLabel: "Capture an idea", inputLabel: "Capture", headers: { "X-Devhub-Task-Profile": "work" }, body: { profile: "work" } };
+
+    it("sends every submit path to the capture endpoint with the profile, and hides the ready-task button", async () => {
+      const onAdded = vi.fn();
+      render(<TaskComposer capture={capture} onAdded={onAdded} />);
+      expect(screen.queryByRole("button", { name: "Add task" })).toBeNull();
+      expect(screen.queryByRole("button", { name: "Capture as draft" })).toBeNull();
+      const input = screen.getByLabelText("Capture");
+      fireEvent.change(input, { target: { value: "PROJ-1 idea #tag" } });
+      fireEvent.keyDown(input, { key: "Enter" });
+      await waitFor(() => expect(onAdded).toHaveBeenCalledWith(created));
+      expect(fetchMock).toHaveBeenCalledExactlyOnceWith("/api/tasks/capture", expect.objectContaining({
+        headers: { "Content-Type": "application/json", "X-Devhub-Task-Profile": "work" },
+        body: JSON.stringify({ text: "PROJ-1 idea #tag", links: [{ kind: "jira", id: "PROJ-1", label: "PROJ-1" }], profile: "work" }),
+      }));
+    });
+
+    it("reports the server's message, keeps the text and ignores a second Enter while saving", async () => {
+      let respond!: (value: Response) => void;
+      fetchMock.mockReturnValueOnce(new Promise<Response>((resolve) => { respond = resolve; }));
+      const onError = vi.fn();
+      render(<TaskComposer capture={{ ...capture, onError }} onAdded={vi.fn()} />);
+      const input = screen.getByLabelText("Capture");
+      fireEvent.change(input, { target: { value: "Keep me" } });
+      fireEvent.keyDown(input, { key: "Enter" });
+      fireEvent.keyDown(input, { key: "Enter" });
+      expect(fetchMock).toHaveBeenCalledOnce();
+      respond({ ok: false, status: 503, text: async () => JSON.stringify({ error: "Capture unavailable." }) } as Response);
+      await waitFor(() => expect(onError).toHaveBeenLastCalledWith("Capture unavailable."));
+      expect((input as HTMLInputElement).value).toBe("Keep me");
+    });
+
+    it("never loops on the Link name prompt: Skip or an empty name keeps the URL, then Enter saves", async () => {
+      const onAdded = vi.fn();
+      render(<TaskComposer capture={capture} onAdded={onAdded} />);
+      const input = screen.getByLabelText("Capture");
+
+      // Skip, then Enter in the main input saves the bare URL as typed.
+      fireEvent.change(input, { target: { value: "https://example.com/a" } });
+      fireEvent.click(screen.getByRole("button", { name: "Skip" }));
+      fireEvent.keyDown(input, { key: "Enter" });
+      expect(screen.queryByRole("button", { name: "Skip" })).toBeNull();
+      await waitFor(() => expect(onAdded).toHaveBeenCalledTimes(1));
+      expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)).text).toBe("https://example.com/a");
+
+      // Enter on an empty name is the same as Skip.
+      fireEvent.change(input, { target: { value: "https://example.com/b" } });
+      fireEvent.keyDown(screen.getByPlaceholderText("e.g. Notes"), { key: "Enter" });
+      expect(screen.queryByPlaceholderText("e.g. Notes")).toBeNull();
+      fireEvent.keyDown(input, { key: "Enter" });
+      await waitFor(() => expect(onAdded).toHaveBeenCalledTimes(2));
+      expect(JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body)).text).toBe("https://example.com/b");
+      expect(fetchMock.mock.calls.every(([url]) => url === "/api/tasks/capture")).toBe(true);
+    });
+
+    it("keeps a skipped URL skipped while the user carries on typing it", () => {
+      render(<TaskComposer capture={capture} onAdded={vi.fn()} />);
+      const input = screen.getByLabelText("Capture");
+      fireEvent.change(input, { target: { value: "https://exa" } });
+      fireEvent.click(screen.getByRole("button", { name: "Skip" }));
+      fireEvent.change(input, { target: { value: "https://example.com/c" } });
+      expect(screen.queryByRole("button", { name: "Skip" })).toBeNull();
+      // A different link still gets offered a name.
+      fireEvent.change(input, { target: { value: "https://other.dev/d" } });
+      expect(screen.getByRole("button", { name: "Skip" })).toBeTruthy();
+    });
+
+    it("does not submit while the destination is unconfirmed", () => {
+      render(<TaskComposer capture={{ ...capture, disabled: true }} onAdded={vi.fn()} />);
+      const input = screen.getByLabelText("Capture");
+      fireEvent.change(input, { target: { value: "Nope" } });
+      fireEvent.keyDown(input, { key: "Enter" });
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
   });
 });

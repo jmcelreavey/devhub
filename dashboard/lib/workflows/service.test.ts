@@ -3,10 +3,11 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({ fingerprint: vi.fn(), execute: vi.fn(), runs: vi.fn(), readRun: vi.fn() }));
+const mocks = vi.hoisted(() => ({ fingerprint: vi.fn(), execute: vi.fn(), runs: vi.fn(), readRun: vi.fn(), orchestration: vi.fn(), validateCwd: vi.fn() }));
 vi.mock("@/lib/workflows/fingerprint", () => ({ worktreeFingerprint: mocks.fingerprint }));
 vi.mock("@/lib/agent-runs/store", () => ({ readAgentRun: mocks.readRun, listAgentRuns: () => [] }));
-vi.mock("@/lib/agent-runs/dispatch", () => ({ validateAgentCwd: (cwd: string) => cwd }));
+vi.mock("@/lib/agent-runs/dispatch", () => ({ validateAgentCwd: mocks.validateCwd }));
+vi.mock("@/lib/storyboard/orchestration-store", () => ({ readOrchestration: mocks.orchestration }));
 vi.mock("@/lib/exec-external", () => ({ execExternal: mocks.execute }));
 vi.mock("@/lib/tasks/task-agent-runs", async (original) => ({
   ...await original<typeof import("@/lib/tasks/task-agent-runs")>(),
@@ -20,6 +21,8 @@ beforeEach(() => {
   notes = fs.mkdtempSync(path.join(os.tmpdir(), "workflow-actions-"));
   vi.stubEnv("NOTES_DIR", notes);
   mocks.fingerprint.mockResolvedValue("current");
+  mocks.orchestration.mockReturnValue(null);
+  mocks.validateCwd.mockImplementation((cwd: string) => cwd);
   mocks.execute.mockResolvedValue({ stdout: "", stderr: "" });
   mocks.readRun.mockReturnValue({ spec: { id: "implement", cwd: "/checkout" } });
   mocks.runs.mockReturnValue([{ runId: "implement", role: "implement" }, { runId: "review", role: "review", status: "done", codeFingerprint: "current" }]);
@@ -77,10 +80,50 @@ it("claims each check once even if its completion callback is repeated", async (
   await Promise.all([executeWorkflowCheck("task", checkId!), executeWorkflowCheck("task", checkId!)]);
   expect(mocks.execute).toHaveBeenCalledTimes(1);
 });
+it("verifies the pinned checkout even when a later implementation run uses another cwd", async () => {
+  mocks.orchestration.mockReturnValue({ auto: { work: { cwd: "/repo", worktree: { path: "/pinned" } } } });
+  const { checkId } = await actOnWorkflow({ taskId: "task", revision: 0, action: "verify" });
+  expect(readWorkflow("task").checks[0].cwd).toBe("/pinned");
+  mocks.runs.mockReturnValue([{ runId: "draft-pr-retry", role: "implement" }]);
+  mocks.readRun.mockReturnValue({ spec: { id: "draft-pr-retry", cwd: "/other" } });
+  await executeWorkflowCheck("task", checkId!);
+  expect(mocks.execute).toHaveBeenCalledWith("npm", ["run", "verify"], expect.objectContaining({ cwd: "/pinned" }));
+  expect(readWorkflow("task").checks[0].outcome).toBe("passed");
+});
+
+it("interrupts verification if the task switches checkout after it was queued", async () => {
+  const { checkId } = await actOnWorkflow({ taskId: "task", revision: 0, action: "verify" });
+  mocks.readRun.mockReturnValue({ spec: { id: "implement", cwd: "/other" } });
+  await executeWorkflowCheck("task", checkId!);
+  expect(mocks.execute).toHaveBeenCalledWith("npm", ["run", "verify"], expect.objectContaining({ cwd: "/checkout" }));
+  expect(readWorkflow("task").checks[0].outcome).toBe("interrupted");
+});
+
+it("records an interrupted check when its checkout disappears before execution", async () => {
+  const { checkId } = await actOnWorkflow({ taskId: "task", revision: 0, action: "verify" });
+  mocks.validateCwd.mockImplementation(() => { throw new Error("Checkout missing"); });
+  await executeWorkflowCheck("task", checkId!);
+  expect(mocks.execute).not.toHaveBeenCalled();
+  expect(readWorkflow("task").checks[0]).toMatchObject({ outcome: "interrupted", exitCode: null, finishedAt: expect.any(String) });
+});
+
 it("recovers abandoned checks without launching them again", async () => {
   await actOnWorkflow({ taskId: "task", revision: 0, action: "verify" });
   await updateWorkflow("task", undefined, (state) => { state.checks[0].startedAt = new Date(0).toISOString(); return "Old fixture"; });
   const workflow = await refreshWorkflowEvidence("task");
   expect(workflow.checks[0].outcome).toBe("interrupted");
   expect(mocks.execute).not.toHaveBeenCalled();
+});
+
+it("marks a workflow read, then unread again, so the inbox can toggle it", async () => {
+  await updateWorkflow("task", undefined, () => "Checks passed");
+  const unreadAtFirst = readWorkflow("task");
+  expect(unreadAtFirst.seenRevision < unreadAtFirst.revision).toBe(true);
+  const { workflow: read } = await actOnWorkflow({ taskId: "task", revision: unreadAtFirst.revision, action: "seen" });
+  expect(read.seenRevision < read.revision).toBe(false);
+  const { workflow: unread } = await actOnWorkflow({ taskId: "task", revision: read.revision, action: "unseen" });
+  expect(unread.seenRevision < unread.revision).toBe(true);
+  // Already unread: nothing to write.
+  const again = await actOnWorkflow({ taskId: "task", revision: unread.revision, action: "unseen" });
+  expect(again.workflow.revision).toBe(unread.revision);
 });

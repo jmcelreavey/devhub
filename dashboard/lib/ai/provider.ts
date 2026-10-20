@@ -87,6 +87,10 @@ const DISABLE_THINKING = {
   providerOptions: { [PROVIDER_NAME]: { thinking: { type: "disabled" as const } } },
 } as const;
 
+const ENABLE_THINKING = {
+  providerOptions: { [PROVIDER_NAME]: { thinking: { type: "enabled" as const } } },
+} as const;
+
 /**
  * Per-call options to spread into generateText/streamText.
  * Reasoning effort is only attached for OpenAI endpoints (`api.openai.com`).
@@ -96,10 +100,12 @@ const DISABLE_THINKING = {
 export function getNotesAiCallOptions(
   modelOverride?: string,
   reasoningEffort?: ReasoningEffort | null,
-): typeof DISABLE_THINKING | { providerOptions: { openai: { reasoningEffort: ReasoningEffort } } } | Record<string, never> {
+  glmThinking?: "enabled" | "disabled" | null,
+): typeof DISABLE_THINKING | typeof ENABLE_THINKING | { providerOptions: { openai: { reasoningEffort: ReasoningEffort } } } | Record<string, never> {
   const { baseURL, modelId } = resolveProviderConfig(modelOverride);
   const isGlm = /z\.ai/i.test(baseURL) || /glm/i.test(modelId);
-  if (isGlm) return DISABLE_THINKING;
+  // Default stays off. An explicit "on" from the effort picker is the only thing that enables it.
+  if (isGlm) return glmThinking === "enabled" ? ENABLE_THINKING : DISABLE_THINKING;
   const effort = resolveReasoningEffort(modelId, reasoningEffort);
   if (effort && isOpenAiEndpoint(baseURL)) return { providerOptions: { openai: { reasoningEffort: effort } } };
   return {};

@@ -66,15 +66,18 @@ describe("buildPrRowMenuGroups", () => {
     expect(itemIds("reviewed")).not.toContain("investigate-pipeline");
   });
 
-  it("marks Investigate pipeline as danger when checks are failing", () => {
+  it("keeps pipeline investigation in Review when checks are failing", () => {
     const groups = buildPrRowMenuGroups({
       row: row({ checks: "failing" }),
       kind: "authored",
       toast,
       openNote: vi.fn(),
     });
-    const item = groups.flatMap((g) => g.items).find((i) => i.id === "investigate-pipeline");
-    expect(item?.danger).toBe(true);
+    const review = groups.find((group) => group.id === "review");
+    expect(review?.items.map((item) => item.id)).toEqual(["agent-review", "investigate-pipeline"]);
+    const item = review?.items.find((item) => item.id === "investigate-pipeline");
+    expect(item).toBeDefined();
+    expect(item?.danger).not.toBe(true);
   });
 
   it("does not offer GitHub reviewer request from the PR menu", () => {

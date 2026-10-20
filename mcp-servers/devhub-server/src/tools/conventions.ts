@@ -57,6 +57,7 @@ interface Run {
   reinforced: number;
   provider?: string;
   model?: string;
+  effort?: string;
 }
 
 interface Detail {
@@ -72,6 +73,7 @@ interface Prefs {
   minIntervalHours: number;
   provider: string;
   model: string;
+  effort?: string;
 }
 
 interface SettingsPayload {
@@ -121,7 +123,7 @@ export function formatDetail(data: Detail): string {
   }
   if (run) {
     const detail = run.ok
-      ? `${run.prsScanned} PRs, ${run.comments} comments, +${run.added} new · ${run.autoAccepted ?? 0} automatically accepted · ${run.autoRejected ?? 0} automatically rejected, ${run.reinforced} reinforced${run.provider ? ` · ${[run.provider, run.model].filter(Boolean).join(" ")}` : ""}`
+      ? `${run.prsScanned} PRs, ${run.comments} comments, +${run.added} new · ${run.autoAccepted ?? 0} automatically accepted · ${run.autoRejected ?? 0} automatically rejected, ${run.reinforced} reinforced${run.provider ? ` · ${[run.provider, run.model, run.effort].filter(Boolean).join(" ")}` : ""}`
       : `FAILED — ${run.error ?? "unknown error"}`;
     head.push(`Last run ${ago(run.at)}: ${detail}`);
   }
@@ -141,6 +143,7 @@ export function formatPrefs(p: Prefs, extra?: Pick<SettingsPayload, "providers" 
     `At most one automatic run per repo every: ${p.minIntervalHours}h`,
     `Provider: ${p.provider || "default"}`,
     `Model: ${p.model || "provider default"}`,
+    ...(p.effort ? [`Effort: ${p.effort}`] : []),
   ];
   if (extra) {
     lines.push(`Providers: ${extra.providers.map((x) => `${x.id}${x.available ? "" : " (not installed)"}`).join(", ")} — default resolves to ${extra.resolved ?? "none"}`);
@@ -264,6 +267,7 @@ export function registerConventionsTools(server: McpServer, ctx: Context): void 
         minIntervalHours: z.number().int().min(1).max(168).optional(),
         provider: z.string().optional().describe("cursor-cli | chatgpt-cli | antigravity-cli | opencode | api; empty string = the default provider"),
         model: z.string().optional().describe("Model for mining; empty string = the provider's own"),
+        effort: z.string().max(32).optional().describe("Reasoning effort. Empty string clears it."),
       },
     },
     async (fields) =>

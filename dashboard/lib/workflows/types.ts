@@ -5,6 +5,8 @@ export type WorkflowStatus = "active" | "waiting-user" | "blocked" | "paused" | 
 export interface WorkflowCheck {
   id: string;
   runId: string;
+  /** Checkout fingerprinted when queued; absent on checks saved before checkout pinning. */
+  cwd?: string;
   fingerprint: string;
   command: string;
   startedAt: string;

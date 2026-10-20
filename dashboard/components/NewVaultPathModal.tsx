@@ -4,7 +4,7 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import { X } from "lucide-react";
 import { getVaultClient } from "@/lib/vault/vault-client";
 import type { VaultId } from "@/lib/vault/vault-client";
-import { NOTE_TEMPLATES, noteTemplateById } from "@/lib/notes/templates";
+import { NOTE_TEMPLATES, newNoteMarkdown, noteTemplateById } from "@/lib/notes/templates";
 import { textToBlocks } from "@/lib/markdown-convert";
 
 export interface NewVaultPathModalProps {
@@ -46,7 +46,7 @@ export function NewVaultPathModal({
         .trim()
         .replace(new RegExp(`${ext.replace(".", "\\.")}$`, "i"), "");
       const template = showTemplates && templateId ? noteTemplateById(templateId) : undefined;
-      const content = vaultId === "docs" ? "" : template ? textToBlocks(template.markdown) : [];
+      const content = vaultId === "docs" ? "" : showTemplates ? textToBlocks(newNoteMarkdown(cleanPath, template)) : [];
       const r = await fetch(`${vault.apiPrefix}/${cleanPath}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },

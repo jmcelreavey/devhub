@@ -37,6 +37,17 @@ export const DASHBOARD_MANAGED_ENV_KEYS = [
   "DD_APPLICATION_KEY",
   "DATADOG_ONCALL_SCHEDULE_ID",
   "AI_API_KEY",
+  // Jev (TypeSafe), the model behind QA runs. Saved from Setup → QA (Jev).
+  "TYPESAFE_API_KEY",
+  "SLACK_BOT_TOKEN",
+  "SLACK_APP_TOKEN",
+  "SLACK_CHANNEL_ID",
+  "SLACK_ALLOWED_USER_ID",
+  "SLACK_TEAM_ID",
+  "SLACK_POST_NEEDS_YOU",
+  "SLACK_POST_PROGRESS",
+  "SLACK_TRANSPORT",
+  "SLACK_GATEWAY_URL",
   "AI_BASE_URL",
   "AI_MODEL",
   // Agents → Usage: org admin key for billed OpenAI spend (project keys lack api.usage.read).
@@ -81,7 +92,7 @@ const GOOGLE_PROCESS_KEYS = [
   "GOOGLE_OAUTH_REDIRECT_URI",
 ] as const;
 
-const JIRA_PROCESS_KEYS = ["JIRA_DOMAIN", "JIRA_EMAIL", "JIRA_API_TOKEN"] as const;
+const JIRA_PROCESS_KEYS = ["JIRA_DOMAIN", "JIRA_EMAIL", "JIRA_API_TOKEN", "NEXT_PUBLIC_JIRA_DOMAIN"] as const;
 const DATADOG_PROCESS_KEYS = ["DATADOG_API_KEY", "DATADOG_APPLICATION_KEY", "DATADOG_APP_KEY", "DD_APPLICATION_KEY", "DATADOG_ONCALL_SCHEDULE_ID"] as const;
 
 const INFRA_PROCESS_KEYS = ["AWS_PROFILE", "OKTA_PASSWORD", "DATADOG_USER_EMAIL", "AUTOMATION_REPO_PATH"] as const;
@@ -117,6 +128,15 @@ export function syncJiraProcessEnvFromOverrides(overrides: Map<string, string>):
 
 export function syncDatadogProcessEnvFromOverrides(overrides: Map<string, string>): void {
   syncProcessEnvFromOverrides(DATADOG_PROCESS_KEYS, overrides);
+}
+
+/** Keeps QA runs on the key just saved in Setup, without a restart. */
+export function syncQaProcessEnvFromOverrides(overrides: Map<string, string>): void {
+  syncProcessEnvFromOverrides(["TYPESAFE_API_KEY"], overrides);
+}
+
+export function syncSlackProcessEnvFromOverrides(overrides: Map<string, string>): void {
+  syncProcessEnvFromOverrides(["SLACK_BOT_TOKEN", "SLACK_APP_TOKEN", "SLACK_CHANNEL_ID", "SLACK_ALLOWED_USER_ID", "SLACK_TEAM_ID", "SLACK_POST_NEEDS_YOU", "SLACK_POST_PROGRESS", "SLACK_TRANSPORT", "SLACK_GATEWAY_URL"], overrides);
 }
 
 export function syncInfraProcessEnvFromOverrides(overrides: Map<string, string>): void {

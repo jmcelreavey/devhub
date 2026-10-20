@@ -37,6 +37,10 @@ Always-on. Keep this short. L2 modes (teaching, review, setup, DevOps, tooling) 
 - Parameterized queries, never string-built SQL
 - Sensible CORS, not `*`
 
+## DevHub
+
+- If the DevHub MCP is connected, prefer it for tasks, notes, Jira, PRs, repos/worktrees and agent runs before shell, `gh` or loose files; search for its tools by name if they're deferred. If it's unreachable, say so once and use normal tools.
+
 ## Recap
 
 Don't volunteer session notes. If they ask to capture the work: in OpenCode use `devhub-recap`; anywhere else, recap from your own tool history (`sessions_recap` can only see OpenCode sessions).

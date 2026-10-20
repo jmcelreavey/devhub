@@ -10,8 +10,9 @@ import {
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
+  type RefObject,
 } from "react";
-import { MoreHorizontal } from "lucide-react";
+import { ArrowLeft, ChevronRight, MoreHorizontal } from "lucide-react";
 import {
   ROW_LONG_PRESS_MOVE_PX,
   ROW_LONG_PRESS_MS,
@@ -42,6 +43,7 @@ export interface ContextMenuItem {
   /** Shown greyed next to the label when the item is disabled. */
   disabledReason?: string;
   onSelect: () => void | Promise<void>;
+  submenu?: ContextMenuItem[];
 }
 
 /** A labelled run of items. An empty label renders as a plain divider. */
@@ -49,6 +51,15 @@ export interface ContextMenuGroup {
   id: string;
   label?: string;
   items: ContextMenuItem[];
+}
+
+/** Keep destructive actions together at the end, even when callers append groups. */
+export function menuGroupsWithDangerLast(groups: ContextMenuGroup[]): ContextMenuGroup[] {
+  const dangerItems = groups.flatMap((group) => group.items.filter((item) => item.danger));
+  const safeGroups = groups
+    .map((group) => ({ ...group, items: group.items.filter((item) => !item.danger) }))
+    .filter((group) => group.items.length > 0);
+  return dangerItems.length ? [...safeGroups, { id: "destructive", items: dangerItems }] : safeGroups;
 }
 
 export interface ContextMenuPosition {
@@ -198,6 +209,13 @@ export function ContextMenu({
   label?: string;
 }) {
   const menuRef = useRef<HTMLDivElement>(null);
+  const typeahead = useRef({ text: "", at: 0 });
+  const [submenu, setSubmenu] = useState<ContextMenuItem | null>(null);
+  const [previousOpen, setPreviousOpen] = useState(open);
+  if (previousOpen !== open) {
+    setPreviousOpen(open);
+    if (!open) setSubmenu(null);
+  }
   const [flipped, setFlipped] = useState<
     ({ key: string } & ClampedMenuPosition) | null
   >(null);
@@ -227,6 +245,20 @@ export function ContextMenu({
     },
     [itemNodes],
   );
+
+  const closeSubmenu = useCallback(() => {
+    const parentId = submenu?.id;
+    setSubmenu(null);
+    requestAnimationFrame(() => {
+      const parent = [...(menuRef.current?.querySelectorAll<HTMLButtonElement>("[data-menu-item]") ?? [])].find((node) => node.dataset.menuItem === parentId);
+      parent?.focus({ preventScroll: true });
+    });
+  }, [submenu]);
+
+  const openSubmenu = (item: ContextMenuItem) => {
+    setSubmenu(item);
+    requestAnimationFrame(() => focusItemAt(1));
+  };
 
   /**
    * Show the popover (so it isn't `display: none`) then flip inside the
@@ -272,12 +304,13 @@ export function ContextMenu({
       el.style.overflowY = "auto";
     }
     setFlipped({ key: originKey, ...next });
-  }, [open, position, originKey]);
+  }, [open, position, originKey, submenu]);
 
   useEffect(() => {
     const el = menuRef.current;
     if (!el) return;
     const supportsPopover = typeof el.showPopover === "function";
+    typeahead.current = { text: "", at: 0 };
 
     if (!open) {
       if (supportsPopover) {
@@ -300,7 +333,8 @@ export function ContextMenu({
       if (event.key !== "Escape") return;
       event.stopPropagation();
       event.preventDefault();
-      onClose();
+      if (submenu) closeSubmenu();
+      else onClose();
     };
     const onScroll = (event: Event) => {
       const host = document.querySelector<HTMLElement>(
@@ -322,16 +356,16 @@ export function ContextMenu({
       window.removeEventListener("resize", onScroll);
       window.removeEventListener("scroll", onScroll, true);
     };
-  }, [open, onClose]);
+  }, [open, onClose, submenu, closeSubmenu]);
 
-  const visibleGroups = groups.filter((g) => g.items.length > 0);
+  const visibleGroups = menuGroupsWithDangerLast(submenu ? [{ id: "submenu", label: submenu.label, items: submenu.submenu ?? [] }] : groups);
 
   return (
     <div
       ref={menuRef}
       className="context-menu"
       role="menu"
-      aria-label={label}
+      aria-label={submenu?.label ?? label}
       style={{
         top: placed?.top ?? position?.y ?? 0,
         left: placed?.left ?? position?.x ?? 0,
@@ -347,7 +381,14 @@ export function ContextMenu({
       onKeyDown={(event) => {
         const nodes = itemNodes();
         const current = nodes.indexOf(document.activeElement as HTMLButtonElement);
-        if (event.key === "ArrowDown") {
+        const selected = visibleGroups.flatMap((group) => group.items).find((item) => item.id === (document.activeElement as HTMLElement)?.dataset.menuItem);
+        if ((event.key === "ArrowRight" || event.key === "Enter") && selected?.submenu) {
+          event.preventDefault();
+          openSubmenu(selected);
+        } else if (event.key === "ArrowLeft" && submenu) {
+          event.preventDefault();
+          closeSubmenu();
+        } else if (event.key === "ArrowDown") {
           event.preventDefault();
           focusItemAt(current + 1);
         } else if (event.key === "ArrowUp") {
@@ -361,10 +402,27 @@ export function ContextMenu({
           focusItemAt(nodes.length - 1);
         } else if (event.key === "Tab") {
           onClose();
+        } else if (event.key.length === 1 && event.key !== " " && !event.ctrlKey && !event.metaKey && !event.altKey) {
+          const now = event.timeStamp;
+          const key = event.key.toLocaleLowerCase();
+          const previous = now - typeahead.current.at < 700 ? typeahead.current.text : "";
+          const text = previous === key ? key : previous + key;
+          typeahead.current = { text, at: now };
+          const offset = text.length > 1 ? 0 : 1;
+          for (let step = offset; step < nodes.length + offset; step += 1) {
+            const index = (Math.max(current, text.length > 1 ? 0 : -1) + step) % nodes.length;
+            const label = nodes[index].querySelector(".context-menu-label")?.textContent ?? nodes[index].textContent ?? "";
+            if (label.trim().toLocaleLowerCase().startsWith(text)) {
+              event.preventDefault();
+              focusItemAt(index);
+              break;
+            }
+          }
         }
       }}
       {...({ popover: "manual" } as { popover?: "manual" })}
     >
+      {submenu ? <button type="button" className="context-menu-item" role="menuitem" onClick={closeSubmenu}><span className="context-menu-icon"><ArrowLeft size={12} aria-hidden /></span>Back</button> : null}
       {visibleGroups.map((group, index) => (
         <div key={group.id} className="context-menu-group">
           {index > 0 && <div className="context-menu-divider" role="separator" />}
@@ -374,11 +432,18 @@ export function ContextMenu({
               key={item.id}
               type="button"
               role="menuitem"
+              data-menu-item={item.id}
+              aria-haspopup={item.submenu ? "menu" : undefined}
+              aria-expanded={item.submenu ? false : undefined}
               className="context-menu-item"
               data-danger={item.danger ? "true" : undefined}
               disabled={item.disabled}
               title={item.disabled ? item.disabledReason : item.description}
               onClick={() => {
+                if (item.submenu) {
+                  openSubmenu(item);
+                  return;
+                }
                 onClose();
                 void item.onSelect();
               }}
@@ -392,6 +457,7 @@ export function ContextMenu({
                   </span>
                 )}
               </span>
+              {item.submenu ? <ChevronRight size={12} aria-hidden /> : null}
             </button>
           ))}
         </div>
@@ -525,21 +591,30 @@ export function useContextMenu<T>() {
 export function RowMenuKebab({
   label = "More actions",
   onOpen,
+  triggerRef,
 }: {
   label?: string;
+  triggerRef?: RefObject<HTMLButtonElement | null>;
   onOpen: (x: number, y: number) => void;
 }) {
   return (
     <button
       type="button"
       className="row-menu-kebab reveal-on-hover shrink-0"
+      ref={triggerRef}
       aria-label={label}
       aria-haspopup="menu"
       onPointerDown={(event) => event.stopPropagation()}
       onClick={(event) => {
         event.preventDefault();
         event.stopPropagation();
-        onOpen(event.clientX, event.clientY);
+        // Keyboard clicks have no pointer coordinates; keep the menu beside its trigger.
+        if (event.clientX === 0 && event.clientY === 0) {
+          const rect = event.currentTarget.getBoundingClientRect();
+          onOpen(rect.left, rect.bottom);
+        } else {
+          onOpen(event.clientX, event.clientY);
+        }
       }}
     >
       <MoreHorizontal size={16} aria-hidden />

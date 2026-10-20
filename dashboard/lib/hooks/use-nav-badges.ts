@@ -33,7 +33,7 @@ function countRemainingMeetings(events: CalendarEvent[]): number {
  * burger nav so the two never drift apart.
  *
  * Counts appear only where action is owed (2026-06 IA): Calendar shows
- * today's remaining meetings, Work shows open tasks.
+ * today's remaining meetings, Tasks shows open tasks.
  */
 export function useNavBadges(): NavBadges {
   const counts = useSidebarCounts();
@@ -48,7 +48,7 @@ export function useNavBadges(): NavBadges {
   // Shares the SWR cache with CalendarWidget — no extra polling cost.
   const { data: cal } = useLive<CalendarResponse>("/api/calendar");
   const calendarRemaining = cal && !cal.error ? countRemainingMeetings(cal.events ?? []) : 0;
-  return { counts, unseen: { tickets, prs }, calendarRemaining };
+  return { counts, unseen: { tickets, prs: prs && (counts?.actionablePrs ?? 0) > 0 }, calendarRemaining };
 }
 
 /** Queue-depth badge for a nav item (0 = no badge). */
@@ -59,16 +59,17 @@ export function countForItem(
 ): number {
   if (icon === "calendar") return extras?.calendarRemaining ?? 0;
   if (!counts) return 0;
+  if (icon === "today") return counts.needsYou ?? 0;
   if (icon === "tasks") return counts.tasks;
   if (icon === "tickets") return counts.tickets;
-  if (icon === "prs") return counts.prs;
+  if (icon === "prs") return counts.actionablePrs ?? 0;
   if (icon === "shared") return counts.shared;
   return 0;
 }
 
 /** Whether a nav item has new activity unseen since its last visit. */
 export function unseenForItem(icon: string, unseen: NavUnseen): boolean {
-  // Jira tickets live on Work's Jira tab — there is no Tickets row any more.
+  // Jira tickets live on the Tasks page's Jira tab — there is no Tickets row any more.
   if (icon === "tasks") return unseen.tickets;
   if (icon === "prs") return unseen.prs;
   return false;

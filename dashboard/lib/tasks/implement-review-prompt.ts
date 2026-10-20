@@ -1,4 +1,12 @@
+import { TASK_STATUS_UPDATE_INSTRUCTION } from "@shared/task-note/status-update.ts";
+import { OWNER_NOTES_INSTRUCTION } from "./owner-notes";
 import { taskImplementPlanUrl } from "@/lib/tasks/implement-prompt";
+
+/** The reviewer is read-only on code, but the task note is how its verdict reaches the board. */
+export const REVIEW_TASK_NOTE_LINE =
+  OWNER_NOTES_INSTRUCTION + " " +
+  TASK_STATUS_UPDATE_INSTRUCTION + " " +
+  "Task note: record the review on it with the task_note_update MCP tool as you go: add_bug for each must-fix finding (with severity and file:line in details), set_bug_status fixed for earlier bugs this diff resolves, add_decision for any trade-off you accept, and append_log with the verdict. Tidy what you touch (remove_item for duplicate or stale bugs). Keep the workflow column unchanged; update the structured status summary with your verdict and next step.";
 
 export interface ImplementReviewPromptInput {
   /** Dashboard origin, e.g. http://localhost:1337. */
@@ -39,6 +47,7 @@ export function buildImplementReviewPrompt(input: ImplementReviewPromptInput): s
   lines.push(
     `Save the review as the DevHub note ${input.notePath} (create it, or replace its body if it exists). Its ## Links section must carry a **Repo:** backlink to the local clone folder and a **Task:** backlink for task id ${input.taskId} dated ${input.date}.`,
     "Also follow the code-review skill on this same diff. The spec is this task and its Jira ticket. Put its reports in this same note under ## Standards and ## Spec, and leave those two sections separate from the other findings.",
+    `${REVIEW_TASK_NOTE_LINE} Task id ${input.taskId}, date ${input.date}.`,
     "Finish by replying with the verdict and a numbered list of must-fix findings, each with a file and line. If there are none, say so.",
   );
   return lines.join("\n");

@@ -12,6 +12,14 @@
  * `shared/entity-note` in MCP/sibling packages. Do not invent per-plugin formats.
  */
 
+import {
+  extractTaskNoteMetaFromMarkdown,
+  hasTaskNoteMeta,
+  normalizeTaskNoteLink,
+  replaceTaskNoteMetaInMarkdown,
+  type TaskNoteLink,
+} from "../task-note/meta.ts";
+
 export type EntityKind =
   | "task"
   | "meeting"
@@ -133,6 +141,30 @@ export function buildEntityLinksSection(
   return ["## Links", "", ...body, ""].join("\n");
 }
 
+const ENTITY_KINDS: ReadonlySet<string> = new Set([
+  "task",
+  "meeting",
+  "pr",
+  "note",
+  "diagram",
+  "calendar",
+  "jira",
+  "repo",
+  "tag",
+]);
+
+/** A task-note header link as a graph edge; kinds that are not entities (preview URLs) have none. */
+export function taskNoteLinkToEntityRef(link: TaskNoteLink): EntityRef | null {
+  if (!ENTITY_KINDS.has(link.kind)) return null;
+  return { kind: link.kind as EntityKind, id: link.id, label: link.label, href: link.href };
+}
+
+/** Inverse of `taskNoteLinkToEntityRef`. The task backlink and tags live elsewhere in the note. */
+export function entityRefToTaskNoteLink(ref: EntityRef): TaskNoteLink | null {
+  if (ref.marker || ref.kind === "tag") return null;
+  return normalizeTaskNoteLink({ kind: ref.kind, id: ref.id, label: ref.label, href: ref.href });
+}
+
 const TASK_REF_RE = /^::task-ref\s+(\S+)\s+(\S+)(?:\s+(.*))?$/;
 const LINK_LINE_RE = /^\*\*([^*]+):\*\*\s+(?:\[([^\]]+)\]\(([^)]+)\)|(.+))\s*$/;
 
@@ -184,6 +216,12 @@ export function parseEntityLinksFromMarkdown(markdown: string): EntityRef[] {
     const kind = kindFromLabel(kindRaw);
     if (!kind || !label) continue;
     push(refFromParsedLink(kind, label, href));
+  }
+
+  // Task notes keep their links in the ```task-meta header block rather than a ## Links section.
+  for (const link of extractTaskNoteMetaFromMarkdown(markdown)?.links ?? []) {
+    const ref = taskNoteLinkToEntityRef(link);
+    if (ref) push(ref);
   }
   return refs;
 }
@@ -496,6 +534,16 @@ export function mergeEntityRefs(...groups: Array<EntityRef[] | undefined>): Enti
  * Preserves body content above/below the section. Empty refs removes the section.
  */
 export function upsertEntityLinksInMarkdown(markdown: string, refs: EntityRef[]): string {
+  // A task note's links live in its metadata block; a second ## Links section would show them twice.
+  if (hasTaskNoteMeta(markdown)) {
+    const meta = extractTaskNoteMetaFromMarkdown(markdown);
+    if (meta) {
+      const entityLinks = refs.map(entityRefToTaskNoteLink).filter((l): l is TaskNoteLink => l !== null);
+      // Non-entity header links (preview URLs) are not in `refs`; keep them.
+      const kept = (meta.links ?? []).filter((l) => !ENTITY_KINDS.has(l.kind));
+      return replaceTaskNoteMetaInMarkdown(markdown, { ...meta, links: [...entityLinks, ...kept] });
+    }
+  }
   const section = buildEntityLinksSection(refs);
   const lines = markdown.split("\n");
   let start = -1;

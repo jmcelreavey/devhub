@@ -95,7 +95,7 @@ the latest audit as markdown; run new audits from the Repos page **DX Audit** bu
   `repos_git_diff`, `repos_git_stash`, `repos_git_branches`, `repos_git_branch`
   (checkout/create/delete/fetch/pull/push/undo-commit), `repos_git_commit`,
   `repos_git_push`, `repos_git_log`, `repos_git_show`, `repos_git_blame`,
-  `repos_git_range` (branch vs main), `repos_git_ci`, `repos_git_worktrees`,
+  `repos_git_range` (branch vs main), `repos_git_ci`, `repos_git_worktrees`, `repos_worktree_cleanup` (finished worktrees across repos, bulk delete),
   `repos_git_conflicts`. Mutating tools need `confirm:true` (except `repos_git_worktrees`).
 - **Inventory/search** — `assets_list` (agents|skills|mcp|persona), `search` (notes|docs).
 - **Agents** — `agent_providers`, `agent_dispatch`, `agent_race`, `agent_runs`, `agent_output`,

@@ -111,11 +111,23 @@ export function noteOpenQuestions(markdown: string | null | undefined): string[]
   const rest = text.slice(match.index + match[0].length);
   const nextHeading = rest.search(/\n##\s+/);
   const body = nextHeading === -1 ? rest : rest.slice(0, nextHeading);
-  return body
-    .split("\n")
-    .filter((line) => !/^\s*[-*+]\s*\[[xX]\]/.test(line))
-    .map((line) => line.replace(/^\s*[-*+]\s*(\[ \])?\s*/, "").trim())
-    .filter((line) => line.length >= 3);
+  const questions: string[] = [];
+  let answeredIndent: number | null = null;
+  for (const line of body.split("\n")) {
+    if (!line.trim()) continue;
+    const listItem = /^(\s*)[-*+]\s+/.exec(line);
+    if (/^\s*[-*+]\s*\[[xX]\]/.test(line)) {
+      answeredIndent = /^\s*/.exec(line)![0].length;
+      continue;
+    }
+    // BlockNote serializes answer paragraphs as indented children of the question.
+    const indent = /^\s*/.exec(line)![0].length;
+    if (!listItem && answeredIndent !== null && indent > answeredIndent) continue;
+    answeredIndent = null;
+    const question = line.replace(/^\s*[-*+]\s*(\[ \])?\s*/, "").trim();
+    if (question.length >= 3) questions.push(question);
+  }
+  return questions;
 }
 
 export function jiraDescriptionHasContent(text: string | null | undefined): boolean {

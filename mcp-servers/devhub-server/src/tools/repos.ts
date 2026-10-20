@@ -714,4 +714,39 @@ export function registerReposTools(server: McpServer, ctx: Context): void {
         return { content: [{ type: "text", text: `Worktree ${action} OK${detail}` }] };
       }),
   );
+  server.registerTool(
+    "repos_worktree_cleanup",
+    {
+      description:
+        "Finished worktrees across every local repo (the PRs page Worktrees tab): list shows rows with a merged PR, a stopped agent run, or a missing folder. remove deletes many at once from items (repo + path from list); dryRun:true reports what would go and what would be skipped. remove needs confirm:true unless dryRun, never forces, and skips any worktree with uncommitted changes or an agent run still going, with the reason. Only checkout folders go; branches and commits stay.",
+      inputSchema: {
+        action: z.enum(["list", "remove"]).optional().describe("Default list"),
+        items: z.array(z.object({ repo: z.string().min(1), path: z.string().min(1).max(4096) })).min(1).max(200).optional().describe("remove: worktrees from list (repo + path)"),
+        all: z.boolean().optional().describe("remove: every worktree list currently shows, instead of items"),
+        dryRun: z.boolean().optional().describe("remove: report what would be removed and skipped; change nothing"),
+        confirm: z.boolean().optional().describe("remove: explicitly approve deleting the folders"),
+      },
+    },
+    async ({ action = "list", items, all, dryRun, confirm }) =>
+      withDashboardErrors(async () => {
+        type Row = { repo: string; path: string; branch: string | null; reason: string; run?: { id: string; state: string }; pr?: { number: number } };
+        if (action === "list") {
+          const data = await dashboard.get<{ rows: Row[]; kept: number; failedRepos: string[] }>("/api/repos/worktree-cleanup", undefined, 180_000);
+          return { content: [{ type: "text", text: jsonText(data) }] };
+        }
+        let targets = items ?? [];
+        if (all) {
+          const data = await dashboard.get<{ rows: Row[] }>("/api/repos/worktree-cleanup", undefined, 180_000);
+          targets = data.rows.map((row) => ({ repo: row.repo, path: row.path }));
+        }
+        if (!targets.length) return { isError: true, content: [{ type: "text", text: "Give items (repo + path from list) or all:true. No worktrees removed." }] };
+        if (!dryRun && confirm !== true) {
+          return { isError: true, content: [{ type: "text", text: `Removing ${targets.length} worktree(s) needs confirm:true (try dryRun:true first). No worktrees removed.` }] };
+        }
+        const data = await dashboard.post<{ removed: string[]; skipped: { repo: string; path: string; reason: string }[] }>(
+          "/api/repos/worktree-cleanup", { items: targets, ...(dryRun ? { dryRun: true } : {}) }, 300_000,
+        );
+        return { content: [{ type: "text", text: jsonText({ dryRun: Boolean(dryRun), ...data }) }] };
+      }),
+  );
 }

@@ -36,6 +36,16 @@ describe("Paseo conversation redirects", () => {
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ url: "http://localhost:6767/h/srv_local/workspace/wks_shared?open=agent%3Aagent-one" });
   });
+  it("reports a start that does not have a chat yet", async () => {
+    mock.read.mockReturnValue({ spec: { runtime: "paseo" }, status: { state: "starting", startupPhase: "worktree", connectionId: "ws://127.0.0.1:6767/ws" } });
+    const req = request();
+    req.nextUrl.searchParams.set("format", "json");
+    const response = await GET(req);
+    expect(response.status).toBe(404);
+    expect(await response.json()).toMatchObject({ starting: true, phase: "worktree", error: "Creating an isolated worktree…" });
+    expect(mock.url).not.toHaveBeenCalled();
+  });
+
   it("does not open an id against a different daemon", async () => {
     mock.read.mockReturnValue({ spec: { runtime: "paseo" }, status: { conversationId: "agent-one", connectionId: "ws://127.0.0.1:9999/ws" } });
     expect((await GET(request())).status).toBe(409);

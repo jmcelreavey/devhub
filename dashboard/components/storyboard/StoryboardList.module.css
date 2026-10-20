@@ -1,0 +1,31 @@
+.list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  min-width: 0;
+  padding: 8px 0;
+}
+
+.row + .row {
+  border-top: 1px solid var(--border-muted);
+}
+
+.row :global(.task-row-start-auto) {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+@media (max-width: 640px) {
+  .row :global(.task-row) {
+    flex-wrap: wrap;
+  }
+
+  .row :global(.task-row-actions) {
+    max-width: 100%;
+    flex-wrap: wrap;
+    margin-left: 28px;
+  }
+}

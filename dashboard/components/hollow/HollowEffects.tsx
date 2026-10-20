@@ -5,6 +5,7 @@ import { isTypingTarget } from "@/lib/konami-sequence";
 import { advanceBoo, type HollowRuntimePlan } from "@/lib/hollow-theme";
 import { HOLLOW_BLOCKED, HOLLOW_MASKED_SURFACES, hollowContentMask, occupiedRects, quietApparitionSlot, quietHollowSlots, quietSpiderColumn } from "./hollow-placement";
 import { HollowRoom } from "./HollowRoom";
+import { hollowActivityPaused, observeHollowActivity } from "./hollow-activity";
 import { cancelScheduledHollowStop, resumeHollowSound, scheduleStopHollowSound,
   startHollowSound, suspendHollowSound } from "./hollow-audio";
 
@@ -43,6 +44,7 @@ export function HollowEffects({ plan, preview, faceShot }: {
     const observed = new Set<Element>();
     const protectedResize = new ResizeObserver(scroll);
     function mask() {
+      timer = 0;
       if (!root || document.hidden) return;
       const elements = new Set(document.querySelectorAll(`${PROTECTED}, ${HOLLOW_BLOCKED}, #main-content`));
       for (const el of observed) {
@@ -100,7 +102,9 @@ export function HollowEffects({ plan, preview, faceShot }: {
     }
     function queueMask() {
       window.clearTimeout(timer);
-      timer = window.setTimeout(mask, 80);
+      // Search results can change outside the input on every character. Never
+      // rebuild viewport SVG masks in the mutation microtask before that paint.
+      if (!document.hidden) timer = window.setTimeout(mask, hollowActivityPaused() ? 250 : 80);
     }
     function scroll() {
       const scenery = root?.querySelector<HTMLElement>(".hollow-scenery");
@@ -112,22 +116,37 @@ export function HollowEffects({ plan, preview, faceShot }: {
       queueMask();
     }
     function visibility() {
-      document.documentElement.toggleAttribute("data-hollow-paused", document.hidden);
+      document.documentElement.toggleAttribute("data-hollow-paused", hollowActivityPaused());
+      window.clearTimeout(timer); timer = 0;
       if (!document.hidden) queueMask();
     }
+    function input() {
+      // Extend a pending geometry refresh through a typing/composition burst.
+      if (timer) queueMask();
+    }
+    function settled(event: Event) {
+      if (event.target instanceof Element && event.target.closest(".hollow-fx, .hollow-glitch")) return;
+      queueMask();
+    }
     const observer = new MutationObserver(records => {
-      if (records.some(record => record.type === "childList"
+      const layoutRecords = records.filter(record => {
+        const target = record.target instanceof Element
+          ? record.target
+          : record.target.parentElement;
+        return !target?.closest(`${EDITOR}, .hollow-fx`);
+      });
+      if (layoutRecords.some(record => record.type === "childList"
         || (record.target instanceof Element && record.target.matches(".react-grid-item")))) scroll();
-      // Clock/progress text can change without childList or size notifications.
-      // Refresh before paint, rather than blinking the scenery for every tick.
-      else if (records.some(record => record.type === "characterData"
-        && !record.target.parentElement?.closest(`${EDITOR}, .hollow-fx`))) mask();
+      // Stale masks must not expose new text to fog. Restore the same scenery
+      // after one coalesced measurement, including when the input stays focused.
+      else if (layoutRecords.some(record => record.type === "characterData")) scroll();
     });
     observer.observe(document.body, { childList: true, characterData: true, subtree: true, attributes: true, attributeFilter: ["style", "class"] });
     const settledEvents = ["animationend", "animationcancel", "transitionend", "transitioncancel"];
-    for (const event of settledEvents) document.addEventListener(event, queueMask, true);
+    for (const event of settledEvents) document.addEventListener(event, settled, true);
     document.addEventListener("scroll", scroll, { capture: true, passive: true });
-    document.addEventListener("visibilitychange", visibility);
+    const stopActivity = observeHollowActivity(visibility);
+    document.addEventListener("input", input, true);
     window.addEventListener("resize", scroll);
     mask();
     visibility();
@@ -135,9 +154,10 @@ export function HollowEffects({ plan, preview, faceShot }: {
       window.clearTimeout(timer);
       observer.disconnect();
       protectedResize.disconnect();
-      for (const event of settledEvents) document.removeEventListener(event, queueMask, true);
+      for (const event of settledEvents) document.removeEventListener(event, settled, true);
       document.removeEventListener("scroll", scroll, true);
-      document.removeEventListener("visibilitychange", visibility);
+      stopActivity();
+      document.removeEventListener("input", input, true);
       window.removeEventListener("resize", scroll);
       document.documentElement.removeAttribute("data-hollow-paused");
     };
@@ -149,7 +169,7 @@ export function HollowEffects({ plan, preview, faceShot }: {
     const mouse = { x: -9999, y: -9999, text: true };
     function frame() {
       raf = 0;
-      if (document.hidden) return;
+      if (hollowActivityPaused()) return;
       if (plan.creatures) pairRefs.current.forEach((pair, i) => {
         const center = centers.current[i];
         if (!pair || !center || !pair.classList.contains("is-open")) return;
@@ -190,14 +210,14 @@ export function HollowEffects({ plan, preview, faceShot }: {
         Boolean(event.target.closest(`${TEXT_TARGET}, ${HOLLOW_BLOCKED}, iframe, .terminal-dock`))
         || [...event.target.childNodes].some((node) => node.nodeType === 3 && node.textContent?.trim())
       );
-      if (!raf && !document.hidden) raf = requestAnimationFrame(frame);
+      if (!raf && !hollowActivityPaused()) raf = requestAnimationFrame(frame);
     }
     function hide() {
       cancelAnimationFrame(raf); raf = 0;
       if (trailRef.current) trailRef.current.style.opacity = "0";
     }
     window.addEventListener("pointermove", move, { passive: true });
-    document.addEventListener("visibilitychange", hide);
+    const stopActivity = observeHollowActivity(hide);
     document.addEventListener("pointerleave", hide);
     window.addEventListener("blur", hide);
     window.addEventListener("dragstart", hide);
@@ -206,7 +226,7 @@ export function HollowEffects({ plan, preview, faceShot }: {
     return () => {
       hide();
       window.removeEventListener("pointermove", move);
-      document.removeEventListener("visibilitychange", hide);
+      stopActivity();
       document.removeEventListener("pointerleave", hide);
       window.removeEventListener("blur", hide);
       window.removeEventListener("dragstart", hide);
@@ -254,16 +274,16 @@ export function HollowEffects({ plan, preview, faceShot }: {
     }
     let attempts = 0;
     function arm() {
-      if (document.hidden) return;
+      if (hollowActivityPaused()) return;
       later(() => {
         place();
         if (!preview || ++attempts < 12) arm();
       }, preview ? 1000 : 18000 + Math.random() * 14000);
     }
-    function visibility() { clear(); if (!document.hidden) arm(); }
+    function visibility() { clear(); if (!hollowActivityPaused()) arm(); }
     arm();
-    document.addEventListener("visibilitychange", visibility);
-    return () => { clear(); document.removeEventListener("visibilitychange", visibility); };
+    const stopActivity = observeHollowActivity(visibility);
+    return () => { clear(); stopActivity(); };
   }, [plan.creatures, preview]);
 
   useEffect(() => {
@@ -273,6 +293,7 @@ export function HollowEffects({ plan, preview, faceShot }: {
     const fracture = node;
     let active: Element | null = null;
     function hover(event: PointerEvent) {
+      if (hollowActivityPaused()) return;
       const card = event.target instanceof Element ? event.target.closest(".card, .hub-card, .btn-primary") : null;
       if (card === active) return;
       active = card;
@@ -306,8 +327,9 @@ export function HollowEffects({ plan, preview, faceShot }: {
     }
     let attempts = 0;
     function arm() {
+      if (hollowActivityPaused()) return;
       timer = window.setTimeout(() => {
-        if (!document.hidden) {
+        if (!hollowActivityPaused()) {
           mark();
           if (!preview) clear = window.setTimeout(unmark, 560);
         }
@@ -316,13 +338,13 @@ export function HollowEffects({ plan, preview, faceShot }: {
     }
     function visibility() {
       window.clearTimeout(timer); window.clearTimeout(clear); unmark();
-      if (!document.hidden) arm();
+      if (!hollowActivityPaused()) arm();
     }
     arm();
-    document.addEventListener("visibilitychange", visibility);
+    const stopActivity = observeHollowActivity(visibility);
     return () => {
       window.clearTimeout(timer); window.clearTimeout(clear); unmark();
-      document.removeEventListener("visibilitychange", visibility);
+      stopActivity();
     };
   }, [plan.glitch, preview]);
 
@@ -331,7 +353,7 @@ export function HollowEffects({ plan, preview, faceShot }: {
     let index = 0, hideTimer = 0, rare = 0;
     function hide() { document.querySelector(".hollow-face")?.classList.remove("is-showing"); }
     function show() {
-      if (document.hidden) return;
+      if (hollowActivityPaused()) return;
       const face = document.querySelector(".hollow-face");
       if (!(face instanceof HTMLElement) || face.classList.contains("is-showing")) return;
       const slot = quietApparitionSlot();
@@ -347,10 +369,12 @@ export function HollowEffects({ plan, preview, faceShot }: {
       index = next === "trigger" ? 0 : next;
       if (next === "trigger") show();
     }
-    function arm() { rare = window.setTimeout(() => { show(); arm(); }, 180000 + Math.random() * 180000); }
+    function arm() {
+      if (!hollowActivityPaused()) rare = window.setTimeout(() => { show(); arm(); }, 180000 + Math.random() * 180000);
+    }
     function visibility() {
       window.clearTimeout(rare); window.clearTimeout(hideTimer); hide();
-      if (!document.hidden) arm();
+      if (!hollowActivityPaused()) arm();
     }
     if (faceShot) {
       let attempts = 0;
@@ -362,11 +386,11 @@ export function HollowEffects({ plan, preview, faceShot }: {
     }
     arm();
     window.addEventListener("keydown", key);
-    document.addEventListener("visibilitychange", visibility);
+    const stopActivity = observeHollowActivity(visibility);
     return () => {
       window.clearTimeout(rare); window.clearTimeout(hideTimer); hide();
       window.removeEventListener("keydown", key);
-      document.removeEventListener("visibilitychange", visibility);
+      stopActivity();
     };
   }, [faceShot, plan.jumpScares]);
 

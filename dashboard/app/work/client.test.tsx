@@ -30,11 +30,24 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 
-describe("Work views", () => {
+describe("Tasks views", () => {
+  it("is called Tasks while its URL and its Tasks / Jira / History tabs stay as they were", () => {
+    render(<WorkPage />);
+    expect(screen.getByRole("heading", { level: 1, name: "Tasks" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Work" })).not.toBeInTheDocument();
+    const tablist = screen.getByRole("tablist", { name: "Task views" });
+    expect(Array.from(tablist.querySelectorAll("[role=tab]"), (tab) => tab.id)).toEqual([
+      "work-tab-tasks",
+      "work-tab-jira",
+      "work-tab-history",
+    ]);
+  });
+
   it("stores tab selection in the URL while preserving other query parameters", () => {
     window.history.replaceState(null, "", "/work?tag=auth&view=compact");
     const view = render(<WorkPage />);
-    expect(screen.getByLabelText("Search tasks")).toHaveValue("");
+    // Tag pills in task notes deep-link here; the tag pre-fills the task search.
+    expect(screen.getByLabelText("Search tasks")).toHaveValue("#auth");
     fireEvent.click(screen.getByRole("tab", { name: "History" }));
     const params = new URLSearchParams(window.location.search);
     expect(params.get("tab")).toBe("history");

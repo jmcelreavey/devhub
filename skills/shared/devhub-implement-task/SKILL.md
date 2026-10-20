@@ -252,7 +252,8 @@ Makefile / CI config for what they are). **All must pass before you offer any
 post-implementation step.** If they fail, fix or report - do not offer a PR
 on a red baseline. Run the single test file as you go, and the full suite
 once at this gate. Check the final diff for unrelated changes and record the
-exact verification commands/results in the task note summary.
+verification outcome in the structured task status. Keep exact commands and
+detailed results in the task note’s verification section.
 
 When the user asked for test-first, or you are locking a bug in with a
 regression test: red, then green. One failing test at the public seam the
@@ -399,3 +400,21 @@ ambiguous requirements):
 - Offer the user: keep the task open with the note, or abandon with a reason.
 - Do not mark anything done, do not open a PR, do not transition Jira further
   (if not-started → In Progress already ran, leave the ticket there).
+
+## Task milestone updates
+
+For a linked DevHub task, call `task_note_update op: "set_status_update"` with
+`statusUpdate: {summary, whatChanged, currentState, nextStep}` at plan ready,
+implementation done, review done, failure, PR opened and after follow-ups.
+Use short plain-language sentences, without raw logs. This refreshes Summary
+and Status while preserving the plan and personal notes. Reviewers update this
+context too, without changing code or the workflow column.
+
+For UI work, capture the rendered result with available browser tooling and
+attach it with `add_media {localFile: <absolute path>, caption, phase: "after"}`.
+Use `"before"` for a baseline. The latest attachment appears in task details.
+If capture is unavailable, explain why in `currentState`.
+
+On Auto, the orchestrator handles “Pause after planning”. Finish the plan and
+summary, then stop; never approve your own plan or start implementation from a
+planning run. Revision requests re-plan and stop again.

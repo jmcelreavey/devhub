@@ -13,12 +13,17 @@ export interface NavItem {
   desktopOnly?: boolean;
   /** Keyboard shortcut hint displayed in the sidebar (mono, 9.5px, opacity .6) */
   shortcut?: string;
+  /** Extra ⌘P search words, never shown: the name a renamed page used to go by. */
+  keywords?: string;
+  /** Sidebar row that lights up on a page with no row of its own. */
+  parent?: string;
 }
 
 export const NAV_GROUPS: { id: NavGroup; label: string }[] = [
   { id: "workspace", label: "Workspace" },
   { id: "library", label: "Library" },
-  { id: "infra", label: "Infrastructure" },
+  // The id stays "infra": plugin manifests declare `group: "infra"`.
+  { id: "infra", label: "Tools" },
   { id: "system", label: "System" },
 ];
 
@@ -30,7 +35,7 @@ export function emptyNavGroups(): Record<NavGroup, NavItem[]> {
 /**
  * Bucket core + plugin destinations for the sidebar / mobile drawer.
  * Plugin items land first within each group so a plugin can own the top of its
- * section (e.g. Ops before Datadog under Infrastructure).
+ * section (e.g. Ops before Datadog under Tools).
  */
 export function groupSidebarNav(
   core: NavItem[],
@@ -60,10 +65,11 @@ export function groupSidebarNav(
 /**
  * Single source of truth for the side nav. Merged concepts:
  *
- * - Work        = Tasks + Tickets (tabs on /work)
+ * - Tasks       = Tasks + Jira + History (tabs on /work; the URL predates the name)
  * - Library     = Notes / Docs / Diagrams (tabs over /notes…)
- * - Infrastructure          = Ops (plugin) / Datadog — first-class items under a Infrastructure group
- * - System      = Status / Logs / Actions / Setup (tabs over /status…)
+ * - Tools       = Ops (plugin) / Datadog / Databases — the `infra` group
+ * - Settings    = Status / Logs / Actions / Setup (tabs over /status…); Agent skills
+ *                 and the QA lab hang off it as links (see `settingsLinks`)
  * - Search        = unified discovery (exact / ranked / semantic via Recall);
  *                   Recall's graph + ingest controls live at /recall, linked
  *                   from the search page and the ⌘P palette
@@ -77,32 +83,31 @@ export function groupSidebarNav(
  * configured.
  */
 export const NAV_ITEMS: NavItem[] = [
-  { href: "/", label: "Today", icon: "today", group: "workspace" },
-  { href: "/briefing", label: "Briefing", icon: "briefing", group: "workspace" },
-  { href: "/calendar", label: "Calendar", icon: "calendar", group: "workspace", gate: "calendar" },
-  { href: "/work", label: "Work", icon: "tasks", group: "workspace" },
+  { href: "/", label: "Home", icon: "today", group: "workspace", keywords: "Today" },
+  { href: "/storyboard", label: "Storyboard", icon: "storyboard", group: "workspace" },
+  // The icon key drives the open-task badge, so it stays "tasks" through the rename.
+  { href: "/work", label: "Tasks", icon: "tasks", group: "workspace", keywords: "Work" },
   { href: "/prs", label: "PRs", icon: "prs", group: "workspace", gate: "github" },
-  { href: "/review", label: "Review", icon: "review", group: "workspace", desktopOnly: true },
+  { href: "/calendar", label: "Calendar", icon: "calendar", group: "workspace", gate: "calendar" },
 
   { href: "/notes", label: "Notes", icon: "notes", group: "library" },
   { href: "/search", label: "Search", icon: "search", group: "library" },
-  { href: "/skills", label: "Skills", icon: "skills", group: "library" },
   { href: "/repos", label: "Repos", icon: "repos", group: "library", desktopOnly: true },
-  // Beside Repos, and desktop-only for the same reason: both reach local files
-  // and local CLIs. Ungated — SQLite connections need no setup at all, and Infrastructure
-  // connections simply don't appear without the plugin.
-  { href: "/db", label: "Databases", icon: "database", group: "library", desktopOnly: true },
 
   { href: "/datadog", label: "Datadog", icon: "datadog", group: "infra", gate: "datadog" },
+  // Desktop-only like Repos: both reach local files and local CLIs. Ungated —
+  // SQLite connections need no setup at all, and infrastructure connections
+  // simply don't appear without the plugin.
+  { href: "/db", label: "Databases", icon: "database", group: "infra", desktopOnly: true },
 
-  { href: "/status", label: "System", icon: "status", group: "system" },
   { href: "/agents", label: "Agents", icon: "agents", group: "system" },
+  { href: "/status", label: "Settings", icon: "setup", group: "system", keywords: "System" },
 ];
 
 /**
- * Destinations that lost their sidebar slot in the 11-item IA but keep
- * working at their URLs. Used for breadcrumbs and the ⌘P palette so every
- * page stays one search away.
+ * Destinations with no sidebar slot that keep working at their URLs. Used for
+ * tab titles, breadcrumbs and the ⌘P palette so every page stays one search
+ * away.
  *
  * /own redirects to /repos?view=owned — ownership radar lives on Repos, not
  * a competing sidebar destination.
@@ -111,6 +116,15 @@ export const NAV_ITEMS: NavItem[] = [
  * /tasks and /tickets redirect forever to /work — do not re-add them.
  */
 export const LEGACY_NAV_ITEMS: NavItem[] = [
+  // Demoted from the sidebar. Each keeps its URL, its old name as a ⌘P search
+  // word, and the sidebar row it now lives under (`parent`).
+  { href: "/briefing", label: "Briefing", icon: "briefing", group: "workspace", parent: "/" },
+  { href: "/review", label: "Weekly review", icon: "review", group: "workspace", keywords: "Review", parent: "/work" },
+  // Titled on its own so /review/rep isn't labelled "Weekly review" by prefix.
+  { href: "/review/rep", label: "Daily rep", icon: "review", group: "workspace", parent: "/work" },
+  { href: "/skills", label: "Agent skills", icon: "skills", group: "system", keywords: "Skills", parent: "/status" },
+  { href: "/qa", label: "QA lab", icon: "review", group: "system", keywords: "QA", parent: "/status" },
+
   { href: "/own", label: "Owned repos", icon: "own", group: "library", gate: "github" },
   { href: "/appraisal", label: "Appraisal", icon: "review", group: "library" },
   { href: "/one-on-one", label: "1:1", icon: "review", group: "library" },
@@ -137,6 +151,25 @@ export const ALL_NAV_DESTINATIONS: NavItem[] = [
   ...LEGACY_NAV_ITEMS,
   ...PLUGIN_NAV_ITEMS,
 ];
+
+/**
+ * The destination that owns a path. The longest href wins, so /review/rep is
+ * "Daily rep" rather than "Weekly review". Tab titles, workspace tabs and the
+ * palette all name pages through this, which keeps them in step with the sidebar.
+ */
+export function navDestinationFor(pathname: string): NavItem | undefined {
+  return ALL_NAV_DESTINATIONS.filter((item) => matchesNavRoute(pathname, item.href)).sort(
+    (a, b) => b.href.length - a.href.length,
+  )[0];
+}
+
+/**
+ * Pages that live under Settings without a top-bar tab. The System strip is
+ * already as wide as the bar allows, so these are links on the Settings page.
+ */
+export function settingsLinks(): { href: string; label: string }[] {
+  return LEGACY_NAV_ITEMS.filter((item) => item.parent === "/status").map(({ href, label }) => ({ href, label }));
+}
 
 /** Tabs rendered in the top bar when inside a merged destination. */
 export interface SectionTab {
@@ -172,7 +205,7 @@ export const SECTION_TABS: Record<string, SectionTab[]> = {
   ),
   system: mergeSectionTabs(
     [
-      { href: "/status", label: "System" },
+      { href: "/status", label: "Status" },
       { href: "/logs", label: "Logs", desktopOnly: true },
       { href: "/actions", label: "Actions", desktopOnly: true },
       { href: "/plugins", label: "Plugins" },
@@ -217,8 +250,10 @@ export function matchesNavRoute(pathname: string, href: string): boolean {
 /**
  * Which sidebar row is "you are here". The longest matching href wins; failing
  * that, a page reached through a section tab (/docs, /logs, …) lights up its
- * family's sidebar entry (Notes, System) — otherwise the sidebar shows no
- * position at all on half the Library and System pages.
+ * family's sidebar entry (Notes, Settings) — otherwise the sidebar shows no
+ * position at all on half the Library and Settings pages. Last, a demoted page
+ * (/review, /qa, …) lights up the row it declares as its `parent`, when the
+ * surface asking has that row (the mobile shelf has three).
  */
 export function activeNavHref(pathname: string, sidebarHrefs: string[]): string | undefined {
   const direct = sidebarHrefs
@@ -228,5 +263,8 @@ export function activeNavHref(pathname: string, sidebarHrefs: string[]): string 
   const family = Object.values(SECTION_TABS).find((tabs) =>
     tabs.some((t) => matchesNavRoute(pathname, t.href)),
   );
-  return family?.find((t) => sidebarHrefs.includes(t.href))?.href;
+  const familyHref = family?.find((t) => sidebarHrefs.includes(t.href))?.href;
+  if (familyHref) return familyHref;
+  const parent = navDestinationFor(pathname)?.parent;
+  return parent && sidebarHrefs.includes(parent) ? parent : undefined;
 }

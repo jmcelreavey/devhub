@@ -359,6 +359,20 @@ describe("taskImplementationCommand", () => {
     expect(result.command).toContain("claude --dangerously-skip-permissions --model 'sonnet' 'Implement task 1'");
   });
 
+  it("adds an effort flag only when one was chosen", async () => {
+    useConfig({
+      cursorModel: "grok-4.7-xhigh",
+      models: { "cursor-cli": ["grok-4.7-low", "grok-4.7-high", "grok-4.7-xhigh"] },
+    });
+    const claude = await taskImplementationCommand("claude", "Implement task 1", { model: "claude-opus-4", effort: "high" });
+    expect(claude.command).toContain("--effort 'high'");
+    const cursor = await taskImplementationCommand("cursor", "Implement task 1", { effort: "low" });
+    expect(cursor.command).toContain("--model 'grok-4.7-low'");
+    const plain = await taskImplementationCommand("cursor", "Implement task 1");
+    expect(plain.command).toContain("--model 'grok-4.7-xhigh'");
+    expect(plain.command).not.toContain("effort=");
+  });
+
   it("adds --resume when continuing a prior Claude session", async () => {
     useConfig();
 

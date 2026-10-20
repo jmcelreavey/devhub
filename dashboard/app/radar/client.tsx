@@ -392,7 +392,7 @@ function DigestSection({ includeGithub, githubFilter }: { includeGithub: boolean
   }
 
   return (
-    <section>
+    <section id="this-week" className="scroll-mt-4">
       <div className="flex items-center gap-2">
         <SectionTitle icon={<CalendarDays size={15} />} title="This week">
           Your engineering environment, summarised - runs weekly, or on demand

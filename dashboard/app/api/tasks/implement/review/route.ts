@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { AgentDispatchError, dispatchAgentRun } from "@/lib/agent-runs/dispatch";
+import { taskTierChoice } from "@/lib/storyboard/task-tiers";
 import { toAgentRunSummary } from "@/lib/agent-runs/store";
 import { parseBody, requireDashboardAuth, withErrorHandler } from "@/lib/api-utils";
 import { readImplementReviewPrefs } from "@/lib/tasks/implement-review-prefs";
@@ -49,7 +50,10 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   if (body.depth >= 2) {
     return NextResponse.json({ error: "A review run can't start another review." }, { status: 409 });
   }
-  const reviewer = readImplementReviewPrefs();
+  // The review step's model tier picks the reviewer when it names a provider; review settings are the fallback.
+  const tier = taskTierChoice(body.taskId, "review");
+  const prefs = readImplementReviewPrefs();
+  const reviewer = tier.provider ? { provider: tier.provider, model: tier.model, effort: tier.effort } : prefs;
   if (!reviewer.provider) {
     return NextResponse.json(
       { error: "No review assistant is assigned. Choose one in review settings before continuing.", code: "no_reviewer" },
@@ -80,6 +84,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
     const run = await dispatchAgentRun({
       provider: reviewer.provider,
       model: reviewer.model || undefined,
+      ...(reviewer.effort ? { effort: reviewer.effort } : {}),
       prompt,
       cwd: body.cwd,
       title: `Review · ${task.text}`.slice(0, 80),
@@ -90,7 +95,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
       activity: { source: "interactive", action: "review", taskId: task.id, taskDate: body.date, notePath: body.notePath },
     });
     return NextResponse.json(
-      { run: toAgentRunSummary(run), reviewer: { provider: reviewer.provider, model: reviewer.model || null }, notePath: body.notePath },
+      { run: toAgentRunSummary(run), reviewer: { provider: reviewer.provider, model: reviewer.model || null, ...(reviewer.effort ? { effort: reviewer.effort } : {}) }, notePath: body.notePath },
       { status: 201 },
     );
   } catch (err) {

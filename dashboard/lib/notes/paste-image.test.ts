@@ -1,53 +1,70 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
-  buildNotePasteAssetRelPath,
+  NOTES_PASTE_IMAGE_MAX_BYTES,
   extForNotePasteImage,
   isNotePasteImageFile,
-  sanitizePasteBasename,
+  uploadNotePasteImage,
+  validateNotePasteImage,
 } from "./paste-image";
 
-describe("buildNotePasteAssetRelPath", () => {
-  it("places assets under the per-note wrapper folder", () => {
-    expect(
-      buildNotePasteAssetRelPath("garden/fence-repair-repaint", {
-        ext: "png",
-        now: 1_725_000_000_123,
-      }),
-    ).toBe("garden/fence-repair-repaint/assets/paste-1725000000123.png");
-  });
+const png = (bytes = 1, name = "a.png") =>
+  new File([new Uint8Array(bytes)], name, { type: "image/png" });
 
-  it("strips .json and drops traversal segments", () => {
-    expect(
-      buildNotePasteAssetRelPath("task-notes/../evil/note.json", {
-        ext: "jpg",
-        name: "Shot One.png",
-        now: 1000,
-      }),
-    ).toBe("task-notes/evil/note/assets/shot-one-1000.jpg");
-  });
-
-  it("requires a note path", () => {
-    expect(() => buildNotePasteAssetRelPath("", { ext: "png" })).toThrow(/required/i);
-    expect(() => buildNotePasteAssetRelPath("..", { ext: "png" })).toThrow(/required/i);
-  });
-});
-
-describe("sanitizePasteBasename / ext helpers", () => {
-  it("drops generic clipboard names", () => {
-    expect(sanitizePasteBasename("image.png")).toBeNull();
-    expect(sanitizePasteBasename("paste.webp")).toBeNull();
-    expect(sanitizePasteBasename("My Screenshot 1.png")).toBe("my-screenshot-1");
-  });
-
+describe("ext / type helpers", () => {
   it("maps mime and filename to extensions", () => {
     expect(extForNotePasteImage("image/jpeg")).toBe("jpg");
     expect(extForNotePasteImage("", "shot.WEBP")).toBe("webp");
   });
 
   it("accepts only raster image files", () => {
-    expect(isNotePasteImageFile(new File([new Uint8Array([1])], "a.png", { type: "image/png" }))).toBe(
-      true,
-    );
+    expect(isNotePasteImageFile(png())).toBe(true);
     expect(isNotePasteImageFile(new File(["hi"], "a.txt", { type: "text/plain" }))).toBe(false);
+    expect(isNotePasteImageFile(new File(["<svg/>"], "a.svg", { type: "image/svg+xml" }))).toBe(false);
+  });
+});
+
+describe("validateNotePasteImage", () => {
+  it("passes a normal image and rejects non-raster, empty and oversized files", () => {
+    expect(validateNotePasteImage(png())).toBeNull();
+    expect(validateNotePasteImage(new File(["x"], "a.pdf", { type: "application/pdf" }))).toMatch(
+      /supported image/,
+    );
+    expect(validateNotePasteImage(png(0))).toMatch(/empty/);
+    expect(validateNotePasteImage(png(NOTES_PASTE_IMAGE_MAX_BYTES + 1))).toMatch(/8 MB max/);
+  });
+});
+
+describe("uploadNotePasteImage", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("posts multipart to /api/notes-media and returns the url", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ url: "/api/notes-media/h.png" }), { status: 201 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(uploadNotePasteImage(png())).resolves.toEqual({ ok: true, url: "/api/notes-media/h.png" });
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(url).toBe("/api/notes-media");
+    expect(init.method).toBe("POST");
+    expect((init.body as FormData).get("file")).toBeInstanceOf(File);
+  });
+
+  it("surfaces the server error and skips the request for invalid files", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(new Response(JSON.stringify({ error: "Image is empty." }), { status: 400 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(uploadNotePasteImage(png())).resolves.toEqual({ ok: false, error: "Image is empty." });
+    fetchMock.mockClear();
+    const big = await uploadNotePasteImage(png(NOTES_PASTE_IMAGE_MAX_BYTES + 1));
+    expect(big.ok).toBe(false);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("reports network failure", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("offline")));
+    await expect(uploadNotePasteImage(png())).resolves.toEqual({ ok: false, error: "offline" });
   });
 });

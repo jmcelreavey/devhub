@@ -265,13 +265,14 @@ export function AddToJiraModal({ open, task, date, generateOnOpen = false, onClo
         const body = await res.json().catch(() => ({}));
         throw new Error(body.error || `Create failed (${res.status})`);
       }
-      const created = (await res.json()) as { key: string; url: string };
+      const created = (await res.json()) as { key: string; url: string; proposal?: { id: string } };
       toast.success(`Created ${created.key}`, {
         duration: 12000,
         action: {
           label: "Open in Jira",
           onClick: () => void openInBrowser(created.url),
         },
+        link: created.proposal ? { label: "Details", href: `/integrations#write-${created.proposal.id}` } : undefined,
       });
       onCreated(created.key, created.url);
       // Refresh the "My Tickets" widgets so the new ticket shows up.

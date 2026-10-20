@@ -11,6 +11,8 @@
 
 import { spawn } from "node:child_process";
 import { StringDecoder } from "node:string_decoder";
+import { applyEffort, cliEffortArgs } from "@/lib/ai/effort";
+import { listCursorAgentModels } from "@/lib/ai/cursor-models";
 import { cliLimiter } from "./cli-limit";
 import fs from "node:fs";
 import os from "node:os";
@@ -443,6 +445,8 @@ export async function generateTextViaCli(
     maxOutputTokens?: number;
     /** Per-call model; blank falls back to the provider's configured model. */
     model?: string;
+    /** Reasoning effort. Blank leaves the model id and argv unchanged. */
+    effort?: string;
     cwd?: string | null;
     abortSignal?: AbortSignal;
     /** Streams reply text as it is generated. Only the Cursor CLI supports it; the rest return the finished reply. */
@@ -458,9 +462,17 @@ export async function generateTextViaCli(
 
   if (provider === "cursor-cli") {
     const bin = resolveCursorAgentBin() ?? "cursor-agent";
+    const cursorModel = modelOverride || settings.cursorModel;
+    const availableModels = await listCursorAgentModels().catch(() => []);
+    const applied = applyEffort({
+      provider: "cursor",
+      model: cursorModel,
+      effort: opts?.effort,
+      availableModels,
+    });
     const text = await execCapture(
       bin,
-      cursorAgentPrintArgs(prompt, modelOverride || settings.cursorModel),
+      cursorAgentPrintArgs(prompt, applied.model || cursorModel),
       timeoutMs,
       cwd,
       opts?.abortSignal,
@@ -499,7 +511,12 @@ export async function generateTextViaCli(
   if (!bin) {
     throw new Error("ChatGPT / Codex CLI not found.");
   }
-  const codexArgs = modelOverride ? ["exec", "--model", modelOverride, prompt] : ["exec", prompt];
+  const codexArgs = [
+    "exec",
+    ...cliEffortArgs("codex", opts?.effort),
+    ...(modelOverride ? ["--model", modelOverride] : []),
+    prompt,
+  ];
   const text = await execCapture(bin, codexArgs, timeoutMs, cwd, opts?.abortSignal, idleTimeoutMs);
   return { text, provider };
 }

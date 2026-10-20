@@ -67,3 +67,21 @@ short: the implementer reads this cold.
 
 Finish with a three-line summary: the cause or spec, the change, and whether
 the task is now ready.
+
+## Task milestone updates
+
+For a linked DevHub task, call `task_note_update op: "set_status_update"` with
+`statusUpdate: {summary, whatChanged, currentState, nextStep}` at plan ready,
+implementation done, review done, failure, PR opened and after follow-ups.
+Use short plain-language sentences, without raw logs. This refreshes Summary
+and Status while preserving the plan and personal notes. Reviewers update this
+context too, without changing code or the workflow column.
+
+For UI work, capture the rendered result with available browser tooling and
+attach it with `add_media {localFile: <absolute path>, caption, phase: "after"}`.
+Use `"before"` for a baseline. The latest attachment appears in task details.
+If capture is unavailable, explain why in `currentState`.
+
+On Auto, the orchestrator handles “Pause after planning”. Finish the plan and
+summary, then stop; never approve your own plan or start implementation from a
+planning run. Revision requests re-plan and stop again.

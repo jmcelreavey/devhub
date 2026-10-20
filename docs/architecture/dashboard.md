@@ -20,13 +20,13 @@ The dashboard is the main DevHub interface. It is a local Next.js app with pages
 | Area         | Purpose                                                                                                     |
 | ------------ | ----------------------------------------------------------------------------------------------------------- |
 | Today        | Daily workspace with tasks, notes, calendar, tickets, PRs, standup tools, and a morning briefing widget     |
-| Briefing     | Full-page personal start-of-day digest (weather, news, events, research, and more)                          |
+| Briefing     | Full-page personal start-of-day digest (weather, news, events, research, and more). Linked from Today and ⌘P |
 | Notes        | BlockNote editing, file tree, folder-scoped master checklists, optional OpenAI-compatible in-editor AI      |
 | Docs         | Read-first docs site with article view, TOC, backlinks, search, Mermaid, and BlockNote edit mode            |
 | Tasks        | Daily task management, drag reorder for open items, weekly review, and history                              |
-| Skills       | Shared skill viewing, creation, sync, and collection                                                        |
+| Agent skills | Shared skill viewing, creation, sync, and collection (`/skills`, linked from Settings)                      |
 | Actions      | Safe script runner for maintenance tasks                                                                    |
-| Status       | Health checks for repo, services, MCP, sync health, merge conflicts, and network access                     |
+| Settings     | Health checks for repo, services, MCP, sync health, merge conflicts, and network access (`/status`)         |
 | Agents       | Paseo workspace: chats, usage, connection (`/agents`)                                                       |
 | Setup        | Environment and integration configuration                                                                   |
 | Repos        | Sibling git checkout discovery, per-repo **work hub**, GitHub clone/search, Cursor/GitKraken/CLI launch, compose-up, Repo Learning, and owned-repo radar (`?view=owned`) |
@@ -48,9 +48,9 @@ When allowlisted script runs failed since your last visit, Today shows a dismiss
 
 Finished agent/PR worktrees get a **non-dismissible** one-line count (`WorktreeCleanupNudge` → `GET /api/repos/worktree-cleanup`) linking to `/prs?tab=cleanup`. It disappears when those folders are gone. See [GitHub — Finished worktrees](../integrations/github.md#finished-worktrees).
 
-### Work, history and weekly review
+### Tasks, history and weekly review
 
-[Work: filtering tasks, history and the weekly review](../assets/demos/work.mp4)
+[Tasks: filtering tasks, history and the weekly review](../assets/demos/work.mp4)
 
 ### Repos
 
@@ -60,39 +60,39 @@ Finished agent/PR worktrees get a **non-dismissible** one-line count (`WorktreeC
 
 [Diagrams and the in-app docs](../assets/demos/diagrams-and-docs.mp4)
 
-### System and setup
+### Settings and setup
 
-[System: status tabs and setup](../assets/demos/system.mp4)
+[Settings: status tabs and setup](../assets/demos/system.mp4)
 
 Notes, search and the command palette have their own clips in [Notes system](notes-system.md#walkthroughs) and [Command palette](../guides/command-palette.md#walkthrough).
 
 ## Navigation
 
-The sidebar is driven by `dashboard/lib/nav.ts` — **14** core sidebar destinations in `NAV_ITEMS` (plugin items such as Ops merge in separately), grouped into **Workspace**, **Library**, **Infrastructure**, and **System**. Integration-gated items stay hidden until `GET /api/setup/status` reports the matching flag. Plugin destinations (e.g. Ops) merge in via `groupSidebarNav`.
+The sidebar is driven by `dashboard/lib/nav.ts` — **12** core sidebar destinations in `NAV_ITEMS` (plugin items such as Ops merge in separately, making 13), grouped into **Workspace**, **Library**, **Tools** (the `infra` group id), and **System**. Integration-gated items stay hidden until `GET /api/setup/status` reports the matching flag. Plugin destinations (e.g. Ops) merge in via `groupSidebarNav`.
+
+Two names changed in the October 2026 clean-up and their URLs did not: **Work** is now **Tasks** (`/work`) and **System** is now **Settings** (`/status`). Briefing, QA, Review and Skills left the sidebar but keep their URLs: they are linked from Today, Tasks → History and Settings, and ⌘P still finds them by their old names (`keywords` in `nav.ts`).
 
 Coding chats live on **Agents** (`/agents`). `/chamber` and `/opencode` redirect there; `/agent-activity` redirects to `/agents`. There are no sidebar rows that open a Claude / Cursor / ChatGPT / Antigravity terminal tab.
 
 | Sidebar    | Route       | Notes                                                                                         |
 | ---------- | ----------- | --------------------------------------------------------------------------------------------- |
-| Today      | `/`         | Daily hub                                                                                     |
-| Briefing   | `/briefing` | Full morning digest                                                                           |
-| Calendar   | `/calendar` | Gated on `calendar`                                                                           |
-| Work       | `/work`     | Tasks + Jira + History tabs (see below)                                                       |
+| Today      | `/`         | Daily hub. Quiet **Briefing** link beside Yesterday in the header                             |
+| Storyboard | `/storyboard` | Tasks followed through their notes and agent runs                                           |
+| Tasks      | `/work`     | Tasks + Jira + History tabs (see below). The URL predates the name; ⌘P still finds it as "Work" |
 | PRs        | `/prs`      | Gated on `github`. Tabs: Mine / Review requested / Recently reviewed / Skipped / Worktrees (`?tab=cleanup`) |
-| Review     | `/review`   | Weekly retrospective; desktop nav only                                                        |
+| Calendar   | `/calendar` | Gated on `calendar`                                                                           |
 | Notes      | `/notes`    | Library landing. Top-bar tabs: Notes, Docs, Diagrams, Live links (gated), Radar |
 | Search     | `/search`   | Unified discovery (notes/docs + Recall). Library sidebar slot                                 |
-| Skills     | `/skills`   | Shared skill catalog, persona, MCP catalog                                                    |
 | Repos      | `/repos`    | Desktop nav only; sibling clones sorted by recent git activity. Click a card for `/repos/<name>` (work hub). Owned radar at `?view=owned` |
-| Databases  | `/db`       | Desktop nav only, **ungated**. SQLite works with no setup; plugins can add connection providers. See [Database client](database-client.md) |
-| Ops        | `/ops`      | Infrastructure group; from a plugin (`gate: infra`)                                                         |
-| Datadog    | `/datadog`  | Infrastructure group; gated on `datadog`                                                                  |
-| System     | `/status`   | Top-bar tabs: Status, Logs (desktop), Actions (desktop), Plugins, Integrations, Browser, Setup |
+| Ops        | `/ops`      | Tools group; from a plugin (`gate: infra`)                                                    |
+| Datadog    | `/datadog`  | Tools group; gated on `datadog`                                                               |
+| Databases  | `/db`       | Tools group. Desktop nav only, **ungated**. SQLite works with no setup; plugins can add connection providers. See [Database client](database-client.md) |
 | Agents     | `/agents`   | System group. Tabs: Chats / Usage / Connection (old `?view=activity` links open Chats). See [Agents (Paseo)](../guides/paseo-agents.md) |
+| Settings   | `/status`   | System group. Top-bar tabs: Status, Logs (desktop), Actions (desktop), Plugins, Integrations, Browser, Setup. Links under the title: Agent skills, QA lab |
 
 ### Merged destinations
 
-**Work** (`/work`) groups “things I owe” in one shell:
+**Tasks** (`/work`) groups “things I owe” in one shell:
 
 | Tab     | Content                          | API                                              |
 | ------- | -------------------------------- | ------------------------------------------------ |
@@ -103,12 +103,12 @@ Coding chats live on **Agents** (`/agents`). `/chamber` and `/opencode` redirect
 All three tabs share the same borderless `InlineSearch` row. **Tasks** filters on
 body text, Jira key, due date, abandon reason, and linked-entity labels/ids.
 **Jira** filters on key, summary, status, priority, type, project, and assignee.
-**History** uses the same control for day summaries. Whitespace-separated terms
-are AND-ed on every tab.
+**History** uses the same control for day summaries and links to the **Weekly
+review** (`/review`). Whitespace-separated terms are AND-ed on every tab.
 
-**Library** and **System** use `SectionTabs` in the top bar on sibling routes such as `/docs` and `/setup`. Library tabs are **Notes**, **Docs**, **Diagrams**, **Live links** (gated on GitHub), and **Radar**. Search and Databases have sidebar destinations. Appraisal, Research, My Voice and Conventions remain reachable through **⌘P**.
+**Library** and **Settings** use `SectionTabs` in the top bar on sibling routes such as `/docs` and `/setup`. Library tabs are **Notes**, **Docs**, **Diagrams**, **Live links** (gated on GitHub), and **Radar**. Search and Databases have sidebar destinations. Appraisal, Research, My Voice and Conventions remain reachable through **⌘P**.
 
-System tabs are **Status**, **Logs** (desktop), **Actions** (desktop), **Plugins**, **Integrations**, **Browser**, and **Setup**. **Infrastructure** is a sidebar group: Ops comes from the Infrastructure plugin and Datadog from core. `/editor` opens from **Repos → Changes**; `/workflow` from a task's **Workflow and evidence**; `/changelog` from **⌘P → Full changelog**.
+Settings tabs are **Status**, **Logs** (desktop), **Actions** (desktop), **Plugins**, **Integrations**, **Browser** and **Setup**. Agent skills and the QA lab are links under the Settings title rather than tabs, because the top-bar strip is already as wide as the bar allows. **Tools** is a sidebar group (id `infra`): Ops comes from the infrastructure plugin, Datadog and Databases from core.
 
 **Diagrams** (`/diagrams`, Library tab) opens a browse-by-folder landing page — recent diagrams plus folder cards (`lib/diagrams/diagram-browse.ts`). Click a card or recent item to open the tldraw editor at `/diagrams/[...path]`.
 
@@ -130,9 +130,9 @@ After an update, a once-per-version **What's new** panel reads `GET /api/release
 
 ### Legacy routes
 
-Older URLs still work and remain reachable via **⌘P** (`LEGACY_NAV_ITEMS` in `nav.ts`): `/own`, `/appraisal`, `/one-on-one`, `/recall`, `/radar`, `/research`, `/learnings`, `/voice`, `/conventions`, `/diagrams`, `/docs`, `/shared`, `/actions`, `/logs`, `/plugins`, `/integrations`, `/browser`, `/setup`. Library tabs cover `/radar`, `/diagrams`, `/docs`, and `/shared`; System tabs cover `/plugins`, `/integrations`, `/browser`, and `/setup`. The other destinations stay in the palette. `/own` redirects to `/repos?view=owned`. `/tasks` and `/tickets` redirect to `/work` and are not in `ALL_NAV_DESTINATIONS`. `/ops` (plugin) and `/datadog` live under the **Infrastructure** sidebar group. `/chamber` and `/opencode` redirect to `/agents`; `/agent-activity` redirects to `/agents`.
+Older URLs still work and remain reachable via **⌘P** (`LEGACY_NAV_ITEMS` in `nav.ts`): `/briefing`, `/review` (**Weekly review**), `/review/rep` (**Daily rep**), `/qa` (**QA lab**), `/skills` (**Agent skills**), `/own`, `/appraisal`, `/one-on-one`, `/recall`, `/radar`, `/research`, `/learnings`, `/voice`, `/conventions`, `/diagrams`, `/docs`, `/shared`, `/actions`, `/logs`, `/setup`. A page that lost its row names the row it lives under (`parent` in `nav.ts`), so the sidebar still shows where you are: `/briefing` lights Today, `/review` lights Tasks, `/qa` and `/skills` light Settings. The tab title, workspace tab and ⌘P entry for every page come from the same registry. Library tabs cover `/radar`, `/diagrams`, `/docs`, and `/shared`; the other Library tools stay in the palette. `/own` redirects to `/repos?view=owned`. `/tasks` and `/tickets` redirect to `/work` and are not in `ALL_NAV_DESTINATIONS`. `/ops` (plugin), `/datadog` and `/db` live under the **Tools** sidebar group. `/chamber` and `/opencode` redirect to `/agents`; `/agent-activity` redirects to `/agents`.
 
-On mobile, the bottom shelf uses **Work** (`/work`) instead of separate Tasks/Tickets entries.
+On mobile, the bottom shelf is Today, Notes and **Tasks** (`/work`), and it highlights the same row the sidebar would.
 
 ### Repo-aware links
 
@@ -240,17 +240,17 @@ Completing, abandoning, or deleting a task settles any running timer into `timeS
 
 ## Weekly Review
 
-The **Review** page (`/review`, desktop nav) is a retrospective view over the last seven calendar days ending on a chosen date. It is not the plan-loop `devhub-retro` skill (that one proposes skill edits from finished work — see [Plan loop — Retro](../guides/plan-loop.md#8-retro)).
+The **Weekly review** page (`/review`, linked from Tasks → History and ⌘P) is a retrospective view over the last seven calendar days ending on a chosen date. It is not the plan-loop `devhub-retro` skill (that one proposes skill edits from finished work — see [Plan loop — Retro](../guides/plan-loop.md#8-retro)).
 
 | Surface     | Route                                  | Behavior                                                                              |
 | ----------- | -------------------------------------- | ------------------------------------------------------------------------------------- |
-| Review page | `/review`                              | Per-day created/completed/abandoned/moved bars, window totals, and a **slipped** list |
+| Weekly review page | `/review`                       | Per-day created/completed/abandoned/moved bars, window totals, and a **slipped** list |
 | API         | `GET /api/tasks/weekly?end=YYYY-MM-DD` | Same data as JSON; `end` defaults to today                                            |
 | MCP         | `tasks_weekly`                         | Dashboard-backed proxy of the weekly route                                            |
 
 **Slipped tasks** are still open with a `startDate` before that day. The same normalised text on three or more days in the window is listed (`SLIP_THRESHOLD = 3`). Two different tasks with the same text are grouped.
 
-Pair with [Standup](../guides/standup.md) for daily forward-looking summaries; Review is the backward-looking complement.
+Pair with [Standup](../guides/standup.md) for daily forward-looking summaries; Weekly review is the backward-looking complement.
 
 ### Daily review reps
 
@@ -317,7 +317,7 @@ See [Capability Radar plan](../archive/capability-radar-plan.md) for scan archit
 
 ## Databases
 
-**Library → Databases** (`/db`, desktop nav, ungated) is the in-app client for PostgreSQL, MongoDB, and SQLite. Connections come from a local provider (hand-added + discovered `.db` files) and from a plugin `dashboard.connections` module (Infrastructure RDS/Atlas). The MCP `db_*` tools share the same pool and write gate. Full architecture: [Database client](database-client.md).
+**Tools → Databases** (`/db`, desktop nav, ungated) is the in-app client for PostgreSQL, MongoDB, and SQLite. Connections come from a local provider (hand-added + discovered `.db` files) and from a plugin `dashboard.connections` module (Infrastructure RDS/Atlas). The MCP `db_*` tools share the same pool and write gate. Full architecture: [Database client](database-client.md).
 
 ## Recall
 
@@ -426,7 +426,7 @@ Failed sync runs surface from `GET /api/scripts/history` with log detail from `G
 
 ### Desktop logs (`/logs`)
 
-On desktop, **System → Logs** (`/logs`, also in ⌘P) tails the rotating log files under the OS app-data directory (`~/Library/Application Support/DevHub/logs/` on macOS, `~/.local/share/devhub/logs/` on Linux, and that same Linux path inside Ubuntu on Windows). The page polls `GET /api/status/logs` every two seconds while **Live** is on, with filters for `shell`, `sidecar`, and `renderer` sources. **Open folder** calls the Tauri `open_logs` bridge when available. For startup failures before the dashboard loads, see [Desktop recovery](../guides/desktop-recovery.md).
+On desktop, **Settings → Logs** (`/logs`, also in ⌘P) tails the rotating log files under the OS app-data directory (`~/Library/Application Support/DevHub/logs/` on macOS). The page polls `GET /api/status/logs` every two seconds while **Live** is on, with filters for `shell`, `sidecar`, and `renderer` sources. **Open folder** calls the Tauri `open_logs` bridge when available. For startup failures before the dashboard loads, see [Desktop recovery](../guides/desktop-recovery.md).
 
 The page reloads on manual refresh and polls Git/services/MCP/LAN every 30 seconds in the background.
 

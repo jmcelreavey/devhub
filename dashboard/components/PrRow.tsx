@@ -7,6 +7,7 @@ import type { GithubPrRow } from "@/lib/github/prs";
 import type { PrChecksState } from "@/lib/github/branch-pr";
 import { PersonChip } from "@/components/PersonChip";
 import { PrReviewNoteLink } from "@/components/PrReviewNoteLink";
+import { usePrStatusMenu, type PrStatusPillBind } from "@/components/github/PrStatusMenu";
 import {
   buildPrRowMenuGroups,
   openPrRowNote,
@@ -30,7 +31,7 @@ const CHECK_ICON: Record<Exclude<PrChecksState, "none">, typeof CheckCircle2> = 
 };
 
 /** Rolled-up CI state — same visual language as RepoOpenPrLink. */
-function PrChecksGlance({ row }: { row: GithubPrRow }) {
+function PrChecksGlance({ row, bind }: { row: GithubPrRow; bind: PrStatusPillBind }) {
   const state = row.checks ?? "none";
   if (state === "none") return null;
   const Icon = CHECK_ICON[state];
@@ -45,24 +46,26 @@ function PrChecksGlance({ row }: { row: GithubPrRow }) {
       title={title}
       aria-label={`checks ${state}`}
       role="img"
+      tabIndex={0}
+      {...bind}
     >
       <Icon size={14} aria-hidden />
     </span>
   );
 }
 
-function PrStatusIcon({ row }: { row: GithubPrRow }) {
+function PrStatusIcon({ row, bind }: { row: GithubPrRow; bind: PrStatusPillBind }) {
   const status = prRowStatus(row);
   if (status === "merged") {
     return (
-      <span className="inline-flex shrink-0" title="Merged" aria-label="Merged" role="img">
+      <span className="inline-flex shrink-0" title="Merged" aria-label="Merged" role="img" tabIndex={0} {...bind}>
         <GitMerge size={14} style={{ color: "var(--text-muted)" }} aria-hidden />
       </span>
     );
   }
   if (status === "approved") {
     return (
-      <span className="inline-flex shrink-0" title="Approved" aria-label="Approved" role="img">
+      <span className="inline-flex shrink-0" title="Approved" aria-label="Approved" role="img" tabIndex={0} {...bind}>
         <Check size={14} strokeWidth={2.5} style={{ color: "var(--success)" }} aria-hidden />
       </span>
     );
@@ -82,6 +85,13 @@ export function PrRow({
   const toast = useToast();
   const router = useRouter();
   const menu = useContextMenu<GithubPrRow>();
+  const statusMenu = usePrStatusMenu({
+    url: row.url,
+    repo: row.repo,
+    number: row.number,
+    checks: row.checks ?? null,
+    checkCounts: row.checkCounts ?? null,
+  });
   const compact = density === "compact";
   const avatarSize = compact ? 14 : 16;
   const target = menu.target ?? row;
@@ -144,8 +154,13 @@ export function PrRow({
           </div>
         </div>
         <div className="pr-row-actions" data-pr-actions>
-          <PrChecksGlance row={row} />
-          <PrStatusIcon row={row} />
+          {row.draft ? (
+            <span className="pr-status-pill" tabIndex={0} {...statusMenu.bind}>
+              Draft
+            </span>
+          ) : null}
+          <PrChecksGlance row={row} bind={statusMenu.bind} />
+          <PrStatusIcon row={row} bind={statusMenu.bind} />
           <PrReviewNoteLink row={row} />
           <RowMenuKebab
             label={`Actions for ${row.repo}#${row.number}`}
@@ -160,6 +175,7 @@ export function PrRow({
         onClose={menu.close}
         label={`${row.repo}#${row.number} actions`}
       />
+      {statusMenu.menuNode}
       {tagsModal}
     </div>
   );

@@ -8,6 +8,7 @@ import { SyncHealthPanel } from "@/components/runs/SyncHealthPanel";
 import { SkeletonRows } from "@/components/ui/SkeletonRows";
 import { useSearchParams } from "next/navigation";
 import { fetchStatusRows, type StatusSnapshot, type ServiceInfo, type ServicesStatus, type GitStatus, type McpRuntimeEntry } from "./status-data";
+import { SettingsLinks } from "./SettingsLinks";
 import styles from "./status.module.css";
 import { CheckoutRebuildCard } from "@/components/desktop/CheckoutRebuildCard";
 import { CopyButton } from "@/components/ui/CopyButton";
@@ -498,7 +499,11 @@ export default function StatusPage() {
         }}
       />
       <div className="page-header">
-        <div><h1 className="page-title">System</h1><p className={styles.subtitle}>Workspace health, sync, and maintenance.</p></div>
+        <div>
+          <h1 className="page-title">Settings</h1>
+          <p className={styles.subtitle}>Workspace health, sync, and maintenance.</p>
+          <SettingsLinks />
+        </div>
         <div className="flex flex-wrap items-center justify-end gap-2">
           {lanAddresses.length > 0 && (
             <div className="relative">

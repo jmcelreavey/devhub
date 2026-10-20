@@ -6,6 +6,7 @@ import { getAppDataDir, getCheckoutRoot, getReposDir, hasCheckout, isDesktopRunt
 import { setupCoreDefaults } from "@/lib/setup/core-defaults";
 import { resolveDatadogApplicationKey } from "@/lib/datadog/application-key";
 import { datadogAppOrigin } from "@/lib/datadog/links";
+import { resolveTypesafeApiKey } from "@/lib/qa/credentials";
 import { getResolvedGoogleCalendarEnv } from "@/lib/google-calendar";
 import { isGithubCliAuthenticated } from "@/lib/repos";
 import { ghAuthLoginCommand } from "@/lib/plugins/source";
@@ -107,6 +108,8 @@ export async function GET() {
     !!resolveEnvValue("DEVHUB_PASEO_PASSWORD", overrides) || !!resolveEnvValue("OPENCHAMBER_UI_PASSWORD", overrides);
 
   const peerServices = await getPeerServiceGateStatus();
+  let typesafeSource: "setup" | "env" | "repo-env" | null = null;
+  try { typesafeSource = resolveTypesafeApiKey()?.source ?? null; } catch { /* unreadable repo .env counts as not configured */ }
 
   return NextResponse.json({
     core,
@@ -114,6 +117,8 @@ export async function GET() {
     calendar,
     jira,
     datadog,
+    typesafe: typesafeSource !== null,
+    typesafeVars: { source: typesafeSource },
     infra: infrastructure.infra,
     opencode: peerServices.opencode,
     claude: peerServices.claude,

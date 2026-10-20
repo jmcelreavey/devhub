@@ -243,7 +243,7 @@ The DevHub MCP's `agent_*` tools hand work to the managed **Paseo** daemon (Agen
 | ----------------------------- | --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `DEVHUB_AGENT_PROVIDERS_FILE` | `~/.config/devhub/agent-providers.json` | Custom CLI provider file used by leftover `legacy-cli` / interactive wrap code. Live `agent_providers` lists **Paseo providers**, not this file. |
 | `DEVHUB_AGENT_RUNS_DIR`       | `<NOTES_DIR>/.config/agent-runs`        | Durable `spec.json`, `status.json` and `events.jsonl` for Paseo agents, leftover CLI runs, and AI generation. Finished history is retained. |
-| `DEVHUB_AGENT_MAX_RUNS`       | `6`                                     | Active coding runs allowed at once. Small AI generation calls do not consume these slots. |
+| `DEVHUB_AGENT_MAX_RUNS`       | `6`                                     | Active coding runs allowed at once. Small AI generation calls do not consume these slots, and runs whose Paseo session has ended are finished rather than counted. |
 | `DEVHUB_AGENT_MAX_COST_USD`   | `25`                                    | Refuse **new** dispatches once finished runs today have recorded this much USD. `0` disables. Mid-run cost is not enforced. |
 | `DEVHUB_AGENT_MAX_TURNS`      | `200`                                   | Default turn cap for leftover CLI runners. Paseo dispatch **rejects** `maxTurns` (`400`) — use the assistant's own controls. `0` disables. |
 | `DEVHUB_AGENT_MAX_SECONDS`    | `1800`                                  | Wall-clock kill for leftover CLI runners. Paseo agents are not killed by this cap. `0` disables. |

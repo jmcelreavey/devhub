@@ -20,8 +20,8 @@ export interface JiraTransitionModalProps {
   /** Transition name to pre-highlight (e.g. "Done" on complete, "Won't Do" on abandon). */
   suggest?: string;
   onCancel: () => void;
-  /** transitionId is null when the user chooses to skip the Jira state change. */
-  onConfirm: (transitionId: string | null) => void;
+  /** transitionId is null when the user chooses to skip the Jira state change. `to` is the destination status label. */
+  onConfirm: (transitionId: string | null, to?: string) => void;
 }
 
 export function JiraTransitionModal({
@@ -87,7 +87,7 @@ export function JiraTransitionModal({
                   type="button"
                   className="truncate rounded-lg px-2.5 py-1.5 text-left text-sm transition-colors"
                   title={t.name !== t.to ? `${t.to} (${t.name})` : t.to}
-                  onClick={() => onConfirm(t.id)}
+                  onClick={() => onConfirm(t.id, t.to)}
                   style={{
                     border: `1px solid ${highlight ? "var(--accent)" : "var(--border-muted)"}`,
                     background: highlight ? "var(--accent-dim)" : "transparent",

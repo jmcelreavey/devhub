@@ -165,14 +165,22 @@ function setupHintFor(id: AiProviderId): string {
  */
 export function resolveAiProvider(opts?: {
   prefer?: AiProviderId | null;
+  /**
+   * Default true. False means "this provider or nothing": no other provider is substituted when
+   * the preferred one is missing, and with no preferred provider nothing is resolved.
+   */
+  fallback?: boolean;
 }): ResolvedAiProvider {
   const configured =
     opts?.prefer !== undefined ? opts.prefer : readConfiguredAiProvider();
   const availability = detectAiProviderAvailability();
 
-  const order: AiProviderId[] = configured
-    ? [configured, ...FALLBACK_ORDER.filter((p) => p !== configured)]
-    : FALLBACK_ORDER;
+  const order: AiProviderId[] =
+    opts?.fallback === false
+      ? configured ? [configured] : []
+      : configured
+        ? [configured, ...FALLBACK_ORDER.filter((p) => p !== configured)]
+        : FALLBACK_ORDER;
 
   for (const id of order) {
     if (!availability[id]) continue;

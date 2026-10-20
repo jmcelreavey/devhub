@@ -76,16 +76,28 @@ import {
   upsertEntityLinksInMarkdown,
 } from "@/lib/entity-note";
 import { useRouteHistoryLabel } from "@/lib/hooks/use-session-history";
+import { isTaskNotePath, type TaskNoteOp } from "@shared/task-note/sections.ts";
+import { TaskNoteVisual } from "@/components/notes/task-note/TaskNoteVisual";
+import { useTaskNote } from "@/components/vault/use-task-note";
+import { prepareTaskNoteBlocks } from "@/lib/notes/prepare-task-note";
+import { applyTaskOpToBlocks, foldEditorChange } from "@/lib/notes/task-note-edit";
+import { submitTaskNoteOperation } from "@/components/notes/task-note/task-note-operation";
+import { repairNoteBlocks } from "@/lib/notes/repair-blocks";
 
 export function VaultEditorPage({
   vault: vaultId,
   path: pathParts,
   notesAiConfigured,
   readHref,
+  embedded = false,
+  hideTaskQuestions = false,
 }: {
   vault: VaultId;
   path: string[];
   notesAiConfigured?: boolean;
+  /** Shown inside another page: no Back/Index bar, and the page's tab keeps its own name. */
+  embedded?: boolean;
+  hideTaskQuestions?: boolean;
   /** When set, shows a "Done" link back to the rendered read view (docs only). */
   readHref?: string;
 }) {
@@ -112,6 +124,11 @@ export function VaultEditorPage({
   const [cursorDraft, setCursorDraft] = useState<{ notePath: string; repoName: string } | null>(null);
   const [applyingCursorDraft, setApplyingCursorDraft] = useState(false);
   const isNotes = vaultId === "notes";
+  /** The whole note as last edited or received. Free-form edits of a task note update this without re-rendering. */
+  const latestBlocksRef = useRef<DevHubPartialBlock[] | null>(null);
+  /** Visual task notes ask the server to keep an agent's newer sections instead of answering 409 on save. */
+  const mergeAgentSectionsRef = useRef(false);
+  const statusRef = useRef<"idle" | "saving" | "saved" | "error">("idle");
   const cursorDraftRepo = cursorDraft?.notePath === filePath ? cursorDraft.repoName : null;
   const { data: allMasters } = useLive<MasterList[]>(
     isNotes && !isNew ? "/api/collections" : null,
@@ -127,6 +144,26 @@ export function VaultEditorPage({
     sourceModifiedRef.current = ms;
     setModifiedMs(ms);
   }, []);
+  const {
+    isTaskNote,
+    sourceMode: taskSourceMode,
+    view: taskNoteView,
+    editorBlocks: editorInitialBlocks,
+    toggleSource: toggleTaskSource,
+  } = useTaskNote({
+    isNotes,
+    filePath,
+    apiPrefix,
+    paths,
+    isNew,
+    blocks,
+    setBlocks,
+    latestBlocksRef,
+    sourceModifiedRef,
+    setSourceModified,
+    statusRef,
+    setEditorEpoch,
+  });
   const isNewRef = useRef(isNew);
   const allMastersRef = useRef(allMasters);
   const pendingLegacyMigrationRef = useRef(false);
@@ -218,9 +255,13 @@ export function VaultEditorPage({
           const masters = allMastersRef.current;
           pendingLegacyMigrationRef.current =
             !masters && noteBlocksHaveLegacyCollection(raw);
-          setBlocks(
-            migrateNoteBlocks(raw, filePath, masters ?? []) as DevHubPartialBlock[],
-          );
+          const migrated = migrateNoteBlocks(raw, filePath, masters ?? []);
+          // Repairs and the old task-note header fold happen in memory; nothing is written until the next save.
+          const next = (
+            vaultId === "notes" && isTaskNotePath(filePath) ? prepareTaskNoteBlocks(migrated) : repairNoteBlocks(migrated)
+          ) as DevHubPartialBlock[];
+          latestBlocksRef.current = next;
+          setBlocks(next);
         }
       })
       .catch((e) => {
@@ -247,6 +288,10 @@ export function VaultEditorPage({
     });
   }, [allMasters, filePath, isNotes]);
 
+  useEffect(() => {
+    statusRef.current = status;
+  }, [status]);
+
   const handleChange = useCallback(
     (newBlocks: DevHubPartialBlock[]) => {
       setCursorDraft(null);
@@ -262,20 +307,25 @@ export function VaultEditorPage({
           try {
             const wasNew = isNewRef.current;
             const method = wasNew ? "POST" : "PUT";
+            const expectedModified = method === "PUT" ? sourceModifiedRef.current : null;
             const r = await fetch(`${apiPrefix}/${paths.apiPathFromSlug(filePath)}`, {
               method,
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
                 content: newBlocks,
-                ...(method === "PUT" && sourceModifiedRef.current !== null
-                  ? { expectedModified: sourceModifiedRef.current }
-                  : {}),
+                expectedModified: expectedModified ?? undefined,
+                mergeAgentSections: expectedModified !== null && mergeAgentSectionsRef.current ? true : undefined,
               }),
               signal: controller.signal,
             });
             if (!r.ok) throw new Error(await r.text());
-            const saved = (await r.json()) as { modified?: number };
+            const saved = (await r.json()) as { modified?: number; merged?: DevHubPartialBlock[] };
             if (typeof saved.modified === "number") setSourceModified(saved.modified);
+            if (saved.merged) {
+              // An agent changed the sections while we were editing; the server kept theirs.
+              latestBlocksRef.current = saved.merged;
+              setBlocks(saved.merged);
+            }
             if (!isCurrentNoteSaveGeneration(generation, saveGenerationRef.current)) return;
             if (wasNew) {
               setIsNew(false);
@@ -298,6 +348,45 @@ export function VaultEditorPage({
       }, 1500);
     },
     [apiPrefix, cancelPendingSave, filePath, paths, router, setSourceModified],
+  );
+
+  /** Visual task notes edit only the free-form blocks; fold them back into the whole note. */
+  const handleEditorChange = useCallback(
+    (editorBlocks: DevHubPartialBlock[]) => {
+      const whole = latestBlocksRef.current;
+      const visual = isTaskNote && !taskSourceMode;
+      const full = visual && whole ? foldEditorChange(whole, editorBlocks) : editorBlocks;
+      latestBlocksRef.current = full;
+      mergeAgentSectionsRef.current = visual;
+      handleChange(full);
+    },
+    [handleChange, isTaskNote, taskSourceMode],
+  );
+
+  /** A section action from the visual note (answer a question, set a bug's status). */
+  const applyTaskOp = useCallback(
+    async (op: TaskNoteOp) => {
+      const generation = saveGenerationRef.current;
+      if (op.op === "resolve_question") {
+        await submitTaskNoteOperation(filePath, op);
+        if (!isCurrentNoteSaveGeneration(generation, saveGenerationRef.current)) return true;
+      }
+      const whole = latestBlocksRef.current;
+      if (!whole) return false;
+      try {
+        const next = applyTaskOpToBlocks(whole, op);
+        if (!next) return true;
+        latestBlocksRef.current = next;
+        setBlocks(next);
+        mergeAgentSectionsRef.current = true;
+        if (op.op !== "resolve_question") handleChange(next);
+        return true;
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Could not update the note.");
+        return false;
+      }
+    },
+    [filePath, handleChange, toast],
   );
 
   const handleDocChange = useCallback(
@@ -435,6 +524,7 @@ export function VaultEditorPage({
       if (!r.ok) throw new Error(await r.text());
       const saved = (await r.json()) as { modified?: number };
       if (!isCurrentNoteSaveGeneration(generation, saveGenerationRef.current)) return;
+      latestBlocksRef.current = newBlocks;
       setBlocks(newBlocks);
       if (typeof saved.modified === "number") setSourceModified(saved.modified);
       setEditorEpoch((n) => n + 1);
@@ -482,7 +572,7 @@ export function VaultEditorPage({
   // Only pass content-derived titles; truncation of machine filenames is NotePageTitle's job.
   const headerDisplayTitle = fromContent ? displayTitle : undefined;
   const headerLabel = displayTitle;
-  useRouteHistoryLabel(headerDisplayTitle);
+  useRouteHistoryLabel(embedded ? null : headerDisplayTitle);
 
   const handleRenamed = useCallback(
     (newSlug: string) => {
@@ -501,13 +591,10 @@ export function VaultEditorPage({
       const result = await applyCursorNoteDraft(cursorDraftRepo, filePath, toast);
       if (!result) return;
       const content = Array.isArray(result.content) ? result.content : [];
-      setBlocks(
-        migrateNoteBlocks(
-          content as Parameters<typeof migrateNoteBlocks>[0],
-          filePath,
-          allMasters ?? [],
-        ) as DevHubPartialBlock[],
-      );
+      const migrated = migrateNoteBlocks(content as Parameters<typeof migrateNoteBlocks>[0], filePath, allMasters ?? []);
+      const next = (isTaskNote ? prepareTaskNoteBlocks(migrated) : repairNoteBlocks(migrated)) as DevHubPartialBlock[];
+      latestBlocksRef.current = next;
+      setBlocks(next);
       if ("modified" in result && typeof result.modified === "number") {
         setSourceModified(result.modified);
       }
@@ -521,7 +608,7 @@ export function VaultEditorPage({
     } finally {
       setApplyingCursorDraft(false);
     }
-  }, [allMasters, cursorDraftRepo, filePath, invalidatePendingSave, status, toast, setSourceModified]);
+  }, [allMasters, cursorDraftRepo, filePath, invalidatePendingSave, isTaskNote, status, toast, setSourceModified]);
 
   const handleDeleteCursorDraft = useCallback(async () => {
     if (!cursorDraftRepo || applyingCursorDraft) return;
@@ -603,9 +690,34 @@ export function VaultEditorPage({
     );
   }
 
+  const noteEditor = (
+    <BlockNoteEditor
+      className={isNotes ? "note-editor" : undefined}
+      key={`${filePath}:${editorEpoch}:${taskSourceMode ? "source" : "view"}`}
+      initialContent={editorInitialBlocks && editorInitialBlocks.length > 0 ? editorInitialBlocks : undefined}
+      onChange={isTaskNote ? handleEditorChange : handleChange}
+      tagLines={isTaskNote}
+      notePath={isNotes ? filePath : undefined}
+      vaultId={vaultId}
+      contentSlug={filePath}
+      notesAiConfigured={isNotes ? notesAiConfigured : false}
+      enableAi={isNotes ? undefined : false}
+      linkedChecklistContext={
+        folderMaster
+          ? {
+              masterListId: folderMaster.id,
+              masterName: folderMaster.name,
+              masterIcon: folderMaster.icon,
+            }
+          : undefined
+      }
+      style={{ minHeight: taskNoteView && !taskSourceMode ? "160px" : "60vh" }}
+    />
+  );
+
   return (
     <div className="page-wrapper">
-      <VaultEditorNav vaultId={vaultId} />
+      {embedded ? null : <VaultEditorNav vaultId={vaultId} />}
       <div
         className="page-header"
         style={{ marginBottom: "12px", alignItems: "flex-start" }}
@@ -739,9 +851,11 @@ export function VaultEditorPage({
                 icon={<MoreHorizontal size={14} aria-hidden />}
                 buttonClassName="btn btn-ghost text-xs flex items-center gap-1 shrink-0"
                 disabled={status === "saving" || deleting}
+                sections={["Open", "Work", "Copy and share", "Organise"]}
                 items={[
                   {
                     id: "one-time",
+                    section: "Copy and share",
                     label: "One-time link",
                     description: "Burn-after-reading PrivateBin share",
                     icon: <Flame size={14} aria-hidden />,
@@ -751,8 +865,9 @@ export function VaultEditorPage({
                     ? [
                         {
                           id: "spawn-tasks-from-plan",
+                          section: "Work",
                           label: "Spawn tasks from plan",
-                          description: "Jira tickets and DevHub tasks from issues, checklists, or PR sections",
+                          description: "Create Jira tickets and DevHub tasks",
                           icon: <ListTodo size={14} aria-hidden />,
                           onSelect: () => {
                             window.dispatchEvent(new Event("devhub:dismiss-hovertips"));
@@ -764,6 +879,7 @@ export function VaultEditorPage({
                   ...(isNotes && linkedRepos.length > 0
                     ? linkedRepos.map((repo) => ({
                         id: `open-cursor-${repo}`,
+                        section: "Open",
                         label:
                           linkedRepos.length === 1
                             ? "Open with Cursor"
@@ -786,11 +902,12 @@ export function VaultEditorPage({
                   ...(isNotes && linkedPrs.length > 0
                     ? linkedPrs.map((pr) => ({
                         id: `open-pr-cursor-${pr.repo}-${pr.number}`,
+                        section: "Open",
                         label:
                           linkedPrs.length === 1
                             ? "Open PR in Cursor"
                             : `Open PR in Cursor · ${pr.label}`,
-                        description: `Stash if dirty, check out ${pr.label}, open in Cursor`,
+                        description: `Check out ${pr.label}; stash if dirty`,
                         icon: <GitPullRequest size={14} aria-hidden />,
                         onSelect: async () => {
                           const result = await openPrInCursor(pr.repo, pr.number, toast, filePath);
@@ -812,6 +929,7 @@ export function VaultEditorPage({
                     ? [
                         {
                           id: "apply-cursor",
+                          section: "Work",
                           label: applyingCursorDraft ? "Applying…" : "Apply Cursor changes",
                           description: `Update this note from the ${cursorDraftRepo} Markdown copy`,
                           icon: applyingCursorDraft ? (
@@ -827,7 +945,7 @@ export function VaultEditorPage({
                           id: "delete-cursor",
                           label: "Delete working copy",
                           description:
-                            "Keep the DevHub note and remove the persistent Markdown copy",
+                            "Remove the Markdown copy; keep this note",
                           icon: <Trash2 size={14} aria-hidden />,
                           danger: true,
                           onSelect: () => {
@@ -840,6 +958,7 @@ export function VaultEditorPage({
                     ? [
                         {
                           id: "create-checklist",
+                          section: "Work",
                           label: "Create checklist",
                           description: `For ${createMasterScope || "this note"}`,
                           icon: <ListChecks size={14} aria-hidden />,
@@ -856,6 +975,7 @@ export function VaultEditorPage({
                     : []),
                   {
                     id: "copy-location",
+                    section: "Copy and share",
                     label: "Copy location",
                     description: filePath,
                     icon: <ClipboardCopy size={14} aria-hidden />,
@@ -870,6 +990,7 @@ export function VaultEditorPage({
                   },
                   {
                     id: "move",
+                    section: "Organise",
                     label: "Move",
                     description: `Move ${headerLabel}`,
                     icon: <FolderInput size={14} aria-hidden />,
@@ -915,26 +1036,19 @@ export function VaultEditorPage({
           spellCheck={false}
         />
       ) : blocks !== null || isNew ? (
-        <BlockNoteEditor
-          key={`${filePath}:${editorEpoch}`}
-          initialContent={blocks && blocks.length > 0 ? blocks : undefined}
-          onChange={handleChange}
-          notePath={isNotes ? filePath : undefined}
-          vaultId={vaultId}
-          contentSlug={filePath}
-          notesAiConfigured={isNotes ? notesAiConfigured : false}
-          enableAi={isNotes ? undefined : false}
-          linkedChecklistContext={
-            folderMaster
-              ? {
-                  masterListId: folderMaster.id,
-                  masterName: folderMaster.name,
-                  masterIcon: folderMaster.icon,
-                }
-              : undefined
-          }
-          style={{ minHeight: "60vh" }}
-        />
+        taskNoteView ? (
+          <TaskNoteVisual
+            view={taskNoteView}
+            sourceMode={taskSourceMode}
+            onToggleSource={toggleTaskSource}
+            onOp={applyTaskOp}
+            hideQuestions={hideTaskQuestions}
+          >
+            {noteEditor}
+          </TaskNoteVisual>
+        ) : (
+          noteEditor
+        )
       ) : null}
 
       {isNotes && !isNew && blocks ? (

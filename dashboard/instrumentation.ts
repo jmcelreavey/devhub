@@ -22,6 +22,9 @@ export async function register() {
     writeDashboardRuntime();
   }
   if (primary) {
+    // Stdio MCP servers whose client died before they learned to exit on their own.
+    const { reapOrphanMcpServers } = await import("./lib/mcp/reap-orphan-mcp");
+    void reapOrphanMcpServers();
     const { startAgentReconciliation } = await import("./lib/paseo/lifecycle");
     startAgentReconciliation();
     const { startAgentCliUpdates } = await import("./lib/paseo/agent-cli-updates");
@@ -35,8 +38,16 @@ export async function register() {
     startTaskPrWatcher();
     const { startAlertWorker } = await import("./lib/integrations/alert-worker");
     startAlertWorker();
+    const { readSlackSettings, slackConfigured } = await import("./lib/integrations/slack/settings");
+    if (slackConfigured(readSlackSettings())) {
+      const { startSlackBot } = await import("./lib/integrations/slack/runtime");
+      startSlackBot();
+    }
     const { startAutoPrReviewPoller } = await import("./lib/github/auto-pr-review-poller");
     startAutoPrReviewPoller();
+    // Storyboard auto mode: advances tasks John started on auto (persisted, so it resumes after a restart).
+    const { startStoryboardAutoTicker } = await import("./lib/storyboard/auto-ticker");
+    startStoryboardAutoTicker();
   } else {
     const { appendSchedulerLog } = await import("./lib/scheduler-log");
     appendSchedulerLog("info", "scheduler", "disabled by DEVHUB_SCHEDULER=0 — another DevHub process owns scheduled jobs");

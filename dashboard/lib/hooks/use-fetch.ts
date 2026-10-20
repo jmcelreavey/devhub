@@ -34,7 +34,7 @@ export function useLive<T = unknown>(key: string | null, opts?: SWRConfiguration
   // polling forever. Paused hooks still serve cached data and revalidate on the
   // way back in. An explicit `isPaused` from the caller still wins.
   const visible = usePanelVisible();
-  return useSWR<T>(key, defaultFetcher as (k: string) => Promise<T>, {
+  return useSWR<T>(key, (opts?.fetcher ?? defaultFetcher) as (k: string) => Promise<T>, {
     ...liveDefaults,
     isPaused: () => !visible,
     ...opts,

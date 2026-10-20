@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useId, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { FilePen, FolderGit2, Link as LinkIcon, Plus, X } from "lucide-react";
 import { EntityLinkDialog } from "@/components/EntityLinkDialog";
@@ -14,9 +14,57 @@ import { HoverTip } from "@/components/ui/HoverTip";
 import { defaultHrefForRef, entityKey, mergeEntityRefs, type EntityRef } from "@/lib/entity-note";
 import { useToast } from "@/lib/hooks/use-toast";
 import { detectBareUrl } from "@/lib/tasks/task-text";
+import { resolveTaskInput } from "@/lib/tasks/resolve-task-input";
 import type { Task } from "@/lib/tasks/types";
 
 const NO_LINKS: readonly EntityRef[] = [];
+
+/**
+ * Whether `url` is the one the user already skipped naming. A URL typed by hand
+ * is detected a character at a time, so one that grows from (or trims back to)
+ * the skipped URL counts as the same link and doesn't re-open the prompt.
+ */
+export function isSkippedUrl(url: string, skipped: string | null): boolean {
+  return skipped !== null && (url.startsWith(skipped) || skipped.startsWith(url));
+}
+
+/** The server's `{ error }` when it sent one, else the raw body. */
+async function responseError(res: Response): Promise<string> {
+  const raw = await res.text().catch(() => "");
+  try {
+    const problem = JSON.parse(raw) as { error?: unknown };
+    if (typeof problem.error === "string") return problem.error;
+  } catch {
+    // not JSON — fall through to the raw text
+  }
+  return raw;
+}
+
+/**
+ * Capture mode: the same input, `@` picker, link chips and URL naming, but
+ * every submit path (Enter, ⇧↵, the Add button) POSTs a draft to `endpoint`.
+ * There is no "ready" or run variant here, so a capture surface can't start work.
+ */
+export interface TaskComposerCapture {
+  endpoint: string;
+  /** Accessible name of the form that wraps the row. */
+  formLabel: string;
+  inputLabel: string;
+  /** Sent with every request — the active task profile scope. */
+  headers?: Record<string, string>;
+  /** Merged into the JSON body — the destination profile. */
+  body?: Record<string, unknown>;
+  /** Blocks submitting while the destination isn't confirmed. */
+  disabled?: boolean;
+  describedBy?: string;
+  maxLength?: number;
+  rowClassName?: string;
+  /** Rendered before the input / before the buttons, inside the row. */
+  leading?: ReactNode;
+  trailing?: ReactNode;
+  /** The server's message on failure, or null when a new submit starts. */
+  onError?: (message: string | null) => void;
+}
 
 export interface TaskComposerProps {
   inputId?: string;
@@ -26,6 +74,7 @@ export interface TaskComposerProps {
    * the repo hub pins its own repo. Not shown as removable chips.
    */
   baseLinks?: readonly EntityRef[];
+  capture?: TaskComposerCapture;
   /** The created task, after the POST succeeds. */
   onAdded: (task: Task) => void | Promise<void>;
 }
@@ -41,6 +90,7 @@ export function TaskComposer({
   inputId = "task-add-text",
   placeholder = "Add a task… (paste a link or Jira key, @ to link)",
   baseLinks = NO_LINKS,
+  capture,
   onAdded,
 }: TaskComposerProps) {
   const [newText, setNewText] = useState("");
@@ -51,15 +101,20 @@ export function TaskComposer({
   /** Open while the text ends in `@fragment` — search anything linkable; a pick becomes a chip. */
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   const [mentionActive, setMentionActive] = useState(0);
+  const [saving, setSaving] = useState(false);
+  const inFlight = useRef(false);
+  const listId = useId();
   const mentionItems = useMentionSuggestions(mentionQuery);
   const inputRef = useRef<HTMLInputElement>(null);
   const linkNameRef = useRef<HTMLInputElement>(null);
+  /** The URL whose "Link name" prompt was skipped, so it doesn't keep coming back. */
+  const skippedUrl = useRef<string | null>(null);
   const toast = useToast();
 
   const handleInputChange = useCallback((value: string) => {
     setNewText(value);
     const url = detectBareUrl(value);
-    if (url) {
+    if (url && !isSkippedUrl(url, skippedUrl.current)) {
       setDetectedUrl(url);
     } else {
       setDetectedUrl(null);
@@ -91,31 +146,36 @@ export function TaskComposer({
   }, [detectedUrl, linkName]);
 
   const dismissLinkPrompt = useCallback(() => {
+    skippedUrl.current = detectedUrl;
     setDetectedUrl(null);
     setLinkName("");
     inputRef.current?.focus();
-  }, []);
+  }, [detectedUrl]);
 
   /** `asDraft` captures an idea: a draft task plus a context snapshot in its note. */
   const addTask = useCallback(async (asDraft = false) => {
-    const text = newText.trim();
-    if (!text) return;
-    const links = mergeEntityRefs([...baseLinks], pendingLinks);
+    const { text, links } = resolveTaskInput(newText, mergeEntityRefs([...baseLinks], pendingLinks));
+    if (!text || inFlight.current || capture?.disabled) return;
+    inFlight.current = true;
+    setSaving(true);
+    capture?.onError?.(null);
     try {
-      const res = await fetch(asDraft ? "/api/tasks/capture" : "/api/tasks", {
+      const res = await fetch(capture?.endpoint ?? (asDraft ? "/api/tasks/capture" : "/api/tasks"), {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...capture?.headers },
         body: JSON.stringify({
           text,
           ...(links.length > 0 ? { links } : {}),
+          ...capture?.body,
         }),
       });
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) throw new Error(await responseError(res));
       const body = (await res.json()) as Task | { task: Task };
       const task = "task" in body ? body.task : body;
-      if (asDraft) toast.success("Captured as a draft — related context is in its note");
+      if (asDraft && !capture) toast.success("Captured as a draft — related context is in its note");
       setNewText("");
       setPendingLinks([]);
+      skippedUrl.current = null;
       setDetectedUrl(null);
       setLinkName("");
       setMentionQuery(null);
@@ -123,23 +183,36 @@ export function TaskComposer({
       inputRef.current?.focus();
     } catch (e) {
       console.error("add task:", e);
-      toast.error("Couldn't add task.");
+      if (capture?.onError) capture.onError(e instanceof Error && e.message ? e.message : "Couldn't save the idea. Try again.");
+      else toast.error("Couldn't add task.");
+    } finally {
+      inFlight.current = false;
+      setSaving(false);
     }
-  }, [newText, baseLinks, pendingLinks, toast, onAdded]);
+  }, [newText, baseLinks, pendingLinks, capture, toast, onAdded]);
 
   const repoLinked = [...baseLinks, ...pendingLinks].some((ref) => ref.kind === "repo");
 
-  return (
-    <>
-      <div className="task-add-row">
+  const listOpen = mentionQuery !== null && mentionItems.length > 0;
+  const activeIndex = Math.min(mentionActive, mentionItems.length - 1);
+
+  const row = (
+      <div className={capture?.rowClassName ? `task-add-row ${capture.rowClassName}` : "task-add-row"}>
+        {capture?.leading}
         <label htmlFor={inputId} className="sr-only">
-          Add a task
+          {capture?.inputLabel ?? "Add a task"}
         </label>
         <input
           id={inputId}
           ref={inputRef}
           className="input task-add-text"
           placeholder={placeholder}
+          aria-describedby={capture?.describedBy}
+          aria-autocomplete="list"
+          aria-controls={listOpen ? listId : undefined}
+          aria-activedescendant={listOpen ? `${listId}-${activeIndex}` : undefined}
+          maxLength={capture?.maxLength}
+          readOnly={capture ? saving : undefined}
           value={newText}
           onChange={(e) => handleTextChange(e.target.value)}
           onBlur={() => {
@@ -167,28 +240,35 @@ export function TaskComposer({
             }
             if (e.key !== "Enter") return;
             const currentText = (e.target as HTMLInputElement).value;
-            const freshUrl = detectedUrl || detectBareUrl(currentText);
+            const bareUrl = detectBareUrl(currentText);
+            const freshUrl = detectedUrl || (bareUrl && !isSkippedUrl(bareUrl, skippedUrl.current) ? bareUrl : null);
             if (freshUrl && linkName.trim()) {
               e.preventDefault();
               confirmLink();
-            } else if (freshUrl) {
+            } else if (freshUrl && !detectedUrl) {
               e.preventDefault();
               setDetectedUrl(freshUrl);
               setNewText(currentText);
             } else {
+              // A name is optional: Enter with the prompt open (or skipped) saves the bare URL.
+              setDetectedUrl(null);
+              setLinkName("");
+              // Enter must not also submit the capture form around the row.
+              e.preventDefault();
               // Shift+Enter captures a draft instead of a ready task.
               void addTask(e.shiftKey);
             }
           }}
         />
-        {mentionQuery !== null && mentionItems.length > 0 && (
-          <ul className="task-tag-sugs" role="listbox" aria-label="Link suggestions">
+        {listOpen && (
+          <ul id={listId} className="task-tag-sugs" role="listbox" aria-label="Link suggestions">
             {mentionItems.map((item, i) => {
               const Icon = KIND_ICON[item.kind];
-              const active = i === Math.min(mentionActive, mentionItems.length - 1);
+              const active = i === activeIndex;
               return (
                 <li key={entityKey(item.ref)}>
                   <button
+                    id={`${listId}-${i}`}
                     type="button"
                     role="option"
                     aria-selected={active}
@@ -256,29 +336,58 @@ export function TaskComposer({
             <FolderGit2 size={14} aria-hidden />
           </button>
         </HoverTip>
-        <HoverTip label="Capture as draft (⇧↵) — saves related notes, PRs and alerts" pos="top-end">
+        {capture?.trailing}
+        {capture ? (
           <button
-            type="button"
-            className="task-icon-action"
-            onClick={() => void addTask(true)}
-            disabled={!newText.trim()}
-            aria-label="Capture as draft"
+            type="submit"
+            className="btn btn-primary"
+            disabled={saving || !newText.trim() || capture.disabled}
+            aria-busy={saving || undefined}
           >
-            <FilePen size={14} aria-hidden />
+            {saving ? "Saving…" : "Add"}
           </button>
-        </HoverTip>
-        <HoverTip label="Add task" pos="top-end">
-          <button
-            type="button"
-            className="btn btn-ghost task-add-btn"
-            onClick={() => void addTask()}
-            disabled={!newText.trim()}
-            aria-label="Add task"
-          >
-            <Plus size={14} aria-hidden />
-          </button>
-        </HoverTip>
+        ) : (
+          <>
+            <HoverTip label="Capture as draft (⇧↵) — saves related notes, PRs and alerts" pos="top-end">
+              <button
+                type="button"
+                className="task-icon-action"
+                onClick={() => void addTask(true)}
+                disabled={!newText.trim()}
+                aria-label="Capture as draft"
+              >
+                <FilePen size={14} aria-hidden />
+              </button>
+            </HoverTip>
+            <HoverTip label="Add task" pos="top-end">
+              <button
+                type="button"
+                className="btn btn-ghost task-add-btn"
+                onClick={() => void addTask()}
+                disabled={!newText.trim()}
+                aria-label="Add task"
+              >
+                <Plus size={14} aria-hidden />
+              </button>
+            </HoverTip>
+          </>
+        )}
       </div>
+  );
+
+  return (
+    <>
+      {capture ? (
+        <form
+          aria-label={capture.formLabel}
+          onSubmit={(e) => {
+            e.preventDefault();
+            void addTask(true);
+          }}
+        >
+          {row}
+        </form>
+      ) : row}
 
       <EntityLinkDialog
         open={linkOpen}
@@ -309,12 +418,13 @@ export function TaskComposer({
             onKeyDown={(e) => {
               if (e.key === "Enter") {
                 e.preventDefault();
+                // An empty name is the same as Skip; the URL stays as typed.
                 if (linkName.trim()) confirmLink();
+                else dismissLinkPrompt();
               } else if (e.key === "Escape") {
                 dismissLinkPrompt();
               }
             }}
-            autoFocus
           />
           <button
             type="button"

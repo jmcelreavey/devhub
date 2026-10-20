@@ -3,6 +3,8 @@
 import { CheckCircle2, CircleDot, ExternalLink, GitPullRequest, XCircle } from "lucide-react";
 import { useEffect, useRef, useState, type RefObject } from "react";
 import { useLive } from "@/lib/hooks/use-fetch";
+import { usePrStatusMenu } from "@/components/github/PrStatusMenu";
+import { openInBrowser } from "@/lib/desktop/bridge";
 import type { BranchOpenPr, PrChecksState } from "@/lib/github/branch-pr";
 
 interface RepoOpenPrPayload {
@@ -94,9 +96,21 @@ export function RepoOpenPrLink({
     refreshInterval: (latest) => (latest?.pr ? 300_000 : 60_000),
   });
 
-  if (skip) return null;
+  const pr = skip ? null : data?.pr ?? null;
+  const statusMenu = usePrStatusMenu(
+    pr
+      ? {
+          url: pr.url,
+          number: pr.number,
+          branch,
+          localRepoName: repoName,
+          checks: pr.checks,
+          checkCounts: pr.checkCounts,
+        }
+      : null,
+  );
 
-  const pr = data?.pr;
+  if (skip) return null;
 
   return (
     // Non-zero size so the observer has something to intersect before a PR is
@@ -105,19 +119,22 @@ export function RepoOpenPrLink({
       {pr ? (
         <a
           href={pr.url}
-          target="_blank"
-          rel="noopener noreferrer"
           className="repo-open-pr-link"
           data-checks={pr.checks !== "none" ? pr.checks : undefined}
-          onContextMenu={(event) => event.preventDefault()}
           title={[
             pr.title ? `${pr.title} — open PR` : `Open PR #${pr.number}`,
             pr.checks !== "none"
               ? `checks: ${pr.checkCounts.passed} passed, ${pr.checkCounts.failed} failed, ${pr.checkCounts.pending} pending`
               : null,
+            "Right-click for PR actions",
           ]
             .filter(Boolean)
             .join(" · ")}
+          onClick={(event) => {
+            event.preventDefault();
+            void openInBrowser(pr.url);
+          }}
+          {...statusMenu.bind}
         >
           <GitPullRequest size={11} aria-hidden />
           PR #{pr.number}
@@ -125,6 +142,7 @@ export function RepoOpenPrLink({
           <ExternalLink size={10} aria-hidden />
         </a>
       ) : null}
+      {statusMenu.menuNode}
     </span>
   );
 }

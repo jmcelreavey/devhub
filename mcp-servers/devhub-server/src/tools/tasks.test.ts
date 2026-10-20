@@ -8,6 +8,7 @@ import { TasksStorage } from "../task-diagram-storage.ts";
 import type { Context } from "../context.ts";
 import { blocksToText, textToBlocks } from "../convert.ts";
 import { registerTasksTools } from "./tasks.ts";
+import { extractTaskNoteMetaFromMarkdown } from "../../../../shared/task-note/meta.ts";
 import { registerNotesTools } from "./notes.ts";
 
 const DAY = "2026-08-25";
@@ -80,6 +81,15 @@ function noteMarkdown() {
 }
 
 describe("tasks_context_sync", () => {
+  it("never infers PTF-4891 as a child task's Jira key from a parent prefix or context link", async () => {
+    await env.handlers.get("tasks_create")!({ text: "PTF-4891 Android login", date: DAY, parentKey: "PTF-4891", withNote: true, links: [{ kind: "jira", id: "PTF-4891", label: "Parent PTF-4891" }] });
+    const task = env.ctx.tasksStorage.getDay(DAY).tasks.find((item) => item.text === "Android login")!;
+    expect(task).toMatchObject({ parentKey: "PTF-4891", text: "Android login" });
+    expect(task.jiraKey).toBeUndefined();
+    expect(task.links).toContainEqual({ kind: "jira", id: "PTF-4891", label: "Parent PTF-4891" });
+    await env.handlers.get("tasks_update")!({ id: task.id, date: DAY, text: "Android login (parent PTF-4891)" });
+    expect(env.ctx.tasksStorage.getDay(DAY).tasks.find((item) => item.id === task.id)?.jiraKey).toBeUndefined();
+  });
   it("opens and updates the inherited plan through both MCP note entry points", async () => {
     const previousDate = "2026-08-24";
     const previousId = "22222222-2222-4222-8222-222222222222";
@@ -117,8 +127,10 @@ describe("tasks_context_sync", () => {
     const markdown = noteMarkdown();
     expect(markdown).toContain("## Implementation https://github.com/owner/repo/pull/9");
     expect(markdown).not.toContain("Tags:");
-    expect(markdown).toContain("**PR:** [PR #9](https://github.com/owner/repo/pull/9)");
-    expect(markdown).toContain("**Note:** Plan");
+    expect(markdown).not.toContain("## Links");
+    const links = extractTaskNoteMetaFromMarkdown(markdown)?.links ?? [];
+    expect(links).toContainEqual(expect.objectContaining({ kind: "pr", id: "owner/repo#9", href: "https://github.com/owner/repo/pull/9" }));
+    expect(links).toContainEqual(expect.objectContaining({ kind: "note", label: "Plan" }));
   });
 
   it("is idempotent on rerun", async () => {
@@ -156,10 +168,16 @@ describe("tasks_context_sync", () => {
 
     const markdown = noteMarkdown();
     expect(markdown).toContain("- hand written observation");
-    expect(markdown).toContain("**Note:** [Hand written](/notes/projects/hand-written)");
-    expect(markdown).toContain("**PR:** [PR #9](https://github.com/owner/repo/pull/9)");
+    // The old "## Links" list is folded into the header block, keeping the hand-written link.
+    expect(markdown).not.toContain("## Links");
+    const links = extractTaskNoteMetaFromMarkdown(markdown)?.links ?? [];
+    expect(links).toContainEqual(expect.objectContaining({ kind: "note", id: "projects/hand-written", label: "Hand written" }));
+    expect(links).toContainEqual(expect.objectContaining({ kind: "pr", id: "owner/repo#9" }));
     const updatedBlocks = env.ctx.storage.read(notePath)!.content as unknown[];
-    expect(updatedBlocks.slice(0, originalBlocks.length)).toEqual(originalBlocks);
+    // Content blocks are untouched, rich ones included.
+    const bullet = originalBlocks.find((b) => JSON.stringify(b).includes("hand written observation"));
+    expect(updatedBlocks).toContainEqual(bullet);
+    expect(updatedBlocks).toContainEqual(originalBlocks[originalBlocks.length - 1]);
   });
 
   it("reports missing tasks", async () => {

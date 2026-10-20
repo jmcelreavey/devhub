@@ -28,6 +28,10 @@ export interface ResolvedOwnedRepo extends OwnedRepo {
   defaultBranch: string | null;
 }
 
+export interface OwnedReposResponse {
+  repos: Pick<OwnedRepo, "fullName">[];
+}
+
 export interface RepoDomain {
   id: string;
   label: string;

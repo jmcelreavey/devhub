@@ -1,0 +1,100 @@
+.card {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  padding: 0.75rem 0;
+}
+
+.card + .card {
+  border-top: 1px solid var(--border-muted);
+}
+
+.copy {
+  flex: 1 1 14rem;
+  min-width: 0;
+}
+
+.title {
+  color: var(--text);
+  font-size: 0.875rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.title:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.heading {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.75rem;
+}
+
+.context,
+.status {
+  margin: 0.25rem 0 0;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.context { margin: 0; }
+
+.action {
+  flex-shrink: 0;
+}
+
+.actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.actions:empty { display: none; }
+.home .actions { flex-shrink: 0; max-width: 100%; }
+
+/* A list of To do cards shouldn't be a wall of solid Start on auto buttons: outline
+   until the card is hovered or focused, like Storyboard cards and Today rows. Touch
+   screens have no hover, so they keep the full button. */
+@media (hover: hover) {
+  .card:not(:hover):not(:focus-within) .quietStart:not(:disabled) {
+    background: transparent;
+    color: var(--accent-text, var(--accent));
+    border-color: var(--accent);
+  }
+}
+
+.status { display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }
+.status.feedback { -webkit-line-clamp: 3; }
+
+.summary { margin: 5px 0 0; font-size: 13px; line-height: 1.5; color: var(--text); overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.compact { flex-wrap: nowrap; padding: 10px 0; gap: 12px; }
+.compact .copy { flex: 1; }
+.compact .heading { display: block; }
+.compact .title { display: block; font-size: 13px; font-weight: 400; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.compact .context, .compact .status { font-size: 11px; }
+.compact .summary { -webkit-line-clamp: 1; font-size: 12px; color: var(--text-muted); }
+.home.compact .title { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; font-weight: 500; }
+.home[data-needs-action] .status { color: var(--text); font-weight: 500; }
+.home[data-needs-action] .status:not(.feedback) { -webkit-line-clamp: 2; }
+.home[data-failed] .status { color: var(--danger); }
+.home :global(.row-menu-kebab) { opacity: 1; }
+.noteTrigger { order: 1; flex-shrink: 0; min-width: 58px; }
+.home :global(.row-menu-kebab) { order: 2; }
+.card > [data-task-note-content] { order: 3; }
+.compact:has(> [data-task-note-content]) { flex-wrap: wrap; }
+@media (hover: hover) {
+  .card:not(:hover):not(:focus-within) .noteTrigger { opacity: 0; }
+}
+@media (max-width: 767px) {
+  .home.compact { flex-wrap: wrap; gap: 8px; }
+  .home.compact .copy { flex-basis: 100%; }
+  .home .actions { flex-basis: 100%; }
+  .home .actions :global(.row-menu-kebab) { margin-left: auto; }
+}
+
+@media (pointer: coarse) {
+  .home .actions :is(button, a) { min-height: 44px; min-width: 44px; }
+}
+
+.pills { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 4px; }

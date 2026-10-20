@@ -32,9 +32,20 @@ describe("describeHref", () => {
   });
 
   it("uses the page name for nav destinations", () => {
-    expect(describeHref("/work")).toEqual({ title: "Work", kind: "nav" });
-    expect(describeHref("/")).toEqual({ title: "Today", kind: "nav" });
+    expect(describeHref("/work")).toEqual({ title: "Tasks", kind: "nav" });
+    expect(describeHref("/")).toEqual({ title: "Home", kind: "nav" });
     expect(describeHref("/repos")).toEqual({ title: "Repos", kind: "nav" });
+  });
+
+  it("follows the sidebar names, including for pages that have no sidebar row", () => {
+    expect(describeHref("/status").title).toBe("Settings");
+    expect(describeHref("/work?tab=history").title).toBe("Tasks");
+    expect(describeHref("/review").title).toBe("Weekly review");
+    expect(describeHref("/review/rep").title).toBe("Daily rep");
+    expect(describeHref("/qa?run=abc").title).toBe("QA lab");
+    expect(describeHref("/skills").title).toBe("Agent skills");
+    expect(describeHref("/briefing").title).toBe("Briefing");
+    expect(describeHref("/db").title).toBe("Databases");
   });
 
   it("updates a nested notes path to the file name", () => {
@@ -145,15 +156,15 @@ describe("note title override", () => {
     const s = state(["/", "/work"], 0);
     const next = updateTabTitle(s, "id-0", "Home");
     expect(next.tabs[0]?.title).toBe("Home");
-    expect(next.tabs[1]?.title).toBe("Work");
+    expect(next.tabs[1]?.title).toBe("Tasks");
   });
 });
 
 describe("openBlank", () => {
-  it("opens a fresh Today tab and focuses it", () => {
+  it("opens a fresh Home tab and focuses it", () => {
     const next = openBlank(state(["/work"]));
     expect(next.tabs.map((t) => t.href)).toEqual(["/work", "/"]);
-    expect(next.tabs[1]?.title).toBe("Today");
+    expect(next.tabs[1]?.title).toBe("Home");
     expect(next.activeId).toBe(next.tabs[1]?.id);
   });
 
@@ -235,7 +246,49 @@ describe("persist", () => {
       tabs: [{ id: "id-0", href: "/work", title: "Work", kind: "nav" }],
     });
     const restored = parseStored(raw, "/");
-    expect(restored.tabs[0]?.history).toEqual([{ href: "/work", label: "Work", ts: 0 }]);
+    expect(restored.tabs[0]?.history).toEqual([{ href: "/work", label: "Tasks", ts: 0 }]);
+  });
+
+  it("renames nav tabs saved before a rename, in the tab and in its trail", () => {
+    const raw = JSON.stringify({
+      v: 1,
+      activeId: "id-0",
+      tabs: [
+        {
+          id: "id-0",
+          href: "/status",
+          title: "System",
+          kind: "nav",
+          history: [
+            { href: "/work", label: "Work", ts: 1 },
+            { href: "/review", label: "Review", ts: 2 },
+            { href: "/status", label: "System", ts: 3 },
+          ],
+        },
+      ],
+    });
+    const [tab] = parseStored(raw, "/").tabs;
+    expect(tab?.title).toBe("Settings");
+    expect(tab?.history.map((e) => e.label)).toEqual(["Tasks", "Weekly review", "Settings"]);
+  });
+
+  it("keeps labels that a page published for itself", () => {
+    const raw = JSON.stringify({
+      v: 1,
+      activeId: "id-0",
+      tabs: [
+        {
+          id: "id-0",
+          href: "/repos/acme-api",
+          title: "Acme API",
+          kind: "repo",
+          history: [{ href: "/repos/acme-api", label: "Acme API", ts: 1 }],
+        },
+      ],
+    });
+    const [tab] = parseStored(raw, "/").tabs;
+    expect(tab?.title).toBe("Acme API");
+    expect(tab?.history.map((e) => e.label)).toEqual(["Acme API"]);
   });
 
   it("falls back on garbage", () => {

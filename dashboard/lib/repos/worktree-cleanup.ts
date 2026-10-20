@@ -286,3 +286,63 @@ export async function removeWorktreeAt(
   const dirty = /contains modified or untracked files/i.test(result.stderr);
   return { ok: false, error: result.stderr.trim() || "Could not remove the worktree", dirty };
 }
+
+/** The newest run that was given this worktree, if any is still going. */
+function activeRunAt(target: string): { id: string; state: AgentRunState } | null {
+  const run = runsByWorktreePath().get(target.trim().replace(/\/+$/, ""));
+  return run && isActiveAgentRunState(run.state) ? run : null;
+}
+
+/** Why a worktree should not be removed right now, or null when it is safe. */
+export async function worktreeRemovalBlocker(target: string): Promise<{ code: "run_active" | "worktree_dirty"; reason: string } | null> {
+  const run = activeRunAt(target);
+  if (run) return { code: "run_active", reason: `an agent run is still ${run.state === "needs-attention" ? "waiting on you" : "going"}` };
+  // A missing folder has nothing to lose; `git worktree remove` only prunes it.
+  if (!fs.existsSync(target)) return null;
+  const status = await runGitRepoAsync(target, ["status", "--porcelain"]);
+  if (status.status === 0 && status.stdout.trim()) return { code: "worktree_dirty", reason: "it has uncommitted changes" };
+  return null;
+}
+
+export interface BulkWorktreeItem {
+  repo: string;
+  path: string;
+}
+
+export interface BulkWorktreeResult {
+  /** Paths removed (or, for a dry run, that would be). */
+  removed: string[];
+  /** Left alone, each with the reason, so nothing is lost silently. */
+  skipped: { repo: string; path: string; reason: string }[];
+}
+
+/**
+ * Remove many worktrees, never forcing. A tree with uncommitted changes or a
+ * run still going is skipped with its reason; everything is rechecked here, not
+ * trusted from the list the user saw. `dryRun` reports the same split without
+ * touching anything, so the confirm step can say what will be skipped.
+ * One at a time: git takes a lock on the repo for each removal.
+ */
+export async function removeWorktrees(
+  items: readonly BulkWorktreeItem[],
+  resolveRepo: (name: string) => string | null,
+  { dryRun = false }: { dryRun?: boolean } = {},
+): Promise<BulkWorktreeResult> {
+  const result: BulkWorktreeResult = { removed: [], skipped: [] };
+  const seen = new Set<string>();
+  for (const item of items) {
+    const key = item.path.trim().replace(/\/+$/, "");
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const skip = (reason: string) => result.skipped.push({ repo: item.repo, path: item.path, reason });
+    const repoPath = resolveRepo(item.repo);
+    if (!repoPath) { skip("its repo was not found"); continue; }
+    const blocker = await worktreeRemovalBlocker(key);
+    if (blocker) { skip(blocker.reason); continue; }
+    if (dryRun) { result.removed.push(item.path); continue; }
+    const outcome = await removeWorktreeAt(repoPath, key);
+    if (outcome.ok) result.removed.push(item.path);
+    else skip(outcome.dirty ? "it has uncommitted changes" : outcome.error ?? "git refused");
+  }
+  return result;
+}

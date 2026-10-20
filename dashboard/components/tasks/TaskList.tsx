@@ -25,6 +25,7 @@ import { SortableList, type SortableRenderState } from "@/components/ui/Sortable
 import { useGridSize } from "@/lib/hooks/use-grid-size";
 import { todayISO } from "@/lib/utils";
 import { celebrateGraphite } from "@/lib/graphite-theme";
+import { runTaskAction } from "@/lib/storyboard/task-action";
 
 // Task now lives in lib/tasks/types.ts, shared with the server storage layer.
 // It was duplicated here and had drifted (missing rolledFromId/rolledFromDate).
@@ -48,11 +49,14 @@ const GROUP_MODES: readonly GroupMode[] = ["flat", "parent"];
 export interface TaskListProps {
   inputId?: string;
   searchQuery?: string;
+  /** taskId → tags from its task note, matched by the search. */
+  noteTags?: Record<string, string[]>;
   /** Hide specific open tasks (e.g. the one already shown in the NOW card). */
   excludeIds?: readonly string[];
+  showStartAuto?: boolean;
 }
 
-export function TaskList({ inputId = "task-add-text", searchQuery, excludeIds }: TaskListProps) {
+export function TaskList({ inputId = "task-add-text", searchQuery, noteTags, excludeIds, showStartAuto = false }: TaskListProps) {
   const { data, error, isLoading, mutate } = useLive<{ tasks?: Task[]; migrationNotice?: string }>("/api/tasks");
   const gridSize = useGridSize("main");
   const tasks = data?.tasks ?? EMPTY_TASKS;
@@ -139,9 +143,9 @@ export function TaskList({ inputId = "task-add-text", searchQuery, excludeIds }:
   );
 
   const toggleTask = useCallback(
-    async (id: string) => {
+    (id: string) => runTaskAction(id, "toggle-completion", async () => {
       const original = tasks.find((t) => t.id === id);
-      if (!original) return;
+      if (!original) return { ok: false };
       await mutate(
         (cur) => ({
           ...(cur ?? {}),
@@ -163,9 +167,12 @@ export function TaskList({ inputId = "task-add-text", searchQuery, excludeIds }:
         const res = await fetch("/api/tasks", {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ id, done: true }),
+          body: JSON.stringify({ id, completion: !original.done }),
         });
-        if (!res.ok) throw new Error(await res.text());
+        if (!res.ok) {
+          const problem = await res.json().catch(() => ({})) as { error?: string };
+          throw new Error(problem.error ?? "Couldn't update task.");
+        }
         const updated = (await res.json()) as Task;
         if (updated.done && !original.done) celebrateGraphite("task");
         await mutate(
@@ -175,6 +182,7 @@ export function TaskList({ inputId = "task-add-text", searchQuery, excludeIds }:
           }),
           { revalidate: false },
         );
+        return { ok: true };
       } catch (e) {
         console.error("toggle task:", e);
         await mutate(
@@ -184,9 +192,10 @@ export function TaskList({ inputId = "task-add-text", searchQuery, excludeIds }:
           }),
           { revalidate: false },
         );
-        toast.error("Couldn't update task.");
+        toast.error(e instanceof Error ? e.message : "Couldn't update task.");
+        return { ok: false };
       }
-    },
+    }),
     [tasks, mutate, toast],
   );
 
@@ -476,10 +485,10 @@ export function TaskList({ inputId = "task-add-text", searchQuery, excludeIds }:
   const q = searchQuery?.toLowerCase() ?? "";
 
   const pending = tasks.filter(
-    (t) => isTaskOpen(t) && matchesTaskSearch(t, q) && !excludeIds?.includes(t.id),
+    (t) => isTaskOpen(t) && matchesTaskSearch(t, q, noteTags) && !excludeIds?.includes(t.id),
   );
-  const completed = tasks.filter((t) => t.done && matchesTaskSearch(t, q));
-  const abandoned = tasks.filter((t) => !!t.abandonedAt && matchesTaskSearch(t, q));
+  const completed = tasks.filter((t) => t.done && matchesTaskSearch(t, q, noteTags));
+  const abandoned = tasks.filter((t) => !!t.abandonedAt && matchesTaskSearch(t, q, noteTags));
 
   // Grouping is a view, not a reorder: it never touches the stored ranking, so
   // dragging is off while it is on and "flat" brings the user's own order back.
@@ -493,20 +502,21 @@ export function TaskList({ inputId = "task-add-text", searchQuery, excludeIds }:
   // update moves it into Done.
   const completeWithExit = useCallback(
     (id: string) => {
-      setExitingIds((prev) => {
-        if (prev.has(id)) return prev;
-        const next = new Set(prev);
-        next.add(id);
-        return next;
-      });
-      window.setTimeout(() => {
+      void runTaskAction(id, "complete-exit", async () => {
+        setExitingIds((prev) => {
+          if (prev.has(id)) return prev;
+          const next = new Set(prev);
+          next.add(id);
+          return next;
+        });
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 440));
         setExitingIds((prev) => {
           const next = new Set(prev);
           next.delete(id);
           return next;
         });
-        void toggleTask(id);
-      }, 440);
+        return toggleTask(id);
+      });
     },
     [toggleTask],
   );
@@ -585,6 +595,7 @@ export function TaskList({ inputId = "task-add-text", searchQuery, excludeIds }:
           date={today}
           jiraStatus={task.jiraKey ? jiraStatuses[task.jiraKey] : undefined}
           hideParent={!!parentGroups}
+          showStartAuto={showStartAuto}
           dragHandleProps={q || exiting ? undefined : sortable?.dragHandleProps}
           isDragging={sortable?.isDragging}
           isDropTarget={sortable?.isDropTarget}

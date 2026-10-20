@@ -31,7 +31,7 @@ export const GOALS: Goal[] = [
     id: "code",
     label: "My code",
     description: "Repositories, pull requests, and jumping into an editor",
-    steps: ["github", "agent"],
+    steps: ["github", "agent", "jev"],
   },
   {
     id: "notes",
@@ -49,7 +49,7 @@ export const GOALS: Goal[] = [
     id: "everything",
     label: "All of it",
     description: "Show every integration",
-    steps: ["github", "agent", "calendar", "jira", "datadog", "infra"],
+    steps: ["github", "agent", "jev", "calendar", "jira", "datadog", "infra", "slack"],
   },
 ];
 

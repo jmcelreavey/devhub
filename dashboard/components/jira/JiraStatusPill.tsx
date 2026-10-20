@@ -1,43 +1,37 @@
 "use client";
-import { integrationFetch } from "@/lib/integrations/client-fetch";
-
 import { useState, useCallback } from "react";
+import { Loader2 } from "lucide-react";
+import { preload } from "swr";
 import { SeverityPill } from "@/components/ui/Severity";
 import { statusTone } from "@/components/jira/JiraWidget";
 import { JiraTransitionModal } from "@/components/jira/JiraTransitionModal";
 import { HoverTip } from "@/components/ui/HoverTip";
-import { useToast } from "@/lib/hooks/use-toast";
-import { mutate } from "swr";
+import { defaultFetcher } from "@/lib/hooks/use-fetch";
+import { useJiraTransition } from "@/lib/hooks/use-jira-transition";
+import { useTransitionOverride } from "@/lib/jira/transition-state";
 
 interface JiraStatusPillProps {
   ticketKey: string;
   status: string;
   onChanged?: () => void;
+  profile?: string;
 }
 
-export function JiraStatusPill({ ticketKey, status, onChanged }: JiraStatusPillProps) {
+export function JiraStatusPill({ ticketKey, status, onChanged, profile }: JiraStatusPillProps) {
   const [open, setOpen] = useState(false);
-  const toast = useToast();
+  const move = useJiraTransition();
+  const override = useTransitionOverride(ticketKey);
+  const shown = override?.status ?? status;
+  const pending = override?.pending === true;
 
-  const handleConfirm = useCallback(async (transitionId: string | null) => {
+  const handleConfirm = useCallback((transitionId: string | null, to?: string) => {
     setOpen(false);
     if (!transitionId) return;
-    try {
-      const res = await integrationFetch(`/api/jira/ticket/${ticketKey}/transition`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ transitionId }),
-      });
-      if (!res) return;
-      if (!res.ok) throw new Error("Transition failed");
-      toast.success(`Updated ${ticketKey}`);
-      void mutate("/api/jira/tickets");
-      void mutate("/api/sidebar/counts");
-      onChanged?.();
-    } catch {
-      toast.error(`Couldn't transition ${ticketKey}`);
-    }
-  }, [ticketKey, toast, onChanged]);
+    void move(ticketKey, { transitionId }, { to, onChanged, profile });
+  }, [ticketKey, move, onChanged, profile]);
+
+  // The picker needs the transition list; start fetching it before the click lands.
+  const warm = () => void preload(`/api/jira/ticket/${ticketKey}/transitions`, defaultFetcher).catch(() => undefined);
 
   return (
     <>
@@ -45,10 +39,17 @@ export function JiraStatusPill({ ticketKey, status, onChanged }: JiraStatusPillP
         <button
           type="button"
           onClick={() => setOpen(true)}
-          aria-label={`Change status from ${status}`}
-          style={{ border: "none", background: "none", padding: 0, cursor: "pointer", borderRadius: 999 }}
+          onMouseEnter={warm}
+          onFocus={warm}
+          disabled={pending}
+          aria-busy={pending}
+          aria-label={pending ? `${ticketKey} moving to ${shown}` : `Change status from ${shown}`}
+          style={{ border: "none", background: "none", padding: 0, cursor: pending ? "progress" : "pointer", borderRadius: 999 }}
         >
-          <SeverityPill tone={statusTone(status)}>{status}</SeverityPill>
+          <SeverityPill tone={statusTone(shown)}>
+            {pending && <Loader2 size={10} className="animate-spin" aria-hidden />}
+            {shown}
+          </SeverityPill>
         </button>
       </HoverTip>
       <JiraTransitionModal

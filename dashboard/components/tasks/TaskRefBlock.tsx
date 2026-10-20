@@ -92,8 +92,8 @@ export function TaskRefBlockView({ taskId, date, label }: TaskRefBlockViewProps)
       <a
         href={`/work?date=${currentDate}`}
         className="hub-icon-btn reveal-on-hover"
-        title="Open in Work"
-        aria-label="Open in Work"
+        title="Open in Tasks"
+        aria-label="Open in Tasks"
         contentEditable={false}
       >
         <ExternalLink size={11} aria-hidden />

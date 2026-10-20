@@ -107,7 +107,7 @@ describe("owned repo menu groups", () => {
     expect(own?.items.map((item) => item.id)).toContain("catch-up");
   });
 
-  it("groups Open / Work / Ownership", () => {
+  it("groups Open / Work / Copy / Knowledge", () => {
     const groups = buildOwnedRepoMenuGroups(
       {
         repo: owned(),
@@ -119,8 +119,8 @@ describe("owned repo menu groups", () => {
       },
       actions,
     );
-    expect(groups.map((group) => group.id)).toEqual(["open", "work", "own"]);
-    expect(groups.map((group) => group.label)).toEqual(["Open", "Work", "Ownership"]);
+    expect(groups.map((group) => group.id)).toEqual(["open", "work", "copy", "own"]);
+    expect(groups.map((group) => group.label)).toEqual(["Open", "Work", "Copy", "Knowledge"]);
   });
 
   it("disables clone-gated items when there is no local clone", () => {

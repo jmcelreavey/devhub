@@ -18,6 +18,8 @@ import {
 } from "@/lib/ai/preference";
 import { isNotesAiConfigured } from "@/lib/notes-ai/config";
 import { isOpenCodeConfigured } from "@/lib/peer-service-availability";
+import { listCursorAgentModels } from "@/lib/ai/cursor-models";
+import { listPaseoProviders } from "@/lib/paseo/providers";
 import {
   readDashboardEnvLocalFile,
   syncAgentProcessEnvFromOverrides,
@@ -26,9 +28,25 @@ import {
 
 export const dynamic = "force-dynamic";
 
-function providerPayload() {
+async function providerPayload() {
   const settings = readAgentCliSettings();
   const resolved = resolveAiProvider();
+  const [cursorModels, paseoProviders] = await Promise.all([
+    listCursorAgentModels().catch(() => []),
+    listPaseoProviders().catch(() => []),
+  ]);
+  const paseoIds: Partial<Record<AiProviderId, string>> = {
+    "chatgpt-cli": "codex",
+    "antigravity-cli": "gemini",
+    opencode: "opencode",
+  };
+  const models: Partial<Record<AiProviderId, string[]>> = {
+    ...(cursorModels.length ? { "cursor-cli": cursorModels } : {}),
+  };
+  for (const [provider, paseoId] of Object.entries(paseoIds) as [AiProviderId, string][]) {
+    const available = paseoProviders.find((row) => row.id === paseoId)?.models ?? [];
+    if (available.length) models[provider] = available;
+  }
   return {
     ...settings,
     // Effective launch CLI for the resolved provider (not a stale DEVHUB_AGENT_CLI).
@@ -43,12 +61,13 @@ function providerPayload() {
     apiConfigured: isNotesAiConfigured(),
     opencodeInstalled: isOpenCodeConfigured(),
     availability: resolved.availability,
+    models,
   };
 }
 
 /** AI provider + agent CLI handoff settings and local CLI availability. */
 export async function GET() {
-  return NextResponse.json(providerPayload());
+  return NextResponse.json(await providerPayload());
 }
 
 function launchCliForProvider(provider: AiProviderId): AgentCli | null {
@@ -185,7 +204,7 @@ export async function PUT(req: NextRequest) {
 
   return NextResponse.json({
     ok: true,
-    ...providerPayload(),
+    ...(await providerPayload()),
     label: providerRaw ? aiProviderLabel(providerRaw) : undefined,
   });
 }

@@ -18,6 +18,8 @@ import { selectToolsets, type ToolsetSelection } from "./toolsets.ts";
 import { registerNotesTools } from "./tools/notes.ts";
 import { registerDocsTools } from "./tools/docs.ts";
 import { registerTasksTools } from "./tools/tasks.ts";
+import { registerTaskNoteTools } from "./tools/task-note.ts";
+import { registerStoryboardTools } from "./tools/storyboard.ts";
 import { registerPlanTools } from "./tools/plans.ts";
 import { registerDiagramsTools } from "./tools/diagrams.ts";
 import { registerAppraisalTools } from "./tools/appraisal.ts";
@@ -63,6 +65,8 @@ import { registerUiTools } from "./tools/ui.ts";
 export const SERVER_INSTRUCTIONS = [
   "DevHub is the user's local developer hub: notes, tasks, repos, PRs, agent runs, a terminal dock and scheduled jobs.",
   "- Scheduling: when the user wants something to happen later or on a recurring schedule and it involves DevHub (a DevHub script, or an agent prompt in one of their repos), create a DevHub scheduled job with jobs_create instead of your own cron, loop or scheduled-task tools. DevHub jobs persist across restarts, catch up after sleep, can wake the Mac, and are visible on DevHub's Actions page.",
+  "- Prefer DevHub when it covers the job, instead of shell, gh, curl or your own files: tasks and task notes (tasks_*, task_note_*), notes and docs (notes_*, docs_*, search, recall), Jira (jira_*), pull requests (prs_*, repo_pr_radar), repos and worktrees (repos_*), agent runs (agent_*). If its tools are deferred, search for them by those names first. Writes still follow the user's normal confirmation rules.",
+  "- If a DevHub tool says it is unreachable, tell the user once and carry on with your normal tools; don't retry in a loop.",
   "- Long-running or user-visible commands belong in the DevHub terminal dock (terminal_propose_run), not your own shell.",
   "- Dashboard-backed tools need the DevHub dashboard running; an 'unreachable' error means start it, not that the tool is broken.",
 ].join("\n");
@@ -72,7 +76,7 @@ const TOOLSETS: Record<string, (server: McpServer, ctx: Context) => void> = {
   // Filesystem-backed (work headless, no dashboard required).
   notes: registerNotesTools,
   docs: registerDocsTools,
-  tasks: (server, ctx) => { registerTasksTools(server, ctx); registerWorkflowTools(server, ctx); },
+  tasks: (server, ctx) => { registerTasksTools(server, ctx); registerTaskNoteTools(server, ctx); registerWorkflowTools(server, ctx); },
   diagrams: registerDiagramsTools,
   appraisal: registerAppraisalTools,
   "dx-audit": registerDxAuditTools,
@@ -106,6 +110,7 @@ const TOOLSETS: Record<string, (server: McpServer, ctx: Context) => void> = {
   },
   ownership: registerOwnershipTools,
   datadog: registerDatadogTools,
+  storyboard: registerStoryboardTools,
   capability: registerCapabilityTools,
   sessions: registerSessionTools,
   recall: registerRecallTools,
@@ -166,6 +171,13 @@ export function createDevhubMcpServer(
   }
 
   const toolsets = selectToolsets(env.DEVHUB_MCP_TOOLSETS, TOOLSET_NAMES);
+
+  // Tag each tool with the toolset it was registered under (`_meta`, additive), so a client
+  // such as the Slack router can group the tool list without guessing from names.
+  const registerWithToolset = server.registerTool.bind(server) as (name: string, config: Record<string, unknown>, cb: unknown) => unknown;
+  server.registerTool = ((name: string, config: { _meta?: Record<string, unknown> }, cb: unknown) =>
+    registerWithToolset(name, registeringToolset ? { ...config, _meta: { ...config._meta, "devhub/toolset": registeringToolset } } : config, cb)) as typeof server.registerTool;
+
   for (const name of toolsets.names) {
     registeringToolset = name;
     TOOLSETS[name]?.(server, ctx);

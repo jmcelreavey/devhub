@@ -1,6 +1,7 @@
 "use client";
 
 import { getAgentCliConfig, type AgentCli, type AgentCliConfig } from "@/lib/agent/cli-config";
+import { applyEffort } from "@/lib/ai/effort";
 import { shellQuote } from "@/lib/shell-quote";
 import { UPSTART_WORKTREE_INSTRUCTIONS } from "@/lib/repos/upstart-command";
 import type { TerminalSessionKind } from "@/lib/terminal-meta";
@@ -620,6 +621,8 @@ export async function resolveTaskImplementationProvider(
 
 export type TaskImplementationCommandOptions = {
   model?: string;
+  /** Reasoning effort. Blank leaves the command unchanged. */
+  effort?: string;
   /** When set and the CLI supports it, continue that interactive session. */
   resumeSessionId?: string;
 };
@@ -640,11 +643,14 @@ export async function taskImplementationCommand(
   const resumeFlag = resumeId ? ` --resume ${shellQuote(resumeId)}` : "";
 
   if (selected === "claude") {
-    const modelFlag = requestedModel ? ` --model ${shellQuote(requestedModel)}` : "";
+    const applied = applyEffort({ provider: "claude", model: requestedModel, effort: options.effort });
+    const modelForFlag = applied.model ?? requestedModel;
+    const modelFlag = modelForFlag ? ` --model ${shellQuote(modelForFlag)}` : "";
+    const effortFlag = applied.thinkingOptionId ? ` --effort ${shellQuote(applied.thinkingOptionId)}` : "";
     return {
       command: guardedCliCommand(
         "claude",
-        `claude --dangerously-skip-permissions${modelFlag}${resumeFlag} ${shellQuote(prompt)}`,
+        `claude --dangerously-skip-permissions${modelFlag}${effortFlag}${resumeFlag} ${shellQuote(prompt)}`,
         "Claude CLI not found. Install Claude Code to implement this task.",
       ),
       label: "Claude",
@@ -653,7 +659,13 @@ export async function taskImplementationCommand(
   }
 
   if (selected === "cursor") {
-    const selectedModel = requestedModel || config.cursorModel;
+    const applied = applyEffort({
+      provider: "cursor",
+      model: requestedModel || config.cursorModel,
+      effort: options.effort,
+      availableModels: config.models?.["cursor-cli"],
+    });
+    const selectedModel = applied.model || requestedModel || config.cursorModel;
     return {
       command: guardedCliCommand(
         "cursor-agent",
@@ -667,8 +679,11 @@ export async function taskImplementationCommand(
 
   if (selected === "chatgpt") {
     const bundled = shellQuote(CHATGPT_APP_CODEX);
-    const modelFlag = requestedModel ? ` -m ${shellQuote(requestedModel)}` : "";
-    const args = `--dangerously-bypass-approvals-and-sandbox${modelFlag} ${shellQuote(prompt)}`;
+    const applied = applyEffort({ provider: "codex", model: requestedModel, effort: options.effort });
+    const modelForFlag = applied.model ?? requestedModel;
+    const modelFlag = modelForFlag ? ` -m ${shellQuote(modelForFlag)}` : "";
+    const effortFlag = applied.thinkingOptionId ? ` -c ${shellQuote(`model_reasoning_effort=${applied.thinkingOptionId}`)}` : "";
+    const args = `--dangerously-bypass-approvals-and-sandbox${effortFlag}${modelFlag} ${shellQuote(prompt)}`;
     const onPath = guardedCliCommand(
       "codex",
       `codex ${args}`,

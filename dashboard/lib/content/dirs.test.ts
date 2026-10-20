@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import path from "node:path";
-import { getRepoRoot, getTasksDir, getCollectionsDir, getDocsDir, getUpstartsDir } from "@/lib/content/dirs";
+import { getRepoRoot, getTasksDir, getActiveTasksDir, getCollectionsDir, getDocsDir, getUpstartsDir } from "@/lib/content/dirs";
+import { withTaskDirectory } from "@/lib/tasks/profile-context";
 
 const SAVE = {
   REPO_ROOT: process.env.REPO_ROOT,
@@ -29,6 +30,17 @@ afterEach(() => {
 });
 
 describe("personal content dir resolution", () => {
+  it("keeps async requests in their captured profile without leaking the scope to other roots", async () => {
+    const root = getTasksDir();
+    await withTaskDirectory(root, "/repo/tasks/work", async () => {
+      await Promise.resolve();
+      expect(getActiveTasksDir()).toBe("/repo/tasks/work");
+      process.env.TASKS_DIR = "/elsewhere/tasks";
+      expect(getActiveTasksDir()).toBe("/elsewhere/tasks");
+      delete process.env.TASKS_DIR;
+    });
+    expect(getActiveTasksDir()).toBe(root);
+  });
   it("uses the private mirror as desktop content root only when explicitly selected", () => {
     vi.stubEnv("DEVHUB_DESKTOP", "1");
     vi.stubEnv("DEVHUB_APP_DATA", "/app-data");

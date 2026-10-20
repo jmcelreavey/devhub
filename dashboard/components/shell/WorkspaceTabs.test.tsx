@@ -156,7 +156,7 @@ describe("browser navigation (ui_open generalization)", () => {
       source?.emit(JSON.stringify({ href: "/work", newTab: true }));
     });
 
-    expect(screen.getByRole("tab", { name: /work/i })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /tasks/i })).toBeInTheDocument();
   });
 
   it("does not listen when the browser opt-out flag is set", () => {
@@ -174,7 +174,7 @@ describe("browser navigation (ui_open generalization)", () => {
     window.localStorage.removeItem(UI_OPEN_BROWSER_FLAG);
     renderStrip(["/work"]);
 
-    const tab = screen.getByRole("tab", { name: /work/i });
+    const tab = screen.getByRole("tab", { name: /tasks/i });
     // Activate the initial (Today) tab so /work is not active, then re-publish.
     const initialTab = screen.getAllByRole("tab").find((el) => el !== tab);
     expect(initialTab).toBeDefined();
@@ -188,8 +188,8 @@ describe("browser navigation (ui_open generalization)", () => {
       source?.emit(JSON.stringify({ href: "/work", newTab: true }));
     });
 
-    expect(screen.getAllByRole("tab", { name: /work/i })).toHaveLength(1);
-    expect(screen.getByRole("tab", { name: /work/i })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getAllByRole("tab", { name: /tasks/i })).toHaveLength(1);
+    expect(screen.getByRole("tab", { name: /tasks/i })).toHaveAttribute("aria-selected", "true");
   });
 });
 
@@ -307,8 +307,8 @@ describe("WorkspaceTabPanels isolation", () => {
 
     routerPush.mockClear();
     unmounted.length = 0;
-    const todayTab = screen.getAllByRole("tab").find((t) => t.textContent?.includes("Today"));
-    fireEvent.click(todayTab!);
+    const homeTab = screen.getAllByRole("tab").find((tab) => tab.textContent?.includes("Home"));
+    fireEvent.click(homeTab!);
 
     expect(routerPush).toHaveBeenCalledWith("/");
     expect(unmounted).toContain("work");
@@ -364,15 +364,15 @@ describe("WorkspaceTabPanels isolation", () => {
     fireEvent.click(screen.getByText("seed"));
     fireEvent.click(screen.getByText("shift-open"));
 
-    expect(screen.getByRole("tab", { name: /Today/ })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: /Work/ })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /Home/ })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /Tasks/ })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /b/ })).toBeInTheDocument();
 
     pathname.current = "/notes/b";
     view.rerender(tree());
 
     const titles = screen.getAllByRole("tab").map((t) => t.textContent);
-    expect(titles.some((t) => t?.includes("Work"))).toBe(true);
-    expect(titles.filter((t) => t?.includes("Work"))).toHaveLength(1);
+    expect(titles.some((t) => t?.includes("Tasks"))).toBe(true);
+    expect(titles.filter((t) => t?.includes("Tasks"))).toHaveLength(1);
   });
 });

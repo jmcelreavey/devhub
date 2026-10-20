@@ -95,6 +95,8 @@ notes/.cache/
 
 # DevHub local app state (machine-local)
 .devhub/
+# QA receipts can contain screenshots and application content; export evidence explicitly.
+notes/.config/qa/
 
 # Agent-run transcripts and idempotency keys. One directory per dispatch.
 # The task-agent-runs index is the durable record.
@@ -114,3 +116,6 @@ notes/.config/agent-runs/run-*/
 # Task timers are per machine. The task items themselves stay synced.
 tasks/.local/
 tasks/*/.local/
+
+# Agent run result scratch files
+/*.result

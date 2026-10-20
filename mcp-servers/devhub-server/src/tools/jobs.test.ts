@@ -83,4 +83,8 @@ describe("scheduling preference", () => {
     expect(PREFER_JOBS).toMatch(/CronCreate/);
     expect(SERVER_INSTRUCTIONS).toMatch(/jobs_create/);
   });
+  it("tells harnesses to prefer DevHub for tasks, notes, Jira, PRs and repos, and to fall back when it is down", () => {
+    expect(SERVER_INSTRUCTIONS).toMatch(/Prefer DevHub[\s\S]*tasks_\*[\s\S]*jira_\*[\s\S]*prs_\*[\s\S]*repos_\*/);
+    expect(SERVER_INSTRUCTIONS).toMatch(/unreachable[\s\S]*normal tools/);
+  });
 });

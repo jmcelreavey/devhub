@@ -1,4 +1,5 @@
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { exitWithParent } from "../../../shared/process/exit-with-parent.ts";
 import { createContext } from "./context.ts";
 import { historyEnabled, mcpHistoryDir } from "./history.ts";
 import { createDevhubMcpServer, startupHousekeeping, TOOLSET_NAMES } from "./server.ts";
@@ -11,6 +12,8 @@ const { server, toolsets } = createDevhubMcpServer(ctx);
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
+  // A client that dies without closing the pipe must not leave this server behind.
+  exitWithParent();
   console.error(
     `DevHub MCP server running (notes: ${ctx.notesDir}, docs: ${ctx.docsDir}, dashboard: ${ctx.dashboard.baseUrl}, toolsets: ${toolsets.names.length}/${TOOLSET_NAMES.length}, history: ${historyEnabled() ? mcpHistoryDir() : "off"})`,
   );

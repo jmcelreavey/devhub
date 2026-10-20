@@ -5,6 +5,8 @@ import { formatZodError, NotePutSchema } from "@/lib/schemas";
 import { withErrorHandler } from "@/lib/api-utils";
 import { getVault, getVaultStorage, type VaultId } from "@/lib/vault/vault-registry";
 import { z } from "zod";
+import { isTaskNotePath } from "@shared/task-note/sections.ts";
+import { mergeAgentEditsIntoTask } from "@/lib/notes/task-note-merge";
 
 type Params = { params: Promise<{ path: string[] }> };
 
@@ -70,20 +72,31 @@ export function createVaultRoutes(vaultId: VaultId) {
       vaultId === "notes" && "expectedModified" in parsed.data
         ? parsed.data.expectedModified
         : undefined;
+    let content = normalizeWriteContent(vaultId, parsed.data.content);
+    let merged: unknown[] | undefined;
     if (expectedModified !== undefined) {
       const current = storage.read(filePath);
       const stale = expectedModified === null ? current !== null : !current || current.modified !== expectedModified;
       if (stale) {
-        return NextResponse.json(
-          { error: "This note changed elsewhere. Reload before saving." },
-          { status: 409 },
-        );
+        // An agent rewrote a task note's sections since this editor loaded it. Keep their
+        // sections and apply only the free-form blocks being saved; done here, between the
+        // read and the write, so nothing can land in the gap.
+        const mergeRequested = "mergeAgentSections" in parsed.data && parsed.data.mergeAgentSections === true;
+        const mergeable = mergeRequested && vaultId === "notes" && current && isTaskNotePath(filePath);
+        const result = mergeable && Array.isArray(content) ? mergeAgentEditsIntoTask(current, content) : null;
+        if (!result) {
+          return NextResponse.json(
+            { error: "This note changed elsewhere. Reload before saving." },
+            { status: 409 },
+          );
+        }
+        content = result.blocks;
+        merged = result.blocks;
       }
     }
-    const content = normalizeWriteContent(vaultId, parsed.data.content);
     const result = storage.write(filePath, content);
     revalidateVault(vaultId);
-    return NextResponse.json(result);
+    return NextResponse.json(merged ? { ...result, merged } : result);
   }, `${vaultId}.put`);
 
   const POST = withErrorHandler(async (req: NextRequest, { params }: Params) => {

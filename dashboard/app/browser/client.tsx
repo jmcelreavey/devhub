@@ -65,7 +65,7 @@ export default function BrowserClient() {
   const disabled = Boolean(busy);
   return <div className={"page-wrapper " + styles.page}>
     <header className={styles.header}><h1>Browser</h1><p>Browse inside DevHub, with a separate Chrome window when you need it. You decide when this task’s agent can read or act.</p>
-      <nav><Link href="/workflow">Task workflows</Link><Link href="/docs/guides/managed-browser">Browser guide</Link></nav>
+      <nav><Link href="/docs/guides/managed-browser">Browser guide</Link></nav>
     </header>
     {failure && <p role="alert" className="tone-panel tone-panel--danger">{failure}</p>}
     {message && <p role="status" className="tone-panel tone-panel--muted">{message}</p>}

@@ -250,7 +250,7 @@ export async function openLogs(): Promise<void> {
 
 /** Swap the running window / Dock icon. No-op in a browser. */
 export async function setDesktopIcon(
-  kind: "default" | "plugin",
+  kind: "default" | "plugin" | "halloween",
   png?: Uint8Array,
 ): Promise<void> {
   const api = tauri();

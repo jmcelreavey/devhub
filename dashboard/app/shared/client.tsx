@@ -16,6 +16,7 @@ import {
 import { useLive } from "@/lib/hooks/use-fetch";
 import { useToast } from "@/lib/hooks/use-toast";
 import { copyTextToClipboard } from "@/lib/clipboard";
+import { openInBrowser } from "@/lib/desktop/bridge";
 import { useConfirm } from "@/components/shell/ConfirmDialog";
 import {
   ContextMenu,
@@ -66,6 +67,7 @@ function LiveLinkRow({
   const groups: ContextMenuGroup[] = [
     {
       id: "open",
+      label: "Open",
       items: [
         {
           id: "open",
@@ -78,13 +80,14 @@ function LiveLinkRow({
           label: "Open gist",
           icon: <ExternalLink {...icon} aria-hidden />,
           onSelect: () => {
-            window.open(share.url, "_blank", "noopener,noreferrer");
+            void openInBrowser(share.url);
           },
         },
       ],
     },
     {
       id: "file",
+      label: "Copy",
       items: [
         {
           id: "copy",
@@ -97,7 +100,12 @@ function LiveLinkRow({
             );
           },
         },
-        canRecover
+      ],
+    },
+    {
+      id: "manage",
+      label: "Manage",
+      items: [canRecover
           ? {
               id: "recover",
               label: busy ? "Recovering…" : "Recover",

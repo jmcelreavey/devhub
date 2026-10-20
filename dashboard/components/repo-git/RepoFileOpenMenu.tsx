@@ -1,6 +1,6 @@
 "use client";
 
-import { ExternalLink } from "lucide-react";
+import { Code2, ExternalLink, GitBranch } from "lucide-react";
 import { LaunchMenu } from "@/components/shell/LaunchMenu";
 import { useLive } from "@/lib/hooks/use-fetch";
 import { useToast } from "@/lib/hooks/use-toast";
@@ -36,6 +36,7 @@ export function RepoFileOpenMenu({
       id: "cursor",
       label: commit ? `Cursor · ${commit.slice(0, 7)}` : "Cursor",
       description: commit ? "Open this revision" : "Open working-tree file",
+      icon: <Code2 size={12} aria-hidden />,
       onSelect: async () => {
         await openRepoFileInCursor(repoName, toast, trimmed, commit);
       },
@@ -46,6 +47,7 @@ export function RepoFileOpenMenu({
             id: "gitkraken",
             label: "GitKraken",
             description: "Open repository",
+            icon: <GitBranch size={12} aria-hidden />,
             onSelect: async () => {
               await openRepoInGitKraken(repoName, toast);
             },

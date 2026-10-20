@@ -7,6 +7,7 @@
  * Playwriter's MCP resources instead.
  */
 import { spawn } from "node:child_process";
+import { exitWithParent } from "../../../shared/process/exit-with-parent.ts";
 import { StringDecoder } from "node:string_decoder";
 
 export const PLAYWRITER_EXECUTE_DESCRIPTION = [
@@ -96,6 +97,16 @@ function main(): void {
   child.on("exit", (code, signal) => {
     if (signal) process.kill(process.pid, signal);
     process.exit(code ?? 1);
+  });
+
+  // stdin ending is handled above (the child exits on its own); this covers a
+  // client that dies without closing the pipe.
+  exitWithParent({
+    watchStdin: false,
+    exit: (code) => {
+      child.kill("SIGTERM");
+      process.exit(code);
+    },
   });
 }
 

@@ -9,6 +9,7 @@
  */
 import path from "node:path";
 import { safeReadJSON, withMutex, writeAtomic } from "@/lib/atomic-write";
+import { normalizeEffortId } from "@/lib/ai/effort";
 import { AI_PROVIDER_IDS, normalizeAiProvider } from "@/lib/ai/preference";
 import { getNotesDir } from "@/lib/notes/dir";
 import type { ConventionsPrefs } from "./types";
@@ -21,6 +22,7 @@ export const DEFAULT_CONVENTIONS_PREFS: ConventionsPrefs = {
   minIntervalHours: 12,
   provider: "",
   model: "",
+  effort: "",
 };
 
 interface StoredPrefs {
@@ -51,6 +53,7 @@ export function normalizeConventionsPrefs(
     minIntervalHours: clampInt(src.minIntervalHours, 1, 168, base.minIntervalHours),
     provider: AI_PROVIDER_IDS.includes(provider as never) ? provider : "",
     model: typeof src.model === "string" ? src.model.trim().slice(0, 120) : base.model,
+    effort: src.effort === undefined ? base.effort : normalizeEffortId(src.effort),
   };
 }
 

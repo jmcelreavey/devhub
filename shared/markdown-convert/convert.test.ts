@@ -21,6 +21,18 @@ function bInline(type: string, content: unknown[], extra?: Record<string, unknow
   };
 }
 
+describe("note media images", () => {
+  it("round-trips pasted /api/notes-media images through markdown", () => {
+    const url = `/api/notes-media/${"b".repeat(64)}.png`;
+    const image = { id: "i", type: "image", props: { url, caption: "" }, children: [] };
+    const md = blocksToText([image]);
+    expect(md).toBe(`![](${url})`);
+    const [back] = textToBlocks(md) as Array<{ type: string; props: { url: string } }>;
+    expect(back?.type).toBe("image");
+    expect(back?.props.url).toBe(url);
+  });
+});
+
 describe("textToBlocks", () => {
   it("converts paragraphs", () => {
     const blocks = textToBlocks("hello\nworld") as Record<string, unknown>[];
@@ -836,3 +848,16 @@ describe("blocksToPortableMarkdown", () => {
     );
   });
 });
+
+describe("scaffold list lines", () => {
+  it("turns a bare \"- [ ]\" into a real empty checkbox, not a bullet reading [ ]", () => {
+    const blocks = textToBlocks("- [ ]\n- [x]\n* [ ] star") as Array<{ type: string; props?: { checked?: boolean }; content?: unknown[] }>;
+    expect(blocks.map((b) => b.type)).toEqual(["checkListItem", "checkListItem", "checkListItem"]);
+    expect(blocks[1].props?.checked).toBe(true);
+  });
+  it("turns a bare \"- \" into an empty bullet, not a literal dash paragraph", () => {
+    const blocks = textToBlocks("## Notes\n\n- \n") as Array<{ type: string }>;
+    expect(blocks.map((b) => b.type)).toEqual(["heading", "bulletListItem"]);
+  });
+});
+

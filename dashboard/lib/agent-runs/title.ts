@@ -19,5 +19,10 @@ export function agentRunTitle(input: { title?: string; prompt: string; activity?
   const key = task.jiraKey || parseJiraIssueKey(task.text);
   const text = (key ? stripLinkedJiraKeyFromText(task.text, key) : task.text)
     .replace(/(^|\s)#[\w-]+/g, " ").replace(/\s+/g, " ").trim();
-  return [action, key, text || "Task"].filter(Boolean).join(" · ").slice(0, 80);
+  // The label goes last but must survive the clip, so the task text gives way to it.
+  const label = activity.label?.trim();
+  const head = [action, key, text || "Task"].filter(Boolean).join(" · ");
+  if (!label) return head.slice(0, 80);
+  const room = 80 - label.length - 3;
+  return `${head.length > room ? `${head.slice(0, Math.max(room - 1, 1))}…` : head} · ${label}`;
 }

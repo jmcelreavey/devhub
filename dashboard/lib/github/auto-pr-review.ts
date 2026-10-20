@@ -5,6 +5,7 @@
  * note path as the UI "Review with agent" action, on the default AI provider
  * (`startBackgroundAgent`) — never posts a GitHub review comment.
  */
+import { getTaskProfileOverview } from "@/lib/tasks/profiles";
 import { readAutoPrReviewPrefs } from "@/lib/github/auto-pr-review-prefs";
 import { listOwnedRepos } from "@/lib/ownership/owned-repos";
 import { startBackgroundAgent } from "@/lib/agent-runs/background";
@@ -266,6 +267,7 @@ export interface RunAutoPrReviewOptions {
  */
 export async function runAutoPrReview(opts: RunAutoPrReviewOptions): Promise<AutoReviewResult> {
   const dryRun = opts.dryRun === true;
+  const workProfile = getTaskProfileOverview().active ?? "default";
   const ownedRepos = readAutoPrReviewPrefs().ownedOnly
     ? new Set(listOwnedRepos().map((repo) => repo.fullName.toLowerCase()))
     : null;
@@ -340,6 +342,7 @@ export async function runAutoPrReview(opts: RunAutoPrReviewOptions): Promise<Aut
     try {
       const { runId, sessionId } = await startReview({ row, notePath });
       await recordAutoPrReviewStart({
+        workProfile,
         url: row.url,
         updatedAt: row.updatedAt ?? "",
         headSha: row.headSha,

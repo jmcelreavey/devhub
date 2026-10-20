@@ -7,14 +7,16 @@
  */
 
 import {
-  buildEntityLinksSection,
+  entityRefToTaskNoteLink,
   escapeRegExp,
+  extractTags,
   joinMarkdownLines,
   mergeEntityRefs,
   parseJiraIssueKey,
   slugify,
   type EntityRef,
 } from "../entity-note/index.ts";
+import { mergeTaskNoteLinks, taskNoteMetaFence, type TaskNoteLink, type TaskNoteMeta } from "./meta.ts";
 
 export interface TaskNoteSource {
   id: string;
@@ -62,30 +64,45 @@ export function taskEntityRefs(task: TaskNoteSource): EntityRef[] {
   ];
 }
 
-/** Markdown scaffold for a task note, with EntityRef backlinks. */
+/** Header metadata a fresh task note starts with: the pills the note view shows. */
+export function buildTaskNoteMeta(task: TaskNoteSource): TaskNoteMeta {
+  const jira: TaskNoteLink[] = task.jiraKey
+    ? [{ kind: "jira", id: task.jiraKey, label: task.jiraKey, ...(task.jiraUrl ? { href: task.jiraUrl } : {}) }]
+    : [];
+  const related = (task.related ?? [])
+    .map(entityRefToTaskNoteLink)
+    .filter((link): link is TaskNoteLink => link !== null);
+  const tags = extractTags(task.text);
+  return {
+    status: "todo",
+    date: (task.date || "").slice(0, 10),
+    ...(tags.length ? { tags } : {}),
+    links: mergeTaskNoteLinks(jira, [{ kind: "task", id: task.id, label: "Open in Work", href: "/work?tab=tasks" }], related),
+  };
+}
+
+/**
+ * Markdown scaffold for a task note.
+ *
+ * The header is one ```task-meta block (status, tags, links) that the note view
+ * renders as pills; the `::task-ref` line is the task backlink the entity graph
+ * reads. Standard sections (Summary, Decisions, …) are added on demand by
+ * `applyTaskNoteOp`, so a new note has no empty headings.
+ */
 export function buildTaskNoteMarkdown(task: TaskNoteSource): string {
   const title = task.text.trim() || "Untitled task";
-  const links = buildEntityLinksSection(taskEntityRefs(task));
+  const ref = taskEntityRefs(task)[0];
 
   return joinMarkdownLines([
     `# ${title}`,
     "",
-    `**Date:** ${(task.date || "").slice(0, 10)}`,
-    task.jiraKey && task.jiraUrl
-      ? `**Jira:** [${task.jiraKey}](${task.jiraUrl})`
-      : task.jiraKey
-        ? `**Jira:** ${task.jiraKey}`
-        : null,
+    taskNoteMetaFence(buildTaskNoteMeta(task)),
     "",
-    links.trimEnd(),
+    ref?.marker ?? null,
     "",
     "## Notes",
     "",
     "- ",
-    "",
-    "## Action items",
-    "",
-    "- [ ] ",
   ]);
 }
 
@@ -117,9 +134,10 @@ function refJiraKey(ref: EntityRef): string {
 function promotableJiraKey(
   jiraKey: string | undefined | null,
   links: EntityRef[] | undefined,
+  parentKey?: string,
 ): string | null {
   if (jiraKey) return null;
-  const jira = links?.find((l) => l.kind === "jira" && l.id);
+  const jira = links?.find((link) => link.kind === "jira" && link.id && refJiraKey(link) !== parentKey?.toUpperCase());
   if (!jira) return null;
   return refJiraKey(jira);
 }
@@ -132,8 +150,9 @@ export function textWithJiraLinkPromotion(
   text: string,
   jiraKey: string | undefined | null,
   links: EntityRef[] | undefined,
+  parentKey?: string,
 ): string {
-  const key = promotableJiraKey(jiraKey, links);
+  const key = promotableJiraKey(jiraKey, links, parentKey);
   if (!key) return text;
   if (new RegExp(`\\b${escapeRegExp(key)}\\b`, "i").test(text)) return text;
   return rewriteTaskKey(text, undefined, key);
@@ -147,16 +166,16 @@ export function normalizeTaskLinkState(
   text: string,
   jiraKey: string | undefined | null,
   links: EntityRef[] | undefined,
+  parentKey?: string,
 ): { text: string; jiraKey: string | undefined; links: EntityRef[] | undefined } {
   const deduped = links?.length ? mergeEntityRefs(links) : undefined;
   const nextLinks = deduped && deduped.length > 0 ? deduped : undefined;
   // Derive the key once and reuse it for the title, rather than promoting the
   // text and then re-parsing the key back out of it three different ways.
-  const promoted = promotableJiraKey(jiraKey, nextLinks);
+  const promoted = promotableJiraKey(jiraKey, nextLinks, parentKey);
   return {
-    text: promoted ? textWithJiraLinkPromotion(text, jiraKey, nextLinks) : text,
+    text: promoted ? textWithJiraLinkPromotion(text, jiraKey, nextLinks, parentKey) : text,
     jiraKey: jiraKey || promoted || undefined,
     links: nextLinks,
   };
 }
-

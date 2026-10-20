@@ -5,7 +5,9 @@ const mocks = vi.hoisted(() => ({
   dispatchAgentRun: vi.fn(),
   readImplementReviewPrefs: vi.fn(),
   getTasks: vi.fn(),
+  taskTierChoice: vi.fn(),
 }));
+vi.mock("@/lib/storyboard/task-tiers", () => ({ taskTierChoice: mocks.taskTierChoice }));
 
 vi.mock("@/lib/api-utils", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/api-utils")>()),
@@ -49,6 +51,7 @@ beforeEach(() => {
   mocks.readImplementReviewPrefs.mockReturnValue({ provider: "codex", model: "gpt-6-astra" });
   mocks.getTasks.mockReturnValue([{ id: "task-1", text: "Cap webhook retries with jitter", jiraKey: "PAY-482" }]);
   mocks.dispatchAgentRun.mockResolvedValue({ id: "run-abc" });
+  mocks.taskTierChoice.mockReturnValue({ step: "review", tier: "heavy", provider: "", model: "", source: "defaults" });
 });
 
 describe("POST /api/tasks/implement/review", () => {
@@ -115,5 +118,19 @@ describe("POST /api/tasks/implement/review", () => {
     const response = await POST(request(valid));
     expect(response.status).toBe(400);
     expect(await response.json()).toEqual({ error: "Provider codex is not ready." });
+  });
+  it("runs the reviewer the review tier names, over review settings", async () => {
+    mocks.taskTierChoice.mockReturnValue({ step: "review", tier: "heavy", provider: "claude", model: "opus", effort: "max", source: "defaults" });
+    const response = await POST(request(valid));
+    expect(response.status).toBe(201);
+    expect(mocks.taskTierChoice).toHaveBeenCalledWith("task-1", "review");
+    expect(mocks.dispatchAgentRun).toHaveBeenCalledWith(expect.objectContaining({ provider: "claude", model: "opus", effort: "max" }));
+    expect(await response.json()).toMatchObject({ reviewer: { provider: "claude", model: "opus", effort: "max" } });
+  });
+
+  it("starts the review tier's agent even when no reviewer is assigned", async () => {
+    mocks.readImplementReviewPrefs.mockReturnValue({ provider: "", model: "" });
+    mocks.taskTierChoice.mockReturnValue({ step: "review", tier: "heavy", provider: "claude", model: "", source: "auto" });
+    expect((await POST(request(valid))).status).toBe(201);
   });
 });

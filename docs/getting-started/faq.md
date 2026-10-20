@@ -76,7 +76,7 @@ runs in WSL.
 Choose **DevHub → Check for Updates…**. If a newer version exists, DevHub shows a banner;
 you decide when to download and restart. If you also keep a linked private checkout that
 is ahead of the installed app, rebuild it from there: **Rebuild from Checkout…** on
-Windows (then **Pull and rebuild** under **System → Maintenance**), or **View → Rebuild
+Windows (then **Pull and rebuild** under **Settings → Maintenance**), or **View → Rebuild
 Dashboard…** on a Mac. Both need a linked checkout. See
 [Updating](guided-setup.md#updating).
 

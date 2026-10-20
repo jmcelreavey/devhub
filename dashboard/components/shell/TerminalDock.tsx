@@ -1569,6 +1569,7 @@ export function TerminalDock() {
   const termMenuGroups: ContextMenuGroup[] = [
     {
       id: "clip",
+      label: "Clipboard",
       items: [
         {
           id: "copy",
@@ -1605,6 +1606,12 @@ export function TerminalDock() {
             });
           },
         },
+      ],
+    },
+    {
+      id: "agent",
+      label: "Agent",
+      items: [
         {
           id: "send-agent",
           label: "Send to Agent",
@@ -1831,6 +1838,7 @@ export function TerminalDock() {
                       });
                     }}
                   >
+                    {tpl.id === "agent" ? <Sparkles size={12} aria-hidden /> : <SquareTerminal size={12} aria-hidden />}
                     {tpl.label}
                   </button>
                 ))}

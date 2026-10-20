@@ -1,5 +1,6 @@
 import {
   imageMarkdownLine,
+  isVideoMediaPath,
   parseImageMarkdownLine,
   toNoteAssetApiUrl,
   toNoteAssetMarkdownPath,
@@ -120,7 +121,7 @@ function serializeRoundTripBlocks(blocks: unknown[]): string {
       lines.push(tableBlockToText(b));
     } else if (b.type === "divider") {
       lines.push("---");
-    } else if (b.type === "image") {
+    } else if (b.type === "image" || b.type === "video") {
       const caption = typeof props?.caption === "string" ? props.caption : "";
       const url = typeof props?.url === "string" ? props.url : "";
       lines.push(imageMarkdownLine(caption, toNoteAssetMarkdownPath(url)));
@@ -221,7 +222,7 @@ function serializePortableBlocks(blocks: unknown[]): string {
       i++;
       continue;
     }
-    if (type === "image") {
+    if (type === "image" || type === "video") {
       const caption = typeof props?.caption === "string" ? props.caption : "";
       const url = typeof props?.url === "string" ? props.url : "";
       push(imageMarkdownLine(caption, toNoteAssetMarkdownPath(url)));
@@ -589,7 +590,7 @@ function tableBlockToText(
   return mdRows.join("\n");
 }
 
-interface InlineSegment {
+export interface InlineSegment {
   type: string;
   text?: string;
   href?: string;
@@ -599,6 +600,11 @@ interface InlineSegment {
 
 const INLINE_RE =
   /(\*\*\*(.+?)\*\*\*|\*\*(.+?)\*\*|\*(.+?)\*|~~(.+?)~~|`([^`]+)`|\[([^\]]+)\]\(([^)]+)\))/g;
+
+/** Inline markdown (bold, italic, code, links) to BlockNote inline content. */
+export function parseInlineMarkdown(text: string): InlineSegment[] {
+  return parseInline(text);
+}
 
 function parseInline(text: string): InlineSegment[] {
   const parts: InlineSegment[] = [];
@@ -837,7 +843,7 @@ export function textToBlocks(text: string): unknown[] {
       const notesPath = toNoteAssetMarkdownPath(imageLine.path);
       blocks.push({
         id: crypto.randomUUID(),
-        type: "image",
+        type: isVideoMediaPath(notesPath) ? "video" : "image",
         props: {
           textAlignment: "left",
           backgroundColor: "default",
@@ -888,9 +894,13 @@ export function textToBlocks(text: string): unknown[] {
       blocks.push(makeBlock("heading", trimmed.slice(3), { level: 2 }));
     } else if (trimmed.startsWith("# ")) {
       blocks.push(makeBlock("heading", trimmed.slice(2), { level: 1 }));
-    } else if (trimmed.startsWith("- [x] ") || trimmed.startsWith("- [ ] ")) {
-      const checked = trimmed.startsWith("- [x] ");
-      blocks.push(makeBlock("checkListItem", trimmed.slice(6), { checked }));
+    } else if (/^[-*] \[[ xX]?\](\s|$)/.test(trimmed)) {
+      // "- [ ]" with or without text (a trailing space is trimmed away) is a real checkbox.
+      const match = /^[-*] \[([ xX]?)\]\s?(.*)$/.exec(trimmed)!;
+      blocks.push(makeBlock("checkListItem", match[2], { checked: match[1].toLowerCase() === "x" }));
+    } else if (trimmed === "-" || trimmed === "*") {
+      // An empty list line ("- " trimmed) starts an empty bullet, not a literal dash.
+      blocks.push(makeBlock("bulletListItem", ""));
     } else if (trimmed.startsWith("- ") || trimmed.startsWith("* ")) {
       blocks.push(makeBlock("bulletListItem", trimmed.slice(2)));
     } else if (/^\d+\.\s/.test(trimmed)) {

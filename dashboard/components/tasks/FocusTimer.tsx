@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback, useRef, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { useSecondTick } from "@/lib/tickers";
-import { Timer, Square, Check, X } from "lucide-react";
+import { Timer, Square, Check, X, Settings2 } from "lucide-react";
 import {
   clearFocusSession,
   readFocusSession,
@@ -436,10 +436,12 @@ export function FocusTimer() {
                 className="focus-preset"
                 onClick={() => start(p.mins)}
               >
+                <Timer size={12} aria-hidden />
                 <span>{p.label}</span>
                 <span className="focus-preset-mins">{p.mins}m</span>
               </button>
             ))}
+            <div className="context-menu-divider" role="separator" />
             <button
               type="button"
               role="menuitem"
@@ -452,6 +454,7 @@ export function FocusTimer() {
                 setCustomModalOpen(true);
               }}
             >
+              <Settings2 size={12} aria-hidden />
               <span>Custom…</span>
               <span className="focus-preset-mins">-</span>
             </button>

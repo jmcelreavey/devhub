@@ -20,6 +20,7 @@ import { devhubBlockNoteSchema } from "@/lib/blocknote/schema";
 import { blocknoteDashboardTheme } from "@/lib/blocknote/dashboard-theme";
 import { filterDevHubSlashMenuItems } from "@/lib/blocknote/slash-menu";
 import { blocknoteNotesAiEditorOptions } from "@/lib/notes-ai/editor-options";
+import { tagLineExtension } from "@/lib/blocknote/tag-line-extension";
 import { useNotesAiConfigured } from "@/lib/notes-ai/use-notes-ai-configured";
 import { ChecklistIcon } from "@/lib/checklists/icons";
 import { collectCheckboxBlocks } from "@/lib/notes/task-sync";
@@ -31,6 +32,8 @@ import {
   handleBlockNoteLinkClick,
 } from "@/lib/blocknote/link-navigation";
 import { openInBrowser } from "@/lib/desktop/bridge";
+import { createNoteImageUploader } from "@/lib/notes/editor-upload";
+import { useToast } from "@/lib/hooks/use-toast";
 import type { VaultId } from "@/lib/vault/vault-public";
 import "@blocknote/core/fonts/inter.css";
 import "@blocknote/core/style.css";
@@ -281,6 +284,8 @@ interface BlockNoteEditorProps {
   enableAi?: boolean;
   /** Server-known AI availability — skips client status fetch when provided. */
   notesAiConfigured?: boolean;
+  /** Dress `Tags: #a #b` lines as pills (task notes). Display only; the text is untouched. */
+  tagLines?: boolean;
   className?: string;
   style?: React.CSSProperties;
 }
@@ -316,6 +321,7 @@ function BlockNoteEditorReady({
   editable = true,
   enableAi,
   aiConfigured,
+  tagLines = false,
   className,
   style,
 }: BlockNoteEditorReadyProps) {
@@ -330,7 +336,7 @@ function BlockNoteEditorReady({
   const [caseSensitive, setCaseSensitive] = useState(false);
   const [activeMatchIndex, setActiveMatchIndex] = useState(0);
   const [utilityStatus, setUtilityStatus] = useState<string | null>(null);
-  const [, forceDocumentRefresh] = useState(0);
+  const [searchVersion, forceSearchRefresh] = useState(0);
   const notesAiEnabled =
     editable && enableAi !== false && aiConfigured && (enableAi === true || enableAi === undefined);
 
@@ -394,9 +400,21 @@ function BlockNoteEditorReady({
     };
   }, [router]);
 
+  const toast = useToast();
+
+  const aiOptions = notesAiEnabled ? blocknoteNotesAiEditorOptions() : null;
   const editor = useCreateBlockNote(
     {
       schema: devhubBlockNoteSchema,
+      // Paste, drop and the image block's Upload tab all land here. `editor` is
+      // only read when an upload fails, long after it has been assigned.
+      uploadFile: createNoteImageUploader({
+        notify: (message) => toast.error(message),
+        discardPlaceholder: (blockId) => {
+          const block = editor.getBlock(blockId);
+          if (block && block.type === "image" && !block.props.url) editor.removeBlocks([blockId]);
+        },
+      }),
       initialContent: stableInitialContent,
       animations: true,
       defaultStyles: true,
@@ -404,17 +422,24 @@ function BlockNoteEditorReady({
         HTMLAttributes: { rel: "noopener noreferrer" },
         onClick: (event) => linkClickHandlerRef.current(event),
       },
-      ...(notesAiEnabled ? blocknoteNotesAiEditorOptions() : {}),
+      ...aiOptions,
+      extensions: [...(aiOptions?.extensions ?? []), ...(tagLines ? [tagLineExtension] : [])],
     },
-    [notesAiEnabled],
+    [notesAiEnabled, tagLines],
   );
 
   const wrappedOnChange = useCallback(() => {
-    forceDocumentRefresh((version) => version + 1);
+    if (utilityOpen && findQuery) forceSearchRefresh((version) => version + 1);
     onChangeRef.current?.(editor.document as DevHubPartialBlock[]);
-  }, [editor]);
+  }, [editor, findQuery, utilityOpen]);
 
-  const searchableBlocks = flattenSearchableBlocks(editor.document as readonly SearchableBlock[]);
+  const searchableBlocks = useMemo(() => {
+    // BlockNote mutates its document in place; the version invalidates this derived search index.
+    void searchVersion;
+    return utilityOpen && findQuery
+      ? flattenSearchableBlocks(editor.document as readonly SearchableBlock[])
+      : [];
+  }, [editor, findQuery, searchVersion, utilityOpen]);
 
   const matchCount = findQuery
     ? searchableBlocks.reduce(
@@ -467,7 +492,7 @@ function BlockNoteEditorReady({
     // The replaced occurrence is gone, so the same index now points at the next
     // match — re-highlight it against the freshly updated document.
     selectMatch(editor.prosemirrorView, findQuery, caseSensitive, clampedActiveMatchIndex);
-    forceDocumentRefresh((version) => version + 1);
+    forceSearchRefresh((version) => version + 1);
   }, [caseSensitive, clampedActiveMatchIndex, editor, findQuery, matchCount, replaceValue, searchableBlocks]);
 
   const replaceAll = useCallback(() => {
@@ -482,7 +507,7 @@ function BlockNoteEditorReady({
     });
     setActiveMatchIndex(0);
     setUtilityStatus(`Replaced ${replaced} ${replaced === 1 ? "match" : "matches"}.`);
-    forceDocumentRefresh((version) => version + 1);
+    forceSearchRefresh((version) => version + 1);
   }, [caseSensitive, editor, findQuery, matchCount, replaceValue, searchableBlocks]);
 
   const copyMarkdown = useCallback(async () => {
@@ -493,11 +518,14 @@ function BlockNoteEditorReady({
   }, [editor]);
 
   const copyPlainText = useCallback(async () => {
+    const currentBlocks = flattenSearchableBlocks(
+      editor.document as readonly SearchableBlock[],
+    );
     await copyTextToClipboard(
-      searchableBlocks.map((block) => inlineText(block.content)).filter(Boolean).join("\n"),
+      currentBlocks.map((block) => inlineText(block.content)).filter(Boolean).join("\n"),
     );
     setUtilityStatus("Copied plain text.");
-  }, [searchableBlocks]);
+  }, [editor]);
 
   const prependSlashItems = useMemo((): DefaultReactSuggestionItem[] => {
     const items: DefaultReactSuggestionItem[] = [];

@@ -153,7 +153,7 @@ export function buildCommitMenuGroups(
         {
           id: "rebase-plan",
           label: "Rewrite history from here…",
-          description: "Reorder, reword, squash, fixup or drop commits after this one",
+          description: "Plan changes to later commits",
           icon: <ListTree size={12} />,
           disabled: busy || isMerge,
           disabledReason: isMerge
@@ -182,6 +182,7 @@ export function buildCommitMenuGroups(
     },
     {
       id: "copy",
+      label: "Copy and share",
       items: [
         {
           id: "copy-sha",
@@ -202,10 +203,15 @@ export function buildCommitMenuGroups(
           icon: <Share2 size={12} />,
           onSelect: () => cb.onSharePatch(commit),
         },
-        {
+      ],
+    },
+    {
+      id: "review",
+      label: "Review",
+      items: [{
           id: "review",
           label: "Review this commit",
-          description: "Write reviews/<repo>-<date> with a Repo entity link",
+          description: "Write a review note linked to this repo",
           icon: <ScanSearch size={12} />,
           onSelect: () => cb.onReview(commit),
         },

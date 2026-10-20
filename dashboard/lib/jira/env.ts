@@ -1,9 +1,19 @@
 import { readDashboardEnvLocalFile, resolveEnvValue } from "@/lib/dashboard-env-local";
+import { normalizeJiraDomain } from "@/lib/utils";
 
 export interface ResolvedJira {
   domain: string;
   email: string;
   apiToken: string;
+}
+
+/** Domain used for browse links. File wins over the process env, same as the API client. */
+export function configuredJiraDomain(): string {
+  const { overrides } = readDashboardEnvLocalFile();
+  return (
+    normalizeJiraDomain(resolveEnvValue("JIRA_DOMAIN", overrides))
+    || normalizeJiraDomain(resolveEnvValue("NEXT_PUBLIC_JIRA_DOMAIN", overrides))
+  );
 }
 
 export function getResolvedJiraEnv(): ResolvedJira | null {

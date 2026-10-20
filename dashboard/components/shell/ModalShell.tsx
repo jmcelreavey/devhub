@@ -18,6 +18,8 @@ export interface ModalShellProps {
   footer?: ReactNode;
   /** Close when the backdrop is clicked. Default true. */
   dismissOnBackdrop?: boolean;
+  /** Close on Escape. Default true. */
+  dismissOnEscape?: boolean;
   /** Move focus to the heading. Used when the heading is the review title. */
   focusTitle?: boolean;
   /** Changes which view should receive heading focus without remounting. */
@@ -41,6 +43,7 @@ export function ModalShell({
   align = "center",
   footer,
   dismissOnBackdrop = true,
+  dismissOnEscape = true,
   focusTitle = false,
   focusToken,
 }: ModalShellProps) {
@@ -104,7 +107,7 @@ export function ModalShell({
       onCancel={(e) => {
         // Fires only on the topmost open dialog, so stacked modals close one at a time.
         e.preventDefault();
-        onClose();
+        if (dismissOnEscape) onClose();
       }}
       onClick={(e) => {
         if (dismissOnBackdrop && e.target === e.currentTarget) onClose();

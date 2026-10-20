@@ -236,9 +236,13 @@ test.describe("app shell", () => {
 
   test("sidebar exposes the primary destinations", async ({ page }) => {
     await page.goto("/");
-    // Labels track the sidebar glossary (Notes / Skills — see lib/nav.ts).
-    for (const label of ["Today", "Briefing", "Work", "Notes", "Skills", "Repos", "System"]) {
+    // Labels track the sidebar glossary (see lib/nav.ts).
+    for (const label of ["Today", "Storyboard", "Tasks", "Notes", "Repos", "Settings"]) {
       await expect(page.getByRole("link", { name: label, exact: false }).first()).toBeVisible();
+    }
+    // Demoted pages keep their routes (ROUTES above) but not a sidebar row.
+    for (const label of ["Briefing", "Skills", "QA", "Review"]) {
+      await expect(page.locator("aside nav").getByRole("link", { name: label })).toHaveCount(0);
     }
   });
 });

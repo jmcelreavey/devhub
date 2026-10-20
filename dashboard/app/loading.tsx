@@ -1,6 +1,5 @@
-import { BootScreen } from "@/components/today/TodayBootScreen";
+import { PageSkeleton } from "@/components/ui/PageSkeleton";
 
-/** Route-level loading: the branded boot overlay, not skeletons. */
 export default function Loading() {
-  return <BootScreen state="loading" />;
+  return <PageSkeleton titleWidth={200} rows={3} rowHeight={144} variant="list" />;
 }

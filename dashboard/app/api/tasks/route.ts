@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getTasks, addTask, toggleTask, deleteTask, updateTask, abandonTask, reactivateTask, reorderOpenTasks, ensureTasksMigrated, taskMigrationNotice, startTaskTimer, stopTaskTimer } from "@/lib/tasks/storage";
+import { getTasks, addTask, toggleTask, setTaskCompletion, deleteTask, updateTask, abandonTask, reactivateTask, reorderOpenTasks, ensureTasksMigrated, taskMigrationNotice, startTaskTimer, stopTaskTimer } from "@/lib/tasks/storage";
 import { todayISO } from "@/lib/utils";
 import {
   TaskCreateSchema,
@@ -10,6 +10,8 @@ import {
 } from "@/lib/schemas";
 import { withErrorHandler } from "@/lib/api-utils";
 import { currentTaskNode, loadTaskIndex } from "@/lib/tasks/task-index";
+import { isActiveTaskAgentRunStatus, isValidTaskAgentTaskId, listTaskAgentRuns } from "@/lib/tasks/task-agent-runs";
+import { readOrchestration } from "@/lib/storyboard/orchestration-store";
 
 export const GET = withErrorHandler(async (req: Request) => {
   const taskId = new URL(req.url).searchParams.get("taskId");
@@ -34,7 +36,7 @@ export const POST = withErrorHandler(async (req: Request) => {
   if (!parsed.success) {
     return NextResponse.json({ error: formatZodError(parsed.error) }, { status: 400 });
   }
-  const task = await addTask(parsed.data.text.trim(), parsed.data.date, parsed.data.due, parsed.data.links, parsed.data.stage);
+  const task = await addTask(parsed.data.text.trim(), parsed.data.date, parsed.data.due, parsed.data.links, parsed.data.stage, parsed.data.parentKey);
   return NextResponse.json(task, { status: 201 });
 }, "tasks.post");
 
@@ -59,7 +61,20 @@ export const PATCH = withErrorHandler(async (req: Request) => {
   if (!parsed.success) {
     return NextResponse.json({ error: formatZodError(parsed.error) }, { status: 400 });
   }
-  const { id, text, done, due, date, status, abandonReason, timer, links, stage } = parsed.data;
+  const { id, text, done, completion, due, date, status, abandonReason, timer, links, stage } = parsed.data;
+
+  if (completion !== undefined) {
+    if (!isValidTaskAgentTaskId(id)) return NextResponse.json({ error: "Invalid task ID" }, { status: 400 });
+    if (completion) {
+      const orchestration = readOrchestration(id);
+      if (orchestration?.status === "starting" || orchestration?.status === "running" || listTaskAgentRuns(id).some((run) => isActiveTaskAgentRunStatus(run.status))) {
+        return NextResponse.json({ error: "Work is still running. Wait for it to finish or stop it before finishing this task." }, { status: 409 });
+      }
+    }
+    const task = await setTaskCompletion(id, completion, date);
+    if (!task) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    return NextResponse.json(task);
+  }
 
   if (timer) {
     const task = timer === "start" ? await startTaskTimer(id, date) : await stopTaskTimer(id, date);

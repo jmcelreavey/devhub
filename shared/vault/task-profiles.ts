@@ -9,6 +9,11 @@
  * Which profile is active is per-machine and deliberately NOT in the repo:
  * `DEVHUB_PROFILE`, else `~/.config/devhub/profile.json`.
  *
+ * A machine that never chose falls back to the repo's default profile
+ * (`tasks/profiles.json` `{ "default": "work" }`, written when the first
+ * profile is created), never to whichever profile sorts first: "personal"
+ * sorting before "work" would quietly put a fresh machine's work tasks there.
+ *
  * Legacy layout (no profile dirs) keeps tasks in `tasks/items/`.
  */
 import fs from "node:fs";
@@ -20,6 +25,8 @@ const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
 const DAY_FILE_RE = /^\d{4}-\d{2}-\d{2}\.json$/;
 /** Item storage, delete tombstones and the imported day-file archive. Not profile names. */
 const RESERVED_DIRS = new Set(["items", "legacy", "deleted"]);
+/** Repo-wide profile settings in the tasks root (committed, unlike the per-machine choice). */
+const PROFILES_FILE = "profiles.json";
 
 export function isValidProfileId(id: string): boolean {
   // A date-shaped directory name would be indistinguishable from a day.
@@ -60,6 +67,22 @@ export function readActiveProfileId(): string | null {
   }
 }
 
+/** The repo-wide profile for machines that never chose one: `<tasks root>/profiles.json` `default`. */
+export function readDefaultProfileId(tasksRoot: string): string | null {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(path.join(tasksRoot, PROFILES_FILE), "utf-8")) as { default?: unknown };
+    return typeof parsed.default === "string" && isValidProfileId(parsed.default) ? parsed.default : null;
+  } catch {
+    return null;
+  }
+}
+
+export function writeDefaultProfileId(tasksRoot: string, id: string): void {
+  if (!isValidProfileId(id)) throw new Error(`Invalid profile id: ${id}`);
+  fs.mkdirSync(tasksRoot, { recursive: true });
+  fs.writeFileSync(path.join(tasksRoot, PROFILES_FILE), `${JSON.stringify({ default: id }, null, 2)}\n`, "utf-8");
+}
+
 export function writeActiveProfileId(id: string): void {
   if (!isValidProfileId(id)) throw new Error(`Invalid profile id: ${id}`);
   fs.mkdirSync(configDir(), { recursive: true });
@@ -76,8 +99,8 @@ export function writeActiveProfileId(id: string): void {
 export function resolveActiveProfileId(tasksRoot: string): string | null {
   const profiles = listTaskProfiles(tasksRoot);
   if (profiles.length === 0) return null;
-  const chosen = readActiveProfileId();
-  return chosen ?? profiles[0]!;
+  // Chosen, else the repo default (even before its directory exists, same as a choice), else the only sensible guess.
+  return readActiveProfileId() ?? readDefaultProfileId(tasksRoot) ?? profiles[0]!;
 }
 
 /** Directory holding the active profile's items (the root itself when there are no profiles). */
@@ -106,6 +129,8 @@ export function createTaskProfile(tasksRoot: string, id: string): { adopted: num
   const isFirstProfile = listTaskProfiles(tasksRoot).length === 0;
   fs.mkdirSync(profileDir, { recursive: true });
   if (!isFirstProfile) return { adopted: 0 };
+  // The first profile holds everything that existed before profiles, so it is where an unconfigured machine belongs.
+  if (!readDefaultProfileId(tasksRoot)) writeDefaultProfileId(tasksRoot, id);
   return { adopted: adoptLegacyDayFiles(tasksRoot, id) };
 }
 

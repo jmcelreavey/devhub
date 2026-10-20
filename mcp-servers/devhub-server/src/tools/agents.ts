@@ -193,6 +193,7 @@ export function registerAgentTools(server: McpServer, ctx: Context): void {
         cwd: z.string().min(1).describe("Absolute directory under the user's home — usually a repo root"),
         title: z.string().max(80).optional().describe("Short label for the terminal tab"),
         model: z.string().max(120).optional().describe("Provider-specific model id"),
+        effort: z.string().max(32).optional().describe("Reasoning effort (low, medium, high, xhigh, max, or a provider thinking option). Omit for the provider default."),
         worktree: z.boolean().optional().describe("Isolated git worktree on a new branch (default false)"),
         maxTurns: z.number().int().min(1).max(500).optional().describe("Turn cap, for providers that support it"),
       },
@@ -362,14 +363,16 @@ export function registerAgentTools(server: McpServer, ctx: Context): void {
         runId: runIdSchema,
         prompt: z.string().min(1).max(32_000),
         model: z.string().max(120).optional(),
+        effort: z.string().max(32).optional().describe("Reasoning effort. Omit to keep the run's current effort."),
         maxTurns: z.number().int().min(1).max(500).optional(),
       },
     },
-    async ({ runId, prompt, model, maxTurns }) =>
+    async ({ runId, prompt, model, effort, maxTurns }) =>
       withDashboardErrors(async () => {
         const { run } = await dashboard.post<{ run: AgentRunSummary }>(`/api/agent/runs/${encodeURIComponent(runId)}`, {
           prompt,
           model,
+          effort,
           maxTurns,
           depth: callerDepth(),
         });

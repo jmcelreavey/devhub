@@ -88,6 +88,6 @@ export function buildMeetingNoteMarkdown(event: MeetingNoteEvent): string {
     "",
     "## Action items",
     "",
-    "- [ ] ",
+    "- ",
   ]);
 }

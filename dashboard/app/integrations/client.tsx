@@ -45,7 +45,7 @@ export default function IntegrationsClient() {
   };
   return <div className={"page-wrapper " + styles.page}>
     <header className={styles.header}><h1>Integrations</h1><p>Find issues and pull requests across accounts. Choose which workflow updates can leave DevHub.</p>
-      <nav aria-label="Integration sections"><a href="#connections">Connections</a><a href="#actions">Write actions</a><a href="#chat">Chat commands</a><a href="#alerts">Workflow alerts</a><Link href="/setup">Credential setup</Link>{data.task && <Link href={"/workflow?taskId=" + encodeURIComponent(data.task.id)}>Back to task workflow</Link>}</nav>
+      <nav aria-label="Integration sections"><a href="#connections">Connections</a><a href="#actions">Write actions</a><a href="#chat">Chat commands</a><a href="#alerts">Workflow alerts</a><Link href="/setup">Credential setup</Link>{data.task && <Link href={"/storyboard?task=" + encodeURIComponent(data.task.id) + "&taskSection=evidence"}>Back to the task</Link>}</nav>
     </header>
     {failure && <p role="alert" className="tone-panel tone-panel--danger">{failure}</p>}
     {message && <p role="status" className="tone-panel tone-panel--muted">{message}</p>}

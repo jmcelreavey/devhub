@@ -37,6 +37,8 @@ export function listWorkflows(notesDir = getNotesDir()): TaskWorkflow[] {
   return names.filter((name) => name.endsWith(".json")).map((name) => readWorkflow(name.slice(0, -5), notesDir));
 }
 
+const MAX_EVENTS = 100;
+
 export async function recordWorkflowRun(spec: AgentRunSpec, status: AgentRunStatus): Promise<void> {
   const linkedId = spec.activity?.taskId;
   if (!linkedId) return;
@@ -58,7 +60,8 @@ export async function recordWorkflowRun(spec: AgentRunSpec, status: AgentRunStat
       state.status = status.state === "failed" ? "blocked" : "waiting-user";
       if (role === "implement") state.stage = "verify";
     }
-    return role + " run: " + status.state;
+    // "running" and "queued" are passing states of a run whose start and end are already listed. Keeping them tripled the log (86 updates for one task).
+    return ["running", "queued"].includes(status.state) ? null : role + " run: " + status.state;
   });
 }
 
@@ -77,6 +80,8 @@ export async function updateWorkflow(taskId: string, revision: number | undefine
     if (summary !== null) {
       state.revision += 1;
       state.events.push({ id: randomUUID(), at: new Date().toISOString(), summary });
+      // The log is a recent history, not an archive: runs and checks older than this are in the run list.
+      if (state.events.length > MAX_EVENTS) state.events.splice(0, state.events.length - MAX_EVENTS);
     }
     fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
     await writeAtomic(file, JSON.stringify(state, null, 2));

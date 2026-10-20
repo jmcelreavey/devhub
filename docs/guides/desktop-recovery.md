@@ -173,7 +173,7 @@ The installed `.app` ships a **frozen** Next.js build inside `Contents/Resources
 
 `POST /api/status/dashboard/rebuild` is intentionally unavailable when `DEVHUB_SHELL_SUPERVISED=1` (the desktop sidecar owns the process). Use the menu rebuild in that case — see [Dashboard — Status page runbook](../architecture/dashboard.md#status-page-runbook).
 
-If rebuild fails, open **View → Show Logs** or **System → Logs** (`/logs`) for compiler output before retrying.
+If rebuild fails, open **View → Show Logs** or **Settings → Logs** (`/logs`) for compiler output before retrying.
 
 ### Automatic nudge
 

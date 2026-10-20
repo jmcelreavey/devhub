@@ -3,7 +3,7 @@ import { PHASE_DEVELOPMENT_SERVER } from "next/constants";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { createRequire } from "node:module";
+import { builtinModules, createRequire } from "node:module";
 
 /** Repo root — used for production file tracing only (not Turbopack dev root). */
 const repoRoot = path.join(__dirname, "..");
@@ -80,6 +80,7 @@ const nextConfig: NextConfig = {
   typescript: {
     ignoreBuildErrors: process.env.DEVHUB_SKIP_NEXT_TYPECHECK === "true",
   },
+  transpilePackages: ["@devhub/qa"],
   /** @blocknote/xl-ai/server is tagged "use client"; keep it out of the App Route bundle. */
   serverExternalPackages: ["playwright-core", "@blocknote/xl-ai", "@blocknote/core", "adm-zip", "@getpaseo/client", "@getpaseo/protocol", "@getpaseo/relay"],
   allowedDevOrigins: [...DEFAULT_ALLOWED_DEV_ORIGINS, ...extraAllowedDevOriginsFromEnv()],
@@ -165,7 +166,10 @@ const nextConfig: NextConfig = {
         ({ request }: { request?: string }, callback: (err?: Error | null, result?: string) => void) => {
           // `adm-zip` uses bare require("path"); webpack then fails compiling instrumentation.
           // @getpaseo/* map import/default conditions to unshipped .ts sources; Node's own resolver picks the built "node" entry.
-          if (request?.startsWith("node:") || request === "adm-zip" || request?.startsWith("@getpaseo/")) {
+          // The linked QA package must use Node's Playwright entry, including its optional browser dependencies.
+          // Bare builtins too, like node: (pngjs's require("stream"), via lib/qa → the Storyboard auto ticker); register() only runs them on Node.
+          const bareBuiltin = !!request && builtinModules.includes(request);
+          if (request?.startsWith("node:") || bareBuiltin || request === "adm-zip" || request === "playwright-core" || request?.startsWith("@getpaseo/")) {
             callback(null, `commonjs ${request}`);
             return;
           }

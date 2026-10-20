@@ -34,7 +34,7 @@ function trackedFiles(): string[] {
     encoding: "utf8",
   })
     .split("\n")
-    .filter(Boolean);
+    .filter((file) => file && fs.existsSync(path.join(REPO_DIR, file)));
 }
 
 function routeDirs(): string[] {
@@ -65,6 +65,8 @@ const CHROME_EXEMPT: Record<string, "redirect" | "shell"> = {
    chamber: "redirect",
    opencode: "redirect",
    "agent-activity": "redirect",
+  today: "redirect",
+  workflow: "redirect",
 };
 
 describe("page chrome", () => {
@@ -105,7 +107,7 @@ describe("page chrome", () => {
         continue;
       }
       const src = fs.readFileSync(file, "utf8");
-      const isRedirect = /\bredirect\(/.test(src);
+      const isRedirect = /\bredirect\(/.test(src) || /<LegacyWorkRedirect\b/.test(src);
       const isShell = /return null;/.test(src);
       if (shape === "redirect" && !isRedirect) wrong.push(`${route} (claims redirect, isn't one)`);
       if (shape === "shell" && !isShell) wrong.push(`${route} (claims shell, renders something)`);

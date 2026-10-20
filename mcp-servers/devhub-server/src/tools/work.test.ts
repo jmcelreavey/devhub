@@ -6,6 +6,28 @@ import { TOOL_ANNOTATIONS } from "../annotations.ts";
 import { DashboardClient, DashboardHttpError, type DashboardToolResult } from "../dashboard-client.ts";
 import { formatJiraTicket, registerWorkTools } from "./work.ts";
 
+describe("prs_list compatibility", () => {
+  it("adds structured rows for Slack without changing the existing text or input schema", async () => {
+    const authored = [{ repo: "team/service", number: 12, title: "Fix feed", url: "https://github.com/team/service/pull/12", checks: "passing", checkCounts: { passed: 3, failed: 0, pending: 0 }, approved: true, draft: true }];
+    const dashboard = new DashboardClient("http://localhost:1337");
+    vi.spyOn(dashboard, "get").mockResolvedValue({ configured: true, authored, reviews: [] });
+    let run: (() => Promise<unknown>) | undefined;
+    let configuration: unknown;
+    const server = {
+      registerTool(name: string, config: unknown, handler: () => Promise<unknown>) {
+        if (name === "prs_list") { run = handler; configuration = config; }
+      },
+    };
+    registerWorkTools(server as unknown as McpServer, { dashboard } as Context);
+    const result = await run!() as { content: Array<{ type: string; text?: string }>; structuredContent?: unknown };
+    expect(result.content.filter((part) => part.type === "text")).toEqual([{ type: "text", text: "Authored (1):\n  - team/service#12 [passing: 3✓ 0✗ 0…] ✓approved Fix feed\n    https://github.com/team/service/pull/12\n\nAwaiting my review (0):\n  (none)" }]);
+    expect(result.structuredContent).toEqual({ authored, reviews: [] });
+    expect(configuration).not.toHaveProperty("inputSchema");
+    expect(configuration).not.toHaveProperty("outputSchema");
+    expect(dashboard.get).toHaveBeenCalledExactlyOnceWith("/api/github/prs");
+  });
+});
+
 function setupCreate() {
   let create: (input: unknown) => Promise<DashboardToolResult> = async () => { throw new Error("Tool not registered"); };
   const dashboard = new DashboardClient("http://localhost:1337");
@@ -44,6 +66,15 @@ describe("jira_ticket_create", () => {
     expect(result.isError).not.toBe(true);
   });
 
+  it("does not claim a ticket was created when the dashboard only proposed it", async () => {
+    const { create, post } = setupCreate();
+    post.mockResolvedValueOnce({ confirmationRequired: true, proposal: { id: "abc" } });
+    const result = await create({ ...issue, confirm: true });
+    expect(result.content[0]).toMatchObject({ text: expect.stringContaining("Proposed, not applied") });
+    expect(result.content[0]).toMatchObject({ text: expect.stringContaining("Nothing has changed in Jira yet") });
+    expect(result.structuredContent).toEqual({ proposed: true, proposalId: "abc" });
+  });
+
   it("leaves optional defaults to the dashboard", async () => {
     const { create, post } = setupCreate();
     await create({ ...issue, confirm: true });
@@ -73,6 +104,29 @@ describe("jira_ticket_create", () => {
     expect(TOOL_ANNOTATIONS.jira_ticket_create).toEqual({
       readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true,
     });
+  });
+});
+
+describe("jira_ticket_transition", () => {
+  function setupTransition() {
+    let run: (input: unknown) => Promise<DashboardToolResult> = async () => { throw new Error("Tool not registered"); };
+    const dashboard = new DashboardClient("http://localhost:1337");
+    const post = vi.spyOn(dashboard, "post").mockResolvedValue({ confirmationRequired: true, proposal: { id: "abc" } });
+    const server = {
+      registerTool(name: string, config: { inputSchema?: z.ZodRawShape }, handler: (input: unknown) => Promise<DashboardToolResult>) {
+        if (name === "jira_ticket_transition") { const schema = z.object(config.inputSchema!); run = async input => handler(schema.parse(input)); }
+      },
+    };
+    registerWorkTools(server as unknown as McpServer, { dashboard } as Context);
+    return { run, post };
+  }
+
+  it("reports a proposal as proposed, because a person still has to confirm it", async () => {
+    const { run, post } = setupTransition();
+    const result = await run({ key: "PTF-1", transitionId: "41", confirm: true });
+    expect(post).toHaveBeenCalledWith("/api/jira/ticket/PTF-1/transition", { transitionId: "41" });
+    expect(result.content[0]).toMatchObject({ text: expect.stringContaining("Proposed, not applied") });
+    expect(JSON.stringify(result.content)).not.toContain("Moved PTF-1");
   });
 });
 

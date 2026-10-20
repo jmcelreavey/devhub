@@ -152,8 +152,70 @@ describe("Hollow runtime lifecycle", () => {
       progress.setAttribute("data-rect", "260,236,360,24");
       progress.firstChild!.textContent = "08:14 PM · 2/4 tasks done";
     });
+    act(() => { vi.advanceTimersByTime(81); });
     expect(decodeURIComponent(scenery.style.maskImage)).toContain('x="258" y="234" width="364" height="28" fill="black"');
     expect(scenery.style.visibility).toBe("visible");
+  });
+
+  it("ignores editor-internal mutations when refreshing scenery geometry", async () => {
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      return this.id === "main-content" ? new DOMRect(240, 80, 1200, 820) : new DOMRect();
+    });
+    render(<>
+      <main id="main-content">
+        <div className="bn-root" data-testid="editor" />
+        <div data-testid="outside" />
+      </main>
+      <HollowEffects plan={hollowRuntimePlan(HOLLOW_EFFECT_DEFAULTS, true)} preview={false} faceShot={false} />
+    </>);
+    act(() => { vi.advanceTimersByTime(81); });
+    vi.mocked(occupiedRects).mockClear();
+
+    await act(async () => {
+      document.querySelector("[data-testid='editor']")?.append(document.createElement("span"));
+      await Promise.resolve();
+    });
+    act(() => { vi.advanceTimersByTime(81); });
+    expect(occupiedRects).not.toHaveBeenCalled();
+
+    await act(async () => {
+      document.querySelector("[data-testid='outside']")?.append(document.createElement("span"));
+      await Promise.resolve();
+    });
+    act(() => { vi.advanceTimersByTime(81); });
+    expect(occupiedRects).toHaveBeenCalled();
+  });
+
+  it("coalesces changing search results until typing settles and pauses motion while editing", async () => {
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      return this.id === "main-content" ? new DOMRect(240, 80, 1200, 820) : new DOMRect();
+    });
+    render(<><main id="main-content"><input aria-label="Search" /><p>No matches</p></main>
+      <HollowEffects plan={hollowRuntimePlan(HOLLOW_EFFECT_DEFAULTS, true)} preview={true} faceShot={false} /></>);
+    act(() => { vi.advanceTimersByTime(81); });
+    const input = document.querySelector("input")!;
+    act(() => { input.focus(); });
+    act(() => { vi.advanceTimersByTime(300); });
+    vi.mocked(occupiedRects).mockClear();
+    for (let i = 0; i < 20; i++) {
+      await act(async () => {
+        input.dispatchEvent(new InputEvent("input", { bubbles: true, data: "a", isComposing: true }));
+        document.querySelector("p")!.firstChild!.textContent += "a";
+      });
+      act(() => { vi.advanceTimersByTime(35); });
+    }
+    expect(document.documentElement.hasAttribute("data-hollow-paused")).toBe(true);
+    expect(occupiedRects).not.toHaveBeenCalled();
+    expect(document.querySelector(".is-open, .is-hung, .hollow-glitch")).toBeNull();
+    window.dispatchEvent(new MouseEvent("pointermove"));
+    expect(requestAnimationFrame).not.toHaveBeenCalled();
+    act(() => { vi.advanceTimersByTime(251); });
+    expect(occupiedRects).toHaveBeenCalledTimes(1);
+    expect((document.querySelector(".hollow-scenery") as HTMLElement).style.visibility).toBe("visible");
+    await act(async () => { input.blur(); });
+    expect(document.documentElement.hasAttribute("data-hollow-paused")).toBe(false);
+    act(() => { vi.advanceTimersByTime(1500); });
+    expect(document.querySelector(".is-open")).not.toBeNull();
   });
 
   it("keeps the pointer tint off text, controls, and card content", () => {

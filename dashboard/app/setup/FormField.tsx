@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useId, type ReactNode } from "react";
 import { Eye, EyeOff } from "lucide-react";
 
 export function FormField({
@@ -22,9 +22,12 @@ export function FormField({
   hint?: ReactNode;
   onFocus?: () => void;
 }) {
+  const id = useId();
+  const hintId = `${id}-hint`;
   return (
     <div>
       <label
+        htmlFor={id}
         style={{
           display: "block",
           fontSize: "12px",
@@ -37,6 +40,8 @@ export function FormField({
       </label>
       <div style={{ position: "relative" }}>
         <input
+          id={id}
+          aria-describedby={hint ? hintId : undefined}
           type={secret ? "password" : "text"}
           value={value}
           onChange={(e) => onChange(e.target.value)}
@@ -81,7 +86,7 @@ export function FormField({
         )}
       </div>
       {hint && (
-        <p className="mt-1 text-[11px] leading-snug text-text-muted">
+        <p id={hintId} className="mt-1 text-[11px] leading-snug text-text-muted">
           {hint}
         </p>
       )}

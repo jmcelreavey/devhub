@@ -2,6 +2,8 @@ import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { isAuthenticatedDesktopRequest } from "@/lib/desktop/bootstrap-auth";
 import { formatZodError } from "./schemas";
+import { requestedTaskProfile, taskProfileConflict, withTaskProfileRequest } from "@/lib/tasks/profile-request";
+import { expireSidebarCountsCache } from "@/lib/sidebar-counts-cache";
 
 type RouteHandler<Args extends unknown[]> = (...args: Args) => Promise<Response>;
 
@@ -11,7 +13,21 @@ export function withErrorHandler<Args extends unknown[]>(
 ): RouteHandler<Args> {
   return async (...args: Args) => {
     try {
-      return await handler(...args);
+      const request = args[0] instanceof Request ? args[0] : undefined;
+      const profile = request ? requestedTaskProfile(request) : null;
+      if (profile !== null) {
+        const conflict = taskProfileConflict(profile);
+        if (conflict) return conflict;
+      }
+      const response = await (profile === null ? handler(...args) : withTaskProfileRequest(profile, () => handler(...args)));
+      if (profile !== null && request?.method === "GET") {
+        const conflict = taskProfileConflict(profile);
+        if (conflict) return conflict;
+        response.headers.set("Cache-Control", "no-store");
+      } else if (profile !== null && response.ok) {
+        expireSidebarCountsCache(profile);
+      }
+      return response;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       console.error(`[api${label ? ":" + label : ""}]`, err);

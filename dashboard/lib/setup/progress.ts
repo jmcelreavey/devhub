@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 export const SETUP_STEP_IDS = [
-  "welcome", "tools", "paths", "github", "datadog", "calendar", "jira", "infra", "agent", "done",
+  "welcome", "tools", "paths", "github", "datadog", "calendar", "jira", "infra", "agent", "jev", "slack", "done",
 ] as const;
 export type SetupStepId = (typeof SETUP_STEP_IDS)[number];
 
@@ -24,7 +24,7 @@ export const SaveSetupProgressSchema = z.object({
 });
 
 /** `?step=github` on /setup opens that step: the way back in from reminders and other pages. */
-export function requestedSetupStep(search: string): SetupStepId | null {
-  const requested = new URLSearchParams(search).get("step");
+export function requestedSetupStep(search: string, hash = ""): SetupStepId | null {
+  const requested = new URLSearchParams(search).get("step") ?? hash.replace(/^#/, "");
   return (SETUP_STEP_IDS as readonly string[]).includes(requested ?? "") ? (requested as SetupStepId) : null;
 }

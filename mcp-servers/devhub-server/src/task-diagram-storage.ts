@@ -81,9 +81,9 @@ export class TasksStorage {
     return this.getDay(todayISO()).tasks;
   }
 
-  add(text: string, date?: string, due?: string, stage?: "draft"): Task {
+  add(text: string, date?: string, due?: string, stage?: "draft", parentKey?: string): Task {
     const startDate = date || todayISO();
-    const task = createTask(this.dir, { text, startDate, due, stage });
+    const task = createTask(this.dir, { text, startDate, due, stage, parentKey });
     return this.withNotePath(task, startDate);
   }
 
@@ -108,7 +108,7 @@ export class TasksStorage {
     if (patch.due !== undefined) next.due = patch.due;
     if (patch.stage) next.stage = patch.stage;
     if (patch.links !== undefined) {
-      const normalized = normalizeTaskLinkState(next.text ?? existing.text, existing.jiraKey, patch.links);
+      const normalized = normalizeTaskLinkState(next.text ?? existing.text, existing.jiraKey, patch.links, existing.parentKey);
       next.text = normalized.text;
       next.links = normalized.links?.length ? normalized.links : [];
       if (normalized.jiraKey) next.jiraKey = normalized.jiraKey;

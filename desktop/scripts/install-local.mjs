@@ -65,8 +65,12 @@ function run(cmd, args, opts = {}) {
   return execFileSync(cmd, args, { encoding: "utf8", ...opts });
 }
 
-/** Relative paths under a content root that are derived, not user data. */
-const DERIVED_PATHS = ["logs", ".cache", path.join(".index", "recall")];
+/**
+ * Relative paths under a content root that are derived, not user data.
+ * `managed-node` holds the sidecar's node/npm shims, rewritten on every launch
+ * and pointing into the bundle being replaced, so they always "change".
+ */
+const DERIVED_PATHS = ["logs", ".cache", path.join(".index", "recall"), "managed-node"];
 
 function isWithin(relative, prefix) {
   return relative === prefix || relative.startsWith(prefix + path.sep);

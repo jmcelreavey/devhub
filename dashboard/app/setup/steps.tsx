@@ -29,6 +29,7 @@ export function isStepComplete(step: Step, status: SetupStatus): boolean {
   if (step.id === "jira") return status.jira;
   if (step.id === "infra") return status.infra;
   if (step.id === "agent") return Boolean(status.agentVars?.provider);
+  if (step.id === "jev") return status.typesafe === true;
   return true;
 }
 
@@ -1320,7 +1321,7 @@ export function AgentCliStep({
             value={cursorModel}
             onChange={onCursorModelChange}
             placeholder="cursor-grok-4.5-high"
-            hint="Passed as cursor-agent --model. Verify the slug with cursor-agent --help or the /model picker."
+            hint="Passed as cursor-agent --model. Use a model id reported by cursor-agent --list-models."
           />
         ) : null}
       </div>

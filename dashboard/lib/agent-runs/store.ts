@@ -30,6 +30,11 @@ import { recordRunSnapshot } from "@/lib/tasks/run-snapshot";
 
 /** Proposals expire after 15 minutes, so a run still queued past this never started. */
 const NEVER_STARTED_MS = 16 * 60 * 1_000;
+/**
+ * A Paseo run still without an acknowledged agent after this long can't be
+ * followed or cancelled; keeping it "active" only holds capacity forever.
+ */
+const ORPHANED_START_MS = 30 * 60 * 1_000;
 const RUN_ID_RE = /^run-[a-z0-9]{6,12}-[0-9a-f]{8}$/;
 
 export interface AgentRun {
@@ -186,8 +191,23 @@ function pidAlive(pid: number): boolean {
   }
 }
 
+/** Needs no network: a start Paseo never acknowledged has no agent to look up. */
+function reconcileOrphanedPaseoStart(run: AgentRun): AgentRun {
+  const { status } = run;
+  if (!isActiveAgentRunState(status.state) || (status.conversationId && status.messageId)) return run;
+  if (Date.now() - run.spec.createdAt < ORPHANED_START_MS) return run;
+  return updateAgentRunStatus(run, {
+    state: "failed",
+    finishedAt: Date.now(),
+    error: status.submissionAttemptedAt
+      ? "Paseo never acknowledged this start, so DevHub could not follow it. Check Paseo for an agent it may have created."
+      : "This run never reached Paseo.",
+  });
+}
+
 export function reconcileAgentRun(run: AgentRun): AgentRun {
-  if (run.spec.runtime === "aionui" || run.spec.runtime === "paseo") return run;
+  if (run.spec.runtime === "aionui") return run;
+  if (run.spec.runtime === "paseo") return reconcileOrphanedPaseoStart(run);
   if (run.spec.runtime === "generation") {
     if (isActiveAgentRunState(run.status.state) && run.status.ownerPid && !pidAlive(run.status.ownerPid)) {
       return updateAgentRunStatus(run, {
@@ -294,10 +314,18 @@ export function listAgentRuns(limit = 20): AgentRun[] {
     .map(reconcileAgentRun);
 }
 
+/** Short generation calls and historical AionUi records never hold a coding-run slot. */
+export function isCapacityRun(run: AgentRun): boolean {
+  return run.spec.runtime !== "generation" && run.spec.runtime !== "aionui" && isActiveAgentRunState(run.status.state);
+}
+
+/** The runs the dispatch limit counts, newest first. */
+export function listCapacityRuns(): AgentRun[] {
+  return listAgentRuns(Number.MAX_SAFE_INTEGER).filter(isCapacityRun);
+}
+
 export function countActiveAgentRuns(): number {
-  return listAgentRuns(Number.MAX_SAFE_INTEGER).filter((run) =>
-    run.spec.runtime !== "generation" && run.spec.runtime !== "aionui" && isActiveAgentRunState(run.status.state),
-  ).length;
+  return listCapacityRuns().length;
 }
 
 export type AgentRunCancelOutcome = "signalled" | "cancelled" | "already-finished";
@@ -398,6 +426,7 @@ export function toAgentRunSummary(run: AgentRun) {
     depth: spec.depth,
     createdAt: spec.createdAt,
     startedAt: status.startedAt ?? null,
+    startupPhase: status.startupPhase ?? null,
     finishedAt: status.finishedAt ?? null,
     exitCode: status.exitCode ?? null,
     eventCount: status.eventCount,

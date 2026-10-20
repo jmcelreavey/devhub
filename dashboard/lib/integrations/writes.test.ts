@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("./registry", () => ({ providerFor: vi.fn() }));
-import { requestWrite, reviewWrite, confirmWrite, cancelWrite, listWrites } from "./write-store";
+import { requestWrite, reviewWrite, confirmWrite, cancelWrite, listWrites, writeNow } from "./write-store";
 import { IntegrationError, type IntegrationProvider } from "./types";
 import { WriteInputSchema, type PreparedWrite } from "./write-types";
 
@@ -28,6 +28,15 @@ describe("confirmed integration writes", () => {
     expect(provider.executeWrite).toHaveBeenCalledTimes(1);
     expect(listWrites("work", root)[0].state).toBe("succeeded");
   });
+  it("lets a person's approval in chat confirm the reviewed action, keeping their words, with the same digest checks", async () => {
+    const p = await reviewed();
+    await expect(confirmWrite(p.id, "a".repeat(64), "work", signal, options(), { via: "chat", quote: "yes do it" })).rejects.toThrow("Review");
+    expect(provider.executeWrite).not.toHaveBeenCalled();
+    const done = await confirmWrite(p.id, p.digest!, "work", signal, options(), { via: "chat", quote: "Yes, move it to Done" });
+    expect(done).toMatchObject({ state: "succeeded", approval: "chat", approvalNote: "Yes, move it to Done" });
+    expect(provider.executeWrite).toHaveBeenCalledTimes(1);
+  });
+
   it("requires review, matching digest, profile and a live expiry", async () => {
     const p = await requestWrite(input, "work", "DevHub", options());
     await expect(confirmWrite(p.id, "a".repeat(64), "work", signal, options())).rejects.toThrow("Review");
@@ -69,5 +78,40 @@ describe("confirmed integration writes", () => {
     expect(WriteInputSchema.safeParse({ action: "issue.transition", provider: "jira", account: "default", ref: { provider: "jira", account: "other", kind: "issue", id: "../bad" }, transitionId: "1" }).success).toBe(false);
     expect(WriteInputSchema.safeParse({ ...input, repo: "../repo" }).success).toBe(false);
     expect(WriteInputSchema.safeParse({ ...input, confirmed: true }).success).toBe(false);
+  });
+});
+describe("direct writes (a person's own click)", () => {
+  it("prepares once, sends once and records the click as the approval", async () => {
+    const { proposal, timings } = await writeNow(input, "work", signal, options());
+    expect(provider.prepareWrite).toHaveBeenCalledTimes(1);
+    expect(provider.executeWrite).toHaveBeenCalledTimes(1);
+    expect(proposal).toMatchObject({ state: "succeeded", approval: "direct", source: "DevHub", profile: "work" });
+    expect(Object.keys(timings)).toEqual(["prepare", "send"]);
+    const [saved] = listWrites("work", root);
+    expect(saved).toMatchObject({ id: proposal.id, state: "succeeded", approval: "direct" });
+    expect(saved.digest).toMatch(/^[a-f0-9]{64}$/);
+  });
+  it("persists the unknown state before sending, like a reviewed write", async () => {
+    provider.executeWrite = vi.fn(async () => { expect(listWrites("work", root)[0]).toMatchObject({ state: "unknown", approval: "direct" }); throw new Error("socket hang up"); });
+    const { proposal } = await writeNow(input, "work", signal, options());
+    expect(proposal.state).toBe("unknown");
+    expect(proposal.detail).toContain("Outcome unknown");
+  });
+  it("records a refused preparation as failed and rethrows, so a click is never silent", async () => {
+    vi.mocked(provider.prepareWrite!).mockRejectedValueOnce(new IntegrationError("conflict", "This transition is no longer available."));
+    await expect(writeNow(input, "work", signal, options())).rejects.toThrow("no longer available");
+    expect(listWrites("work", root)).toMatchObject([{ state: "failed", approval: "direct", detail: "This transition is no longer available." }]);
+    expect(provider.executeWrite).not.toHaveBeenCalled();
+  });
+  it("keeps the same account and capability gates as the reviewed path", async () => {
+    provider.accounts = () => [];
+    await expect(writeNow(input, "work", signal, options())).rejects.toThrow("account");
+    provider.accounts = () => [{ id: "default", provider: "github", label: "Default" }]; provider.capabilities = [];
+    await expect(writeNow(input, "work", signal, options())).rejects.toThrow("support");
+    expect(provider.prepareWrite).not.toHaveBeenCalled();
+  });
+  it("marks a confirmed proposal as reviewed", async () => {
+    const p = await reviewed(); const done = await confirmWrite(p.id, p.digest!, "work", signal, options());
+    expect(done.approval).toBe("review");
   });
 });

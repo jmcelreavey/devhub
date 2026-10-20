@@ -27,6 +27,17 @@ export function buildSlackMessage(row: GithubPrRow, kind: SlackMessageKind): str
   return lines.join("\n");
 }
 
+/** The same "PR ready for" message the PR rows copy, for a task whose work is ready for review. The PR line is left out when no PR is linked yet. */
+export function buildTaskReviewMessage(task: { repo?: string; title: string; prUrl?: string; jira?: readonly string[] }): string {
+  const repo = task.repo?.split("/").pop();
+  const jiraKey = task.jira?.[0] ?? jiraKeyFromText(task.title);
+  return [
+    `PR ready for ${repo ? `\`${repo}\` - ` : ""}${task.title}`,
+    ...(task.prUrl ? [`PR: ${task.prUrl}`] : []),
+    ...(jiraKey ? [`JIRA: ${jiraBrowseUrl(jiraKey)}`] : []),
+  ].join("\n");
+}
+
 export async function copyTextAndToast(
   text: string,
   label: string,

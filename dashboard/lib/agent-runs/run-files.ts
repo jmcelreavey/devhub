@@ -31,6 +31,8 @@ export interface AgentActivityContext {
   jobId?: string;
   occurrence?: number;
   notePath?: string;
+  /** Which pass of a step this is ("retry 2", "fix round 1"), appended to the chat title so repeats are told apart. */
+  label?: string;
 }
 
 export interface AgentRunWorktree {
@@ -89,6 +91,7 @@ export interface AgentRunStatus {
   connectionId?: string;
   conversationId?: string;
   messageId?: string;
+  steeringMessageIds?: string[];
   turnId?: string;
   connectivity?: "connected" | "reconnecting";
   submissionAttemptedAt?: number;
@@ -99,6 +102,11 @@ export interface AgentRunStatus {
   pinnedWorkspaceId?: string;
   /** Set once that pin is released: implementation started (plans) or the task closed. */
   workspaceUnpinnedAt?: number;
+  /**
+   * Set while a deferred start is still creating the worktree or the Paseo
+   * agent. The chats frame reads it until a conversation id exists.
+   */
+  startupPhase?: "worktree" | "agent";
   inputTokens?: number;
   outputTokens?: number;
   resultText?: string;

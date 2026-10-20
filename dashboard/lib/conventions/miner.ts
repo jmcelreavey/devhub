@@ -167,6 +167,7 @@ async function mineOnce(repo: string, options: MineOptions): Promise<MineOutcome
       prompt: buildMinePrompt({ repo, items, guidance, existing: existing?.rules ?? [] }),
       prefer: prefs.provider || undefined,
       model: prefs.model || undefined,
+      ...(prefs.effort ? { effort: prefs.effort } : {}),
       // A high-effort model took ~4 minutes on a typical repo; a stronger one needs more headroom.
       timeoutMs: 600_000,
       abortSignal: AbortSignal.timeout(600_000),
@@ -206,6 +207,7 @@ async function mineOnce(repo: string, options: MineOptions): Promise<MineOutcome
       ms: elapsed(),
       provider: generated.provider,
       model: prefs.model || "default",
+      ...(prefs.effort ? { effort: prefs.effort } : {}),
     };
     file.runs.unshift(run);
   });

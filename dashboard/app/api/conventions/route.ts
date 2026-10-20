@@ -137,6 +137,7 @@ const PostSchema = z.discriminatedUnion("action", [
       minIntervalHours: z.number().int().optional(),
       provider: z.string().max(40).optional(),
       model: z.string().max(120).optional(),
+      effort: z.string().max(32).optional(),
     }),
   }),
 ]);

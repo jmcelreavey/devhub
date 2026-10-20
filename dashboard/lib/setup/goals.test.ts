@@ -17,6 +17,8 @@ const ALL_STEPS = [
   { id: "jira" },
   { id: "infra" },
   { id: "agent" },
+  { id: "jev" },
+  { id: "slack" },
   { id: "done" },
 ];
 
@@ -62,7 +64,7 @@ describe("stepsForGoals", () => {
 describe("filterStepsByGoals", () => {
   it("preserves the original order", () => {
     const out = filterStepsByGoals(ALL_STEPS, ["code"]).map((s) => s.id);
-    expect(out).toEqual(["welcome", "tools", "paths", "github", "agent", "done"]);
+    expect(out).toEqual(["welcome", "tools", "paths", "github", "agent", "jev", "done"]);
   });
 
   it("never returns fewer than the always-on steps", () => {

@@ -57,7 +57,7 @@ export function RepoActionBar({
       <button type="button" className="btn btn-ghost text-xs" onClick={() => openAgentHandoff({ title: "Ask Agent · " + repo.name, cwd: repo.path, repoName: repo.name, worktree: false })}><Bot size={13} />Agents</button>
       <button
         type="button"
-        className="btn btn-primary text-xs"
+        className="btn btn-ghost text-xs"
         disabled={actions.upstarting !== null}
         onClick={() => void actions.openUpstart(repo)}
         aria-label="Run upstart"

@@ -51,6 +51,10 @@ export interface TaskAgentRunRecord {
   codeFingerprint?: string;
   status: TaskAgentRunStatus;
   provider?: string;
+  /** Model the run was launched with; blank means the provider's default. */
+  model?: string;
+  /** Model tier the run used for its step, when it ran on one. */
+  tier?: { step: string; tier: string };
   startedAt: string;
   updatedAt: string;
   prUrl?: string;
@@ -317,6 +321,8 @@ export interface UpsertTaskAgentRunInput {
   runId: string;
   status?: TaskAgentRunStatus;
   provider?: string;
+  model?: string;
+  tier?: { step: string; tier: string };
   prUrl?: string | null;
   branch?: string | null;
   sessionId?: string | null;
@@ -368,6 +374,8 @@ export async function upsertTaskAgentRun(input: UpsertTaskAgentRunInput): Promis
         updatedAt: stamp,
       };
       applyOptionalString(record, "provider", input.provider);
+      if (input.model) record.model = input.model;
+      if (input.tier) record.tier = { step: input.tier.step, tier: input.tier.tier };
       applyOptionalString(record, "prUrl", input.prUrl);
       applyOptionalString(record, "branch", input.branch);
       applyOptionalString(record, "sessionId", input.sessionId);
@@ -382,6 +390,8 @@ export async function upsertTaskAgentRun(input: UpsertTaskAgentRunInput): Promis
         startedAt: input.startedAt ?? prev.startedAt,
       };
       applyOptionalString(next, "provider", input.provider ?? prev.provider);
+      if (input.model) next.model = input.model;
+      if (input.tier) next.tier = { step: input.tier.step, tier: input.tier.tier };
       applyOptionalString(next, "prUrl", input.prUrl === undefined ? prev.prUrl : input.prUrl);
       // Cached findings belong to the old PR, not to the task or its replacement.
       if (input.prUrl !== undefined && (next.prUrl !== prev.prUrl || !next.prUrl)) {

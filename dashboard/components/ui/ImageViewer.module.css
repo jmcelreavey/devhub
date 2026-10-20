@@ -1,0 +1,87 @@
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: color-mix(in oklab, var(--bg) 88%, transparent);
+  backdrop-filter: blur(6px);
+}
+.dialog {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  max-width: 94vw;
+  outline: none;
+}
+.stage {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+.stage img {
+  display: block;
+  max-width: min(1400px, calc(94vw - 96px));
+  max-height: 80vh;
+  min-width: 120px;
+  min-height: 80px;
+  border-radius: 10px;
+  box-shadow: var(--shadow-elevated-strong);
+  object-fit: contain;
+  background: var(--bg-surface);
+}
+.nav {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--border-muted);
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--bg-elevated) 92%, transparent);
+  color: var(--text);
+  cursor: pointer;
+}
+.nav:hover { background: var(--bg-elevated); }
+.bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 94vw;
+  min-width: 0;
+  color: var(--text);
+  font-size: 13px;
+}
+.counter {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}
+.tag {
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--bg-surface);
+  color: var(--text-muted);
+  font-size: 11px;
+}
+.caption {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.action {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--border-muted);
+  border-radius: 8px;
+  background: var(--bg-elevated);
+  color: var(--text);
+  cursor: pointer;
+}
+.action:hover { background: var(--bg-surface); }

@@ -152,7 +152,7 @@ If you linked a private repo, the checkout can be ahead of the installed app. Re
 from it with:
 
 - **Windows:** **Rebuild from Checkout…** in the tray or View menu, which opens
-  **System → Maintenance** where **Pull and rebuild** runs.
+  **Settings → Maintenance** where **Pull and rebuild** runs.
 - **Mac:** **View → Rebuild Dashboard…**.
 
 Without a linked checkout there is nothing to rebuild from, so **Check for Updates** is the

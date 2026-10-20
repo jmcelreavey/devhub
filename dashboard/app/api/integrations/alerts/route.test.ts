@@ -17,6 +17,18 @@ describe("alert listing and test transport", () => {
     expect(data.destinations).toHaveLength(1); expect(JSON.stringify(data)).not.toMatch(/private-hash|personal/);
     expect(response.headers.get("cache-control")).toBe("no-store");
   });
+  it("exposes the new kinds and accepts PR details only with explicit same-origin consent", async () => {
+    const destination = { id, label: "Team", provider: "slack", workProfile: "work", credentialRef: "SLACK", events: ["pr-reviewed", "pr-ready"], includePrDetails: true, enabled: true };
+    const input = { action: "save", destination, revision: 0 };
+    for (const consent of [undefined, false]) expect((await POST(request("POST", { ...input, consent }))).status).toBe(400);
+    expect((await POST(request("POST", { ...input, consent: true }, "https://other.test"))).status).toBe(403);
+    expect(saveDestination).not.toHaveBeenCalled();
+    expect((await POST(request("POST", { ...input, consent: true }))).status).toBe(200);
+    expect(saveDestination).toHaveBeenCalledExactlyOnceWith(destination, 0, "work");
+    vi.mocked(readAlerts).mockReturnValue({ version: 1, nextSendAt: 0, destinations: [], outbox: [] });
+    const data = await (await GET(request("GET"))).json();
+    expect(data.events).toMatchObject({ "pr-reviewed": "PR got an AI review", "pr-ready": "PR opened / ready for review" });
+  });
   it("sends exactly the saved destination/revision/request ID without changing consent", async () => {
     vi.mocked(sendTestAlert).mockResolvedValue({ state: "sent", kind: "test", detail: "Accepted." } as Awaited<ReturnType<typeof sendTestAlert>>);
     const response = await POST(request("POST", body));

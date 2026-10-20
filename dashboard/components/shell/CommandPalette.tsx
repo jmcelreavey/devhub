@@ -337,7 +337,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
       kind: "nav",
       label: `Go to ${item.label}`,
       hint: item.href,
-      keywords: item.href === "/plugins" ? PLUGIN_KEYWORDS : undefined,
+      keywords: item.href === "/plugins" ? PLUGIN_KEYWORDS : item.keywords,
       href: item.href,
       perform: () => router.push(item.href),
     }));

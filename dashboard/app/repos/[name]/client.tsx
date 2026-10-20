@@ -7,6 +7,7 @@ import { EmptyState, FetchError, PageHeader, SkeletonRows } from "@/components";
 import { RepoOpenPrLink } from "@/components/repos/RepoOpenPrLink";
 import { RepoActionBar } from "@/components/repo-hub/RepoActionBar";
 import { RepoWorkHub } from "@/components/repo-hub/RepoWorkHub";
+import { TaskDetailProvider } from "@/components/storyboard/TaskDetailProvider";
 import { useLive } from "@/lib/hooks/use-fetch";
 import { useRouteHistoryLabel } from "@/lib/hooks/use-session-history";
 import { useReposActions } from "../useReposActions";
@@ -63,7 +64,8 @@ export function RepoHub({ name }: { name: string }) {
         actions={<RepoActionBar repo={repo} actions={actions} />}
       />
 
-      <RepoWorkHub repo={repo} onMutate={refresh} />
+      {error ? <FetchError bare message={error.message} onRetry={refresh} /> : null}
+      <TaskDetailProvider><RepoWorkHub key={repo.name} repo={repo} onMutate={refresh} /></TaskDetailProvider>
     </div>
   );
 }

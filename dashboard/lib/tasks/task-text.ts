@@ -143,7 +143,7 @@ export function clearedLineForToday(today = todayISO()): string {
  * Searches the task body, its Jira key, its due date, the abandon reason, and
  * the labels/ids of anything linked to it (PRs, notes, calendar events).
  */
-export function matchesTaskSearch(task: Task, query: string): boolean {
+export function matchesTaskSearch(task: Task, query: string, noteTags?: Record<string, string[]>): boolean {
   const terms = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
   if (terms.length === 0) return true;
   const hay = [
@@ -152,6 +152,8 @@ export function matchesTaskSearch(task: Task, query: string): boolean {
     task.due ?? "",
     task.abandonReason ?? "",
     ...(task.links ?? []).flatMap((link) => [link.kind, link.id, link.label]),
+    // Tags that live only in the task's note, so a #tag pill finds the task.
+    ...(noteTags?.[task.id] ?? []).map((tag) => `#${tag}`),
   ]
     .join("   ")
     .toLowerCase();

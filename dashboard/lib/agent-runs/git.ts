@@ -112,6 +112,30 @@ export interface AgentRunDiff {
   note: string | null;
 }
 
+export async function ensureRunWorktree(spec: Pick<AgentRunSpec, "cwd" | "worktree">): Promise<Pick<AgentRunSpec, "cwd" | "worktree">> {
+  const tree = spec.worktree;
+  if (!tree) {
+    if (!fs.existsSync(spec.cwd)) throw new Error("The previous checkout is missing. Restore the repository before resuming.");
+    return { cwd: spec.cwd };
+  }
+  const relative = path.relative(tree.path, spec.cwd);
+  if (relative.startsWith("..") || path.isAbsolute(relative)) throw new Error("The saved checkout is outside its worktree.");
+  const pathError = worktreePathError(tree.repoRoot, tree.path);
+  if (pathError) throw new Error(pathError);
+  const listed = await runGitRepoAsync(tree.repoRoot, ["worktree", "list", "--porcelain"]);
+  if (listed.status !== 0) throw new Error(listed.stderr.trim() || "Cannot inspect the saved worktree.");
+  const { parseWorktreeList } = await import("@/lib/repos/worktree-parsers");
+  const attached = parseWorktreeList(listed.stdout).find((item) => item.branch === tree.branch && fs.existsSync(item.path));
+  if (attached) return { cwd: path.join(attached.path, relative), worktree: { ...tree, path: attached.path } };
+  if (fs.existsSync(tree.path)) throw new Error("The saved worktree path is occupied by a different checkout.");
+  const valid = await runGitRepoAsync(tree.repoRoot, ["check-ref-format", "--branch", tree.branch]);
+  if (valid.status !== 0) throw new Error("The saved worktree branch is invalid.");
+  fs.mkdirSync(path.dirname(tree.path), { recursive: true });
+  const restored = await runGitRepoAsync(tree.repoRoot, ["worktree", "add", tree.path, tree.branch]);
+  if (restored.status !== 0) throw new Error(restored.stderr.trim() || "Cannot restore the saved branch. No branch was overwritten.");
+  return { cwd: path.join(tree.path, relative), worktree: tree };
+}
+
 /** Working tree against HEAD-at-dispatch, so commits the agent made are included. */
 export async function agentRunDiff(spec: AgentRunSpec, includePatch: boolean): Promise<AgentRunDiff> {
   const cwd = spec.worktree?.path ?? spec.cwd;

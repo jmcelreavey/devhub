@@ -19,6 +19,8 @@ export interface AutoPrReviewRecord {
   number: number;
   title: string;
   startedAt: string;
+  /** Captured at launch so shared-channel alerts cannot cross task profiles. */
+  workProfile?: string;
   /** Agent run id when started on a CLI provider. */
   runId?: string;
   /** OpenCode session id when started on OpenCode. */
@@ -92,7 +94,7 @@ export function listAutoPrReviewRecords(): AutoPrReviewRecord[] {
 export async function recordAutoPrReviewStart(
   row: Pick<
     AutoPrReviewRecord,
-    "url" | "updatedAt" | "headSha" | "repo" | "number" | "title" | "runId" | "sessionId" | "notePath"
+    "url" | "updatedAt" | "headSha" | "repo" | "number" | "title" | "runId" | "sessionId" | "notePath" | "workProfile"
   >,
 ): Promise<void> {
   await updateAll((reviews) => {
@@ -105,6 +107,7 @@ export async function recordAutoPrReviewStart(
       number: row.number,
       title: row.title,
       startedAt: new Date().toISOString(),
+      ...(row.workProfile ? { workProfile: row.workProfile } : {}),
       ...(row.headSha ? { headSha: row.headSha } : {}),
       ...(row.runId ? { runId: row.runId } : {}),
       ...(row.sessionId ? { sessionId: row.sessionId } : {}),

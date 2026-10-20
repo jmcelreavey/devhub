@@ -321,6 +321,11 @@ describe("mineRepoConventions", () => {
     await mineRepoConventions(REPO, { trigger: "manual", deps: t.deps });
     expect(t.generate.mock.calls[0][0]).toMatchObject({ prefer: "opencode", model: "big-model" });
     expect(readConventions(REPO)!.runs[0].model).toBe("big-model");
+    await saveConventionsPrefs({ provider: "cursor-cli", model: "grok-4.6", effort: "low" });
+    t.generate.mockClear();
+    await mineRepoConventions(REPO, { trigger: "manual", force: true, deps: t.deps });
+    expect(t.generate.mock.calls[0][0]).toMatchObject({ prefer: "cursor-cli", model: "grok-4.6", effort: "low" });
+    expect(readConventions(REPO)!.runs[0].effort).toBe("low");
   });
 
   it("reads at most the configured number of PRs", async () => {

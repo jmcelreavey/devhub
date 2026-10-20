@@ -14,9 +14,13 @@ import {
   syncDatadogProcessEnvFromOverrides,
   syncGoogleProcessEnvFromOverrides,
   syncJiraProcessEnvFromOverrides,
+  syncQaProcessEnvFromOverrides,
+  syncSlackProcessEnvFromOverrides,
   writeDashboardEnvLocalFile,
 } from "@/lib/dashboard-env-local";
-import { parseBody } from "@/lib/api-utils";
+import { isSameOriginStrict, parseBody, requireDashboardAuth } from "@/lib/api-utils";
+import { applySlackSettings } from "@/lib/integrations/slack/settings";
+import { restartSlackBot } from "@/lib/integrations/slack/runtime";
 import { invalidateJiraTicketsCache } from "@/lib/jira/tickets-cache";
 import { SetupSaveSchema } from "@/lib/schemas";
 import { resolveSetupPath, unsupportedPathMessage } from "@/lib/setup/input-path";
@@ -46,7 +50,12 @@ function validateDirectory(p: string): string | null {
 export async function POST(req: NextRequest) {
   const parsed = await parseBody(req, SetupSaveSchema);
   if (!parsed.ok) return parsed.response;
-  const { calendar, jira, datadog, core, network, infra, agent } = parsed.data;
+  const { calendar, jira, datadog, core, network, infra, agent, typesafe, slack } = parsed.data;
+  if (slack !== undefined) {
+    const auth = requireDashboardAuth(req);
+    if (!auth.ok) return auth.response;
+    if (!isSameOriginStrict(req)) return NextResponse.json({ error: "Manage Slack settings in DevHub." }, { status: 403 });
+  }
 
   // Validate core paths up-front so we don't half-write the env file.
   if (core) {
@@ -129,7 +138,13 @@ export async function POST(req: NextRequest) {
   }
 
   if (jira) {
-    if (jira.domain?.trim()) overrides.set("JIRA_DOMAIN", jira.domain.trim());
+    if (jira.domain?.trim()) {
+      const domain = jira.domain.trim();
+      overrides.set("JIRA_DOMAIN", domain);
+      // Kept in sync for older bundles that still read the public var. Browse
+      // links themselves use the runtime domain injected by the root layout.
+      overrides.set("NEXT_PUBLIC_JIRA_DOMAIN", domain);
+    }
     if (jira.email?.trim()) overrides.set("JIRA_EMAIL", jira.email.trim());
     if (jira.apiToken?.trim()) overrides.set("JIRA_API_TOKEN", jira.apiToken.trim());
     invalidateJiraTicketsCache();
@@ -137,6 +152,7 @@ export async function POST(req: NextRequest) {
     overrides.delete("JIRA_DOMAIN");
     overrides.delete("JIRA_EMAIL");
     overrides.delete("JIRA_API_TOKEN");
+    overrides.delete("NEXT_PUBLIC_JIRA_DOMAIN");
   }
 
   if (datadog) {
@@ -222,11 +238,14 @@ export async function POST(req: NextRequest) {
   }
 
 
+  if (typesafe?.apiKey?.trim()) overrides.set("TYPESAFE_API_KEY", typesafe.apiKey.trim());
+  else if (typesafe === null) overrides.delete("TYPESAFE_API_KEY");
+  if (slack !== undefined) applySlackSettings(overrides, slack);
   writeDashboardEnvLocalFile(overrides, passthrough);
   if (jira) {
     const packaged = getPackagedUserEnvFilePath();
     if (packaged) {
-      patchEnvFileKeys(packaged, overrides, ["JIRA_DOMAIN", "JIRA_EMAIL", "JIRA_API_TOKEN"]);
+      patchEnvFileKeys(packaged, overrides, ["JIRA_DOMAIN", "JIRA_EMAIL", "JIRA_API_TOKEN", "NEXT_PUBLIC_JIRA_DOMAIN"]);
     }
   }
   syncGoogleProcessEnvFromOverrides(overrides);
@@ -235,8 +254,14 @@ export async function POST(req: NextRequest) {
   syncInfraProcessEnvFromOverrides(overrides);
   syncPaseoProcessEnvFromOverrides(overrides);
   syncAgentProcessEnvFromOverrides(overrides);
+  if (typesafe !== undefined) syncQaProcessEnvFromOverrides(overrides);
+  if (slack !== undefined) {
+    syncSlackProcessEnvFromOverrides(overrides);
+    restartSlackBot();
+  }
 
   const saved: string[] = [];
+  if (slack !== undefined) saved.push("Slack settings saved (tokens hidden)");
   if (core?.repoRoot && overrides.get("REPO_ROOT")) saved.push(`REPO_ROOT=${overrides.get("REPO_ROOT")}`);
   if (core?.notesDir && overrides.get("NOTES_DIR")) saved.push(`NOTES_DIR=${overrides.get("NOTES_DIR")}`);
   if (core?.reposDir && overrides.get("DEVHUB_REPOS_DIR")) {
@@ -252,6 +277,7 @@ export async function POST(req: NextRequest) {
   if (datadog?.applicationKey) saved.push(`DATADOG_APPLICATION_KEY=${mask(datadog.applicationKey)}`);
   if (datadog?.email?.trim()) saved.push(`DATADOG_USER_EMAIL=${datadog.email.trim()}`);
   if (datadog?.scheduleId?.trim()) saved.push(`DATADOG_ONCALL_SCHEDULE_ID=${datadog.scheduleId.trim()}`);
+  if (typesafe?.apiKey?.trim()) saved.push(`TYPESAFE_API_KEY=${mask(typesafe.apiKey.trim())}`);
   if (infra?.scriptsRepoPath && overrides.get("AUTOMATION_REPO_PATH")) saved.push(`AUTOMATION_REPO_PATH=${overrides.get("AUTOMATION_REPO_PATH")}`);
   if (agent?.provider) saved.push(`DEVHUB_AI_PROVIDER=${normalizeAiProvider(agent.provider) ?? agent.provider}`);
   else if (agent?.cli !== undefined) saved.push(`DEVHUB_AGENT_CLI=${normalizeAgentCli(agent.cli)}`);

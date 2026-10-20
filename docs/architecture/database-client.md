@@ -203,7 +203,7 @@ carry local diffs; these carry rows out of production.
 
 ## Using `/db`
 
-**Databases** is a Library sidebar item (`/db`), desktop-only and **ungated**. SQLite
+**Databases** is a Tools sidebar item (`/db`), desktop-only and **ungated**. SQLite
 files need no integration, so gating on an integration would hide the one path that works
 on a fresh machine. Plugin connections simply do not appear unless the plugin is installed.
 

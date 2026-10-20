@@ -20,7 +20,7 @@ const icon = { size: 12 as const };
 export const SPAWN_TASKS_FROM_PLAN = {
   id: "spawn-tasks-from-plan",
   label: "Spawn tasks from plan",
-  description: "Jira tickets and DevHub tasks from issues, checklists, or PR sections",
+  description: "Create Jira tickets and DevHub tasks",
 } as const;
 
 /** Launch-menu row for dashboard card menus (Today notes panel, etc.). */
@@ -176,8 +176,10 @@ export function buildVaultFileMenuGroups(actions: VaultFileMenuActions): Context
   ];
 
   return [
-    { id: "open", items: openItems },
-    { id: "file", items: fileItems },
+    { id: "open", label: "Open", items: openItems },
+    { id: "work", label: "Work", items: fileItems.filter((item) => item.id === SPAWN_TASKS_FROM_PLAN.id) },
+    { id: "share", label: "Copy and share", items: fileItems.filter((item) => ["copy", "markdown", "share", "one-time"].includes(item.id)) },
+    { id: "file", label: "Organise", items: fileItems.filter((item) => ["rename", "duplicate", "move"].includes(item.id)) },
     {
       id: "danger",
       items: [
@@ -191,7 +193,7 @@ export function buildVaultFileMenuGroups(actions: VaultFileMenuActions): Context
         },
       ],
     },
-  ];
+  ].filter((group) => group.items.length > 0);
 }
 
 export function buildVaultFolderMenuGroups(actions: VaultFolderMenuActions): ContextMenuGroup[] {
@@ -245,7 +247,9 @@ export function buildVaultFolderMenuGroups(actions: VaultFolderMenuActions): Con
   ];
 
   return [
-    { id: "folder", items: folderItems },
+    { id: "create", label: "Create", items: folderItems.filter((item) => ["new", "new-folder"].includes(item.id)) },
+    { id: "folder", label: "Organise", items: folderItems.filter((item) => ["rename", "move"].includes(item.id)) },
+    { id: "copy", label: "Copy", items: folderItems.filter((item) => item.id === "copy") },
     ...(actions.onDelete
       ? [
           {
@@ -263,5 +267,5 @@ export function buildVaultFolderMenuGroups(actions: VaultFolderMenuActions): Con
           },
         ]
       : []),
-  ];
+  ].filter((group) => group.items.length > 0);
 }

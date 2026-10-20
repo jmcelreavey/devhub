@@ -3,6 +3,8 @@ import { z } from "zod";
 import { parseBody, requireDashboardAuth, withErrorHandler } from "@/lib/api-utils";
 import { EntityRefSchema } from "@/lib/schemas";
 import { captureDraftTask } from "@/lib/tasks/capture";
+import { resolveActiveProfileId } from "@shared/vault/task-profiles.ts";
+import { getTasksDir } from "@/lib/notes/dir";
 
 export const dynamic = "force-dynamic";
 
@@ -11,6 +13,7 @@ const CaptureSchema = z.object({
   detail: z.string().max(10_000).optional(),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   links: z.array(EntityRefSchema).max(20).optional(),
+  profile: z.string().regex(/^[a-z0-9][a-z0-9_-]{0,31}$/).optional(),
 });
 
 /** Save an idea as a draft task with a context snapshot in its note. */
@@ -19,6 +22,9 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   if (!auth.ok) return auth.response;
   const parsed = await parseBody(req, CaptureSchema);
   if (!parsed.ok) return parsed.response;
+  if (parsed.data.profile && parsed.data.profile !== (resolveActiveProfileId(getTasksDir()) ?? "legacy")) {
+    return NextResponse.json({ error: "The active profile changed. Refresh before saving this idea." }, { status: 409 });
+  }
   const result = await captureDraftTask(parsed.data);
   return NextResponse.json(result, { status: 201 });
 }, "tasks.capture.post");

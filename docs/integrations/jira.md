@@ -71,11 +71,13 @@ and `sprintId`. The dashboard chooses the issue type from the parent and inherit
 its Team, just as the creation form does.
 
 Creation requires `confirm: true` after user approval. Without it, the tool previews
-the request without contacting Jira. A successful call returns `key` and `url`;
-it does not attach the new key to a DevHub task. It uses the existing authenticated
+the request without contacting Jira. With it, the dashboard records a **proposal**
+and the tool says "Proposed, not applied": a person confirms it under
+**Integrations → Recent actions** before anything reaches Jira. The tool does not
+attach the new key to a DevHub task. It uses the existing authenticated
 dashboard client, so agents do not need to read secrets or supply an Origin header.
 
-Each confirmed call creates another issue. If a request times out, check Jira
+Each confirmed proposal creates another issue. If a request times out, check Jira
 before retrying. Restart the MCP connection after updating the server to expose
 the new tool.
 
@@ -86,9 +88,9 @@ When you complete or abandon a task that includes a Jira key, DevHub can prompt 
 | Route                                    | Purpose                                           |
 | ---------------------------------------- | ------------------------------------------------- |
 | `GET /api/jira/ticket/<key>/transitions` | Lists available transitions for the ticket        |
-| `POST /api/jira/ticket/<key>/transition` | Body: `{ transitionId }` — applies the transition |
+| `POST /api/jira/ticket/<key>/transition` | Body: `{ transitionId }` (or `{ toStatusId }` for Undo). A person's click applies it and answers `{ ok, key, from, to, undo, proposal }`; an agent gets a `202` proposal to confirm |
 
-The prompt is optional — you can dismiss it without changing Jira. Agents can use the MCP tool `jira_ticket_transition` for the same operation (see [MCP Server](../architecture/mcp-server.md)).
+The prompt is optional — you can dismiss it without changing Jira. Picking a status from a chip, row menu or link moves the ticket at once and shows a toast with **Undo**. Agents can use the MCP tool `jira_ticket_transition`; it proposes the move and a person confirms it in DevHub (see [MCP Server](../architecture/mcp-server.md)).
 
 ## Ticket list and search
 

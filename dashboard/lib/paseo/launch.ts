@@ -5,6 +5,7 @@ import { getCheckoutRoot, getResourceRoot } from "@/lib/content/dirs";
 import { readSharedMcpServer, substituteRepoRoot, type Json, type SharedMcpServer } from "@/lib/sync/mcp";
 import { applyCursorAcpServerOverlay } from "@/lib/mcp/cursor-acp-surface";
 import type { PaseoAgentConfig } from "@getpaseo/client";
+import { applyEffort } from "@/lib/ai/effort";
 import { runtimeMcpServers } from "@/lib/plugins/runtime-mcp";
 
 type McpServers = NonNullable<PaseoAgentConfig["mcpServers"]>;
@@ -30,18 +31,9 @@ export function resolveBackgroundCli(env: Env = process.env): string {
   return raw === "chatgpt" ? "codex" : raw;
 }
 
-/** Map `cursor agent --model` ids (DEVHUB_AGENT_CURSOR_MODEL) onto Cursor ACP model ids. */
+/** Cursor CLI and Paseo use the same live model ids. */
 export function mapCursorCliModel(cliModel: string | undefined): string | undefined {
-  const raw = cliModel?.trim();
-  if (!raw) return undefined;
-  if (raw.includes("[") || !raw.startsWith("cursor-")) return raw;
-  const lower = raw.toLowerCase();
-  if (lower.includes("grok-4.6") && lower.includes("fast")) return "grok-4.6[effort=high,fast=true]";
-  if (lower.includes("grok-4.6")) return "grok-4.6[effort=high]";
-  if (lower.includes("grok-4.5") && lower.includes("fast")) return "grok-4.5[effort=high,fast=true]";
-  if (lower.includes("grok-4.5")) return "grok-4.5[effort=high]";
-  if (lower.includes("grok")) return "grok-4.6[effort=high]";
-  return undefined;
+  return cliModel?.trim() || undefined;
 }
 
 /** OpenCode's own default, as the Setup page promises: `model` in opencode.json. */
@@ -60,7 +52,7 @@ function opencodeConfigModel(env: Env): string | undefined {
  * catalog, which can name a model the user's OpenCode setup doesn't have.
  */
 export function defaultModelFor(provider: string, env: Env = process.env): string | undefined {
-  if (provider === "cursor") return mapCursorCliModel(env.DEVHUB_AGENT_CURSOR_MODEL) || "grok-4.6[effort=high]";
+  if (provider === "cursor") return mapCursorCliModel(env.DEVHUB_AGENT_CURSOR_MODEL);
   if (provider === "opencode") return env.DEVHUB_AGENT_OPENCODE_MODEL?.trim() || opencodeConfigModel(env);
   return undefined;
 }
@@ -112,32 +104,52 @@ export function paseoMcpServers(names: readonly string[], repoRoot = getCheckout
   return out;
 }
 
-export function resolvePaseoLaunch(input: { provider: string; model?: string; mcpNames: readonly string[]; depth: number; env?: Env; runtimePlugins?: boolean }): PaseoLaunch {
+export function resolvePaseoLaunch(input: { provider: string; model?: string; effort?: string; thinkingOptions?: readonly { id: string; label?: string }[] | null; availableModels?: readonly string[] | null; mcpNames: readonly string[]; depth: number; env?: Env; runtimePlugins?: boolean; planScope?: { taskId: string; date: string } }): PaseoLaunch {
   const env = input.env ?? process.env;
   const requested = input.provider.trim().toLowerCase();
   const provider = requested === "chatgpt" ? "codex" : requested;
   if (!/^[a-z][a-z0-9-]*$/.test(provider)) throw new Error(`"${input.provider}" is not a Paseo provider id.`);
-  const model = input.model?.trim() || defaultModelFor(provider, env);
+  // Blank effort sends nothing, so an id that already carries effort= keeps it.
+  const applied = applyEffort({
+    provider,
+    model: input.model,
+    effort: input.effort,
+    thinkingOptions: input.thinkingOptions,
+    availableModels: input.availableModels,
+  });
+  const model = applied.model?.trim() || defaultModelFor(provider, env);
   // Paseo requires provider/model; "default" asks the provider for its own default.
   const split = model ? splitParameterizedModel(model) : undefined;
+  const thinking = applied.thinkingOptionId || split?.thinking;
   // The DevHub MCP refuses nested dispatch past DEVHUB_AGENT_MAX_DEPTH; it reads this from its env.
-  const depthEnv = { DEVHUB_AGENT_DEPTH: String(input.depth + 1) };
-  const mcpServers = Object.fromEntries(Object.entries(paseoMcpServers(input.mcpNames, undefined, input.runtimePlugins)).map(([name, server]) => {
+  const plan = input.planScope;
+  const depthEnv = { DEVHUB_AGENT_DEPTH: String(input.depth + 1), ...(plan ? { DEVHUB_PLAN_TASK_ID: plan.taskId, DEVHUB_PLAN_TASK_DATE: plan.date } : {}) };
+  const mcpServers = Object.fromEntries(Object.entries(paseoMcpServers(plan ? ["devhub"] : input.mcpNames, undefined, !plan && input.runtimePlugins)).map(([name, server]) => {
     if (server.type !== "stdio") return [name, server];
     // Cursor drops tools past ~190; it gets the same slimmed DevHub catalog as its synced mcp.json.
     const shaped = provider === "cursor" ? applyCursorAcpServerOverlay(name, server as unknown as Json) as typeof server : server;
-    return [name, { ...shaped, env: { ...shaped.env, ...depthEnv } }];
+    const planRoot = plan && name === "devhub" && shaped.command.endsWith("/bin/devhub-mcp.mjs") ? path.dirname(path.dirname(shaped.command)) : undefined;
+    const command = planRoot ? path.join(planRoot, "node_modules", ".bin", "tsx") : shaped.command;
+    const args = planRoot ? [path.join(planRoot, "src", "plan-mcp.ts")] : plan && name === "devhub" ? shaped.args?.map((arg) => arg.replace(/([/\\])mcp\.ts$/, "$1plan-mcp.ts")) : shaped.args;
+    const peerFile = plan && name === "devhub" ? args?.find((arg) => arg.endsWith("/plan-mcp.ts")) : undefined;
+    if (plan && name === "devhub" && (!peerFile || !fs.existsSync(peerFile) || (planRoot && !fs.existsSync(command)))) throw new Error("Plan runs need the local task-scoped DevHub MCP peer. Update DevHub's repo checkout and try again.");
+    return [name, { ...shaped, command, ...(args ? { args } : {}), env: { ...shaped.env, ...depthEnv } }];
   }));
+  if (plan && mcpServers.devhub?.type !== "stdio") throw new Error("Plan runs need the local task-scoped DevHub MCP peer.");
+  const modeId = plan ? ({ claude: "plan", codex: "auto", opencode: "plan", cursor: "plan" } as Record<string, string>)[provider] : YOLO_MODE[provider];
   const config: PaseoAgentConfig = {
     provider: `${provider}/${split?.model || "default"}`,
-    ...(YOLO_MODE[provider] ? { modeId: YOLO_MODE[provider] } : {}),
-    ...(split?.thinking ? { thinkingOptionId: split.thinking } : {}),
+    ...(modeId ? { modeId } : {}),
+    ...(plan ? { toolPolicy: { preapproved: ["task_plan_context", "task_plan_update"].map((tool) => ({ kind: "mcp" as const, server: "devhub", tool })) } } : {}),
+    ...(plan && provider === "codex" ? { options: { sandbox_mode: "read-only", approval_policy: "never" } } : {}),
+    ...(plan && provider === "claude" ? { options: { disallowedTools: ["Edit", "Write", "NotebookEdit", "ExitPlanMode"], extraArgs: { "strict-mcp-config": null } } } : {}),
+    ...(thinking ? { thinkingOptionId: thinking } : {}),
     featureValues: {
-      ...(AUTOCONFIRM_PROVIDERS.has(provider) ? { auto_accept: true } : {}),
+      ...(!plan && AUTOCONFIRM_PROVIDERS.has(provider) ? { auto_accept: true } : {}),
       ...(split?.fast !== undefined ? { fast: split.fast } : {}),
     },
     ...(Object.keys(mcpServers).length ? { mcpServers } : {}),
   };
   // Also on the agent itself, so user-level DevHub MCP entries the harness loads inherit it.
-  return { provider, model, config, env: depthEnv, autoconfirmPermissions: AUTOCONFIRM_PROVIDERS.has(provider) };
+  return { provider, model, config, env: depthEnv, autoconfirmPermissions: !plan && AUTOCONFIRM_PROVIDERS.has(provider) };
 }

@@ -53,6 +53,48 @@ describe("tasks-storage", () => {
     expect(t.jiraKey).toBe("FOO-123");
   });
 
+  it("resolves repo mentions on both add and edit without losing existing links", async () => {
+    const reposDir = path.join(tmpRepo, "repos");
+    for (const name of ["app", "api"]) fs.mkdirSync(path.join(reposDir, name, ".git"), { recursive: true });
+    const previousReposDir = process.env.DEVHUB_REPOS_DIR;
+    process.env.DEVHUB_REPOS_DIR = reposDir;
+    try {
+      const m = await freshTaskModule();
+      const manual = { kind: "note", id: "manual", label: "Manual note" };
+      const added = await m.addTask("Ship @app", undefined, undefined, [manual]);
+      const task = await m.addTask("Ship", undefined, undefined, [manual]);
+      const edited = await m.updateTask(task.id, { text: "Ship @app" });
+      expect(edited).toMatchObject({ text: "Ship", links: [manual, { kind: "repo", id: "app", label: "app" }] });
+      expect(edited.links).toEqual(added.links);
+      expect(edited.text).toBe(added.text);
+      const changed = await m.updateTask(task.id, { text: "Ship @api" });
+      expect(changed.links.map((link: { id: string }) => link.id)).toEqual(["manual", "app", "api"]);
+      expect(await m.updateTask(task.id, { text: "Ship @api" })).toEqual(changed);
+      const unknown = await m.updateTask(task.id, { text: "Ship @missing" });
+      expect(unknown.text).toBe("Ship @missing");
+      expect(unknown.links).toEqual(changed.links);
+      const plain = await m.updateTask(task.id, { text: "Plain edit" });
+      expect(plain.text).toBe("Plain edit");
+      expect(plain.links).toEqual(changed.links);
+      expect(m.getTasks().find((item: { id: string }) => item.id === task.id)).toEqual(plain);
+    } finally {
+      if (previousReposDir === undefined) delete process.env.DEVHUB_REPOS_DIR;
+      else process.env.DEVHUB_REPOS_DIR = previousReposDir;
+    }
+  });
+
+  it("adds a Jira link on a text edit and preserves manual links on repeated saves", async () => {
+    const m = await freshTaskModule();
+    const manual = { kind: "pr", id: "org/repo#1", label: "Manual PR" };
+    const task = await m.addTask("Ship", undefined, undefined, [manual]);
+    const edited = await m.updateTask(task.id, { text: "PTF-5260 Ship" });
+    expect(edited).toMatchObject({
+      text: "PTF-5260 Ship", jiraKey: "PTF-5260",
+      links: [manual, { kind: "jira", id: "PTF-5260", label: "PTF-5260" }],
+    });
+    expect(await m.updateTask(task.id, { text: "PTF-5260 Ship" })).toEqual(edited);
+  });
+
   it("toggleTask flips done state", async () => {
     const m = await freshTaskModule();
     const t = await m.addTask("x");

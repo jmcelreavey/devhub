@@ -71,9 +71,9 @@ Your day on one page: tasks, the plans that are ready for an agent to pick up, a
 
 ![Today shows the day's tasks and which plans are ready for an agent](docs/assets/demos/today.gif)
 
-### Work
+### Tasks
 
-Every open task, filterable by tag, date or status, plus History for what got done, moved or abandoned. A Jira tab appears once Jira is connected, and **Review** gives you the week in numbers.
+Every open task, filterable by tag, date or status, plus History for what got done, moved or abandoned. A Jira tab appears once Jira is connected, and **Weekly review** gives you the week in numbers.
 
 ![Filtering tasks, then task history and the weekly review](docs/assets/demos/work.gif)
 
@@ -131,7 +131,7 @@ There's more: Repos with a git client, Databases (SQLite, Postgres and MongoDB),
 
 A plugin is a separate repo that adds skills, agents, MCP servers, dashboard pages or database connections to DevHub without living in the core. That's how company-specific things stay out of the shared code. It's just a folder with a `devhub-plugin.json` in it.
 
-In the app: **Plugins** (the top bar when you're on System, or the **Plugins** button on Skills) → **Add from GitHub**, paste the repo URL, review what it adds, then enable. Needs Git (on a Mac: **Install Git** / `xcode-select --install`). Plugins with a prebuilt `runtime` bundle can add pages, APIs, stateless MCP servers and branding without a checkout or rebuild. Existing source-only dashboard plugins still need a checkout. See the [portable example](templates/runtime-plugin/README.md).
+In the app: **Plugins** (the top bar when you're on Settings, or the **Plugins** button on Agent skills) → **Add from GitHub**, paste the repo URL, review what it adds, then enable. Needs Git (on a Mac: **Install Git** / `xcode-select --install`). Plugins with a prebuilt `runtime` bundle can add pages, APIs, stateless MCP servers and branding without a checkout or rebuild. Existing source-only dashboard plugins still need a checkout. See the [portable example](templates/runtime-plugin/README.md).
 
 From a DevHub checkout, the same install is:
 

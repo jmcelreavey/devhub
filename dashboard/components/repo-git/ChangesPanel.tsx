@@ -23,6 +23,7 @@ Bot,
 Check,
 ChevronDown,
 CloudUpload,
+Code2,
 Copy,
 Eye,
 File,
@@ -653,6 +654,7 @@ export function ChangesPanel({
         id: "open-cursor",
         label: "Open in Cursor",
         description: target.path.split("/").pop(),
+        icon: <Code2 size={12} aria-hidden />,
         onSelect: () => void openRepoFileInCursor(repoName, toast, target.path),
       },
       {
@@ -669,6 +671,7 @@ export function ChangesPanel({
       return [
         {
           id: "index",
+          label: "Stage",
           items: [
             {
               id: "unstage",
@@ -695,6 +698,7 @@ export function ChangesPanel({
     return [
       {
         id: "worktree",
+        label: "Stage",
         items: [
           {
             id: "stage",
@@ -1233,6 +1237,7 @@ export function ChangesPanel({
                         aria-hidden
                         style={{ visibility: commitMode === mode ? "visible" : "hidden" }}
                       />
+                      {mode === "commit-and-push" ? <Upload size={11} aria-hidden /> : <GitCommit size={11} aria-hidden />}
                       {label}
                     </button>
                   ))}

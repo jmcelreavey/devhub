@@ -1,8 +1,8 @@
 "use client";
-import { openAgentHandoff } from "@/lib/agent-handoff";
 
 import { RepoGitWorkspace } from "@/components/repo-git/RepoGitWorkspace";
 import { RepoOpenPrLink } from "@/components/repos/RepoOpenPrLink";
+import { buildLocalRepoMenuGroups } from "@/components/repos/local-repo-menu";
 import { usePrompt } from "@/components/shell/ConfirmDialog";
 import {
 ContextMenu,
@@ -14,17 +14,14 @@ type ContextMenuGroup,
 import { HoverTip } from "@/components/ui/HoverTip";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { launchAgentJob } from "@/lib/agent-job";
-import { copyTextToClipboard } from "@/lib/clipboard";
+import { openInBrowser } from "@/lib/desktop/bridge";
 import { useToast } from "@/lib/hooks/use-toast";
 import {
 Archive,
-Bot,
 Brain,
 ClipboardCheck,
-Copy,
 Download,
 ExternalLink,
-FolderOpen,
 GitBranch,
 GitFork,
 ListTodo,
@@ -34,7 +31,6 @@ ScanSearch,
 ScrollText,
 Shield,
 ShieldCheck,
-TerminalSquare,
 Trash2,
 } from "lucide-react";
 import Link from "next/link";
@@ -314,6 +310,12 @@ export function LocalRepoCard({
           icon: <Rocket size={12} />,
           onSelect: () => onUpstart(target, true),
         },
+      ],
+    },
+    {
+      id: "knowledge",
+      label: "Knowledge",
+      items: [
         {
           id: "learn",
           label: "Learn this repo",
@@ -361,7 +363,12 @@ export function LocalRepoCard({
             })();
           },
         },
-        {
+      ],
+    },
+    {
+      id: "maintenance",
+      label: "Maintenance",
+      items: [{
           id: "graveyard",
           label: "Project graveyard",
           icon: <Archive size={12} />,
@@ -369,70 +376,10 @@ export function LocalRepoCard({
         },
       ],
     },
-    {
-      id: "open",
-      label: "Open",
-      items: [
-        ...(isDesktop
-          ? [
-              {
-                id: "cursor",
-                label: opening === target.name ? "Opening in Cursor…" : "Open in Cursor",
-                icon: <MonitorPlay size={12} />,
-                disabled: busy,
-                onSelect: () => onCursor(target.name),
-              },
-              {
-                id: "terminal",
-                label: "Terminal",
-                icon: <TerminalSquare size={12} />,
-                onSelect: () => onTerminal(target),
-              },
-            ]
-          : []),
-        {
-          id: "folder",
-          label: apps?.revealLabel ?? "Show folder",
-          icon: <FolderOpen size={12} />,
-          onSelect: () => onRevealFolder(target.name),
-        },
-        ...(githubUrl
-          ? [
-              {
-                id: "github",
-                label: "Open on GitHub",
-                icon: <ExternalLink size={12} />,
-                onSelect: () => {
-                  window.open(githubUrl, "_blank", "noopener,noreferrer");
-                },
-              },
-            ]
-          : []),
-        {
-          id: "copy-path",
-          label: "Copy path",
-          icon: <Copy size={12} />,
-          onSelect: () =>
-            void copyTextToClipboard(target.path).then(
-              () => toast.success("Path copied"),
-              () => toast.error("Could not copy path"),
-            ),
-        },
-        { id: "agents", label: "Ask Agent", icon: <Bot size={12} />, onSelect: () => openAgentHandoff({ title: "Ask Agent · " + target.name, cwd: target.path, repoName: target.name, worktree: false }) },
-        ...(isDesktop && apps?.gitkraken
-          ? [
-              {
-                id: "gitkraken",
-                label: "GitKraken",
-                icon: <GitBranch size={12} />,
-                onSelect: () => onGitKraken(target.name),
-              },
-            ]
-          : []),
-      ],
-    },
+    ...buildLocalRepoMenuGroups({ target, apps, isDesktop, opening, busy, githubUrl, onCursor, onTerminal, onRevealFolder, onGitKraken, toast }),
     {
       id: "own",
+      label: "Ownership",
       items: [
         ...(ownershipFullName
           ? [
@@ -440,6 +387,7 @@ export function LocalRepoCard({
                 id: "own-toggle",
                 label: owned ? "Stop owning this repo" : "Own this repo",
                 icon: owned ? <ShieldCheck size={12} /> : <Shield size={12} />,
+                danger: owned,
                 disabled: ownershipBusy !== null,
                 onSelect: () => onToggleOwned(ownershipFullName, !owned),
               },
@@ -510,7 +458,7 @@ export function LocalRepoCard({
             {(repo.branch || repo.worktreeOf || (repo.worktreeCount ?? 0) > 0) && (
               <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-2">
                 {repo.branch && <MetaChip icon={<GitBranch size={11} />} label={repo.branch} />}
-                {(repo.worktreeCount ?? 0) > 0 && <Link className="text-xs text-text-muted hover:text-accent" href={`/repos/${encodeURIComponent(repo.name)}/git?tab=worktrees`}>{repo.worktreeCount} worktrees · Review cleanup</Link>}
+                {(repo.worktreeCount ?? 0) > 0 && <Link className="text-xs text-text-muted hover:text-accent" href={`/repos/${encodeURIComponent(repo.name)}/git?tab=worktrees`}>{repo.worktreeCount} worktrees{repo.staleWorktreeCount ? ` · ${repo.staleWorktreeCount} stale` : ""}</Link>}
                 {repo.branch && githubUrl ? (
                   <RepoOpenPrLink repoName={repo.name} branch={repo.branch} />
                 ) : null}
@@ -614,7 +562,10 @@ export function LocalRepoCard({
             {openTasks[0].jiraKey ? (
               <span className="repo-card-work-key">{openTasks[0].jiraKey}</span>
             ) : null}
-            <span className="truncate">{openTasks[0].text}</span>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate">{openTasks[0].text}</span>
+              {openTasks[0].status ? <span className={`block truncate text-xs ${openTasks[0].needsYou ? "text-warning" : "text-text-muted"}`}>{openTasks[0].status}</span> : null}
+            </span>
             {openTasks.length > 1 ? (
               <span className="repo-card-work-more">+{openTasks.length - 1}</span>
             ) : null}
@@ -653,14 +604,13 @@ export function GithubRepoCard({
           id: "github",
           label: "Open on GitHub",
           icon: <ExternalLink size={12} />,
-          onSelect: () => {
-            window.open(target.url, "_blank", "noopener,noreferrer");
-          },
+          onSelect: () => void openInBrowser(target.url),
         },
         {
           id: "own",
           label: owned ? "Stop owning this repo" : "Own this repo",
           icon: owned ? <ShieldCheck size={12} /> : <Shield size={12} />,
+          danger: owned,
           disabled: ownershipBusy !== null,
           onSelect: () => onToggleOwned(target.fullName, !owned),
         },

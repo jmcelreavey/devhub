@@ -24,6 +24,7 @@ import { FileTree } from "@/components/FileTree";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { HoverTip } from "@/components/ui/HoverTip";
 import type { DevHubPartialBlock } from "@/lib/blocknote/schema";
+import { VaultEditorPage } from "@/components/vault/VaultEditorPage";
 
 interface SearchResult {
   path: string;
@@ -42,15 +43,19 @@ interface NoteOverlayProps {
   onClose: () => void;
   /** Increments each time something asks the panel to jump to today's daily note. */
   todayNoteRequest?: number;
+  /** A note another surface asked to open here; a new id reopens even the same path. */
+  notePathRequest?: { path: string; id: number } | null;
 }
 
-export function NotesOverlay({ open, onClose, todayNoteRequest = 0 }: NoteOverlayProps) {
+export function NotesOverlay({ open, onClose, todayNoteRequest = 0, notePathRequest = null }: NoteOverlayProps) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
   const [activeNote, setActiveNote] = useState<{
     path: string;
     blocks: DevHubPartialBlock[];
   } | null>(null);
+  /** Requested notes use the full-page editor embedded, so task notes keep their task view. */
+  const [embeddedPath, setEmbeddedPath] = useState<string | null>(null);
   const [searching, setSearching] = useState(false);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const saveQueueRef = useRef<Promise<void>>(Promise.resolve());
@@ -66,6 +71,7 @@ export function NotesOverlay({ open, onClose, todayNoteRequest = 0 }: NoteOverla
       setQuery(""); // eslint-disable-line react-hooks/set-state-in-effect
       setResults([]);
       setActiveNote(null);
+      setEmbeddedPath(null);
       return;
     }
 
@@ -146,6 +152,7 @@ export function NotesOverlay({ open, onClose, todayNoteRequest = 0 }: NoteOverla
             cleanPath,
             typeof data.modified === "number" ? data.modified : null,
           );
+          setEmbeddedPath(null);
           setActiveNote({ path: cleanPath, blocks: data.content });
         })
         .catch((e) => {
@@ -163,6 +170,20 @@ export function NotesOverlay({ open, onClose, todayNoteRequest = 0 }: NoteOverla
     // Fire once per request; re-running on `open`/`openTodayNote` churn would clobber navigation.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [todayNoteRequest]);
+
+  useEffect(() => {
+    if (!notePathRequest) return;
+    const cleanPath = notePathRequest.path.replace(/\.json$/, "");
+    if (isMobileViewport()) {
+      onClose();
+      router.push(notesPageHref(cleanPath));
+      return;
+    }
+    setActiveNote(null); // eslint-disable-line react-hooks/set-state-in-effect
+    setEmbeddedPath(cleanPath);
+    // Fire once per request, like todayNoteRequest.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [notePathRequest?.id]);
 
   const handleSave = useCallback(
     (blocks: DevHubPartialBlock[]) => {
@@ -196,12 +217,13 @@ export function NotesOverlay({ open, onClose, todayNoteRequest = 0 }: NoteOverla
     [activeNote, toast],
   );
 
+  const shownPath = embeddedPath ?? activeNote?.path ?? null;
   const openFullPage = useCallback(() => {
-    if (activeNote) {
+    if (shownPath) {
       onClose();
-      router.push(`/notes/${activeNote.path}`);
+      router.push(embeddedPath ? notesPageHref(shownPath) : `/notes/${shownPath}`);
     }
-  }, [activeNote, onClose, router]);
+  }, [shownPath, embeddedPath, onClose, router]);
 
   return (
     <SidePanel
@@ -209,17 +231,17 @@ export function NotesOverlay({ open, onClose, todayNoteRequest = 0 }: NoteOverla
       onClose={onClose}
       storageKey="notes-panel-width"
       defaultWidth={440}
-      ariaLabel={activeNote ? "Note editor" : "Notes search"}
+      ariaLabel={shownPath ? "Note editor" : "Notes search"}
     >
       <div
         className="flex items-center gap-2 px-4 py-3 border-b shrink-0"
         style={{ borderColor: "var(--border)" }}
       >
-        {activeNote ? (
+        {shownPath ? (
           <>
             <button
               type="button"
-              onClick={() => setActiveNote(null)}
+              onClick={() => { setActiveNote(null); setEmbeddedPath(null); }}
               className="text-xs text-text-muted"
               aria-label="Back to search"
             >
@@ -228,7 +250,7 @@ export function NotesOverlay({ open, onClose, todayNoteRequest = 0 }: NoteOverla
             <span
               className="text-sm font-medium truncate flex-1 text-text"
             >
-              {activeNote.path.split("/").pop()}
+              {shownPath.split("/").pop()}
             </span>
             <button
               type="button"
@@ -242,7 +264,7 @@ export function NotesOverlay({ open, onClose, todayNoteRequest = 0 }: NoteOverla
                 aria-hidden
               />
             </button>
-            <CopyLocationButton path={activeNote.path} size={14} />
+            <CopyLocationButton path={shownPath} size={14} />
             <button
               type="button"
               onClick={openFullPage}
@@ -322,7 +344,11 @@ export function NotesOverlay({ open, onClose, todayNoteRequest = 0 }: NoteOverla
       </div>
 
       <div className="flex-1 overflow-y-auto overscroll-contain">
-        {activeNote ? (
+        {embeddedPath ? (
+          <div className="p-2" data-testid="notes-panel-embedded">
+            <VaultEditorPage key={`${embeddedPath}:${notePathRequest?.id ?? 0}`} vault="notes" path={embeddedPath.split("/")} embedded />
+          </div>
+        ) : activeNote ? (
           <div className="p-2">
             <BlockNoteEditor
               key={activeNote.path}

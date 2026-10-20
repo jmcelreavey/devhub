@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import { useLive } from "@/lib/hooks/use-fetch";
 import { notify, notifyPermission } from "@/lib/desktop/bridge";
-import type { WorkflowInboxResponse } from "@/app/workflow/WorkflowInbox";
+import type { WorkflowInboxResponse } from "@/lib/workflows/inbox";
 
 /** Delivery markers survive reloads; notification bodies never contain task text. */
 export function WorkflowNotifications() {
@@ -20,7 +20,7 @@ export function WorkflowNotifications() {
       });
       if (!unseen.length) return;
       for (const { workflow } of unseen) localStorage.setItem("devhub:workflow-alert:" + workflow.taskId, String(workflow.revision));
-      await notify("DevHub needs you", unseen.length === 1 ? "A task has an update. Open Task workflows to review it." : unseen.length + " tasks have updates. Open Task workflows to review them.");
+      await notify("DevHub needs you", unseen.length === 1 ? "A task has an update. Open the Storyboard inbox to review it." : unseen.length + " tasks have updates. Open the Storyboard inbox to review them.");
     })().catch((error: unknown) => console.error("[workflow] Notification delivery failed", error));
     return () => { disposed = true; };
   }, [data]);

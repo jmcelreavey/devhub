@@ -13,10 +13,20 @@ const base = {
 describe("buildVaultFileMenuGroups", () => {
   it("keeps Open and Delete groups", () => {
     const groups = buildVaultFileMenuGroups(base);
-    expect(groups.map((group) => group.id)).toEqual(["open", "file", "danger"]);
+    expect(groups.map((group) => group.id)).toEqual(["open", "share", "danger"]);
     expect(groups[0]?.items.map((item) => item.id)).toEqual(["open"]);
     expect(groups[2]?.items[0]?.id).toBe("delete");
     expect(groups[2]?.items[0]?.danger).toBe(true);
+  });
+
+  it("groups work, sharing and organisation before deletion", () => {
+    const groups = buildVaultFileMenuGroups({
+      ...base, onCreateTasksFrom: vi.fn(), onRename: vi.fn(), onMove: vi.fn(),
+    });
+    expect(groups.map((group) => group.label ?? group.id)).toEqual(["Open", "Work", "Copy and share", "Organise", "danger"]);
+    expect(groups.flatMap((group) => group.items.map((item) => item.id))).toEqual([
+      "open", "spawn-tasks-from-plan", "copy", "rename", "move", "delete",
+    ]);
   });
 
   it("shows disabled Open in Cursor when a reason is given", () => {
@@ -41,7 +51,7 @@ describe("buildVaultFileMenuGroups", () => {
       onShare: vi.fn(),
       onOneTime: vi.fn(),
     });
-    expect(groups[1]?.items.map((item) => item.id)).toEqual(
+    expect(groups.find((group) => group.id === "share")?.items.map((item) => item.id)).toEqual(
       expect.arrayContaining(["copy", "markdown", "share", "one-time"]),
     );
   });

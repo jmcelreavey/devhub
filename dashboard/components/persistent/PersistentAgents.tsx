@@ -37,6 +37,9 @@ export function PersistentAgents({ sideRun }: { sideRun?: { id: string; conversa
   const dismissedLink = useRef("");
   const appliedRequest = useRef(0);
   const [requested, setRequested] = useState<{ id: string; serial: number }>();
+  const [startingLabel, setStartingLabel] = useState<string>();
+  const pendingSince = useRef(0);
+  const pendingQuery = useRef("");
   const confirm = useConfirm();
   useEffect(() => { if (!conversation && !runLink) dismissedLink.current = ""; }, [conversation, runLink]);
   useEffect(() => {
@@ -129,11 +132,31 @@ export function PersistentAgents({ sideRun }: { sideRun?: { id: string; conversa
     const link = origin + ":" + query;
     if (!explicit && (appliedLink.current === link || dismissedLink.current === link)) return;
     let cancelled = false;
+    let timer: number | undefined;
+    if (pendingQuery.current !== query) {
+      pendingQuery.current = query;
+      pendingSince.current = 0;
+    }
     void (async () => {
       try {
         const response = await fetch(`/api/paseo/open?${query}&format=json`);
-        const data = await response.json() as { url?: string; error?: string };
+        const data = await response.json() as { url?: string; error?: string; starting?: boolean };
         if (cancelled) return;
+        if (response.status === 404 && data.starting) {
+          if (!pendingSince.current) pendingSince.current = Date.now();
+          if (Date.now() - pendingSince.current > 120_000) {
+            pendingSince.current = 0;
+            setStartingLabel(undefined);
+            setChatRetryable(true);
+            throw new Error(data.error || "The agent is still starting. Check Activity, then try again.");
+          }
+          setChatError(undefined);
+          setStartingLabel(data.error || "Starting the agent…");
+          timer = window.setTimeout(() => { if (!cancelled) setRetry((value) => value + 1); }, 400);
+          return;
+        }
+        pendingSince.current = 0;
+        setStartingLabel(undefined);
         if (!response.ok || !data.url) {
           setChatRetryable(response.status >= 500);
           throw new Error(data.error || "This chat could not be opened.");
@@ -153,12 +176,13 @@ export function PersistentAgents({ sideRun }: { sideRun?: { id: string; conversa
         if (!cancelled) setChatError(err instanceof Error ? err.message : "This chat could not be opened.");
       }
     })();
-    return () => { cancelled = true; };
+    return () => { cancelled = true; if (timer !== undefined) window.clearTimeout(timer); };
   }, [active, origin, conversation, runLink, requested, retry]);
 
   if (!active && !origin) return null;
   return (
     <section aria-label="Agents chats" hidden={!active} style={{ position: "absolute", inset: sideRun ? "0" : "57px 0 0", display: active ? "flex" : "none", flexDirection: "column", background: "var(--bg)" }}>
+      {startingLabel && active ? <p className="m-4 text-sm text-text-muted" role="status">{startingLabel}</p> : null}
       {error && <div className="tone-panel tone-panel--warning m-4" role="alert">
         <p>{error}</p>
         {setupHelp.detail ? <details className="mt-2 text-xs"><summary>Developer detail</summary><p className="mt-1">{setupHelp.detail}</p></details> : null}

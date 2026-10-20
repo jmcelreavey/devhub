@@ -36,13 +36,42 @@ function setup() {
 }
 
 describe("reviewed integration tools", () => {
+  it("adds read-only Slack status without changing existing integration tools", async () => {
+    const { call, get, post } = setup();
+    await call("integrations_slack_status");
+    expect(get).toHaveBeenCalledExactlyOnceWith("/api/integrations/slack/status");
+    expect(post).not.toHaveBeenCalled();
+    expect(TOOL_ANNOTATIONS.integrations_slack_status).toMatchObject({ readOnlyHint: true, openWorldHint: false });
+  });
+  it("adds read-only Slack usage that takes no input", async () => {
+    const { call, get, post } = setup();
+    await call("integrations_slack_usage");
+    expect(get).toHaveBeenCalledExactlyOnceWith("/api/integrations/slack/usage");
+    expect(post).not.toHaveBeenCalled();
+    expect(TOOL_ANNOTATIONS.integrations_slack_usage).toMatchObject({ readOnlyHint: true, destructiveHint: false, openWorldHint: false });
+    await expect(call("integrations_slack_usage", { date: "today" })).rejects.toThrow();
+  });
+  it("sends one revision-bound Slack test, with idempotence and write annotations", async () => {
+    const { call, post } = setup();
+    const input = { revision: "a".repeat(64), requestId };
+    await call("integrations_slack_test", input);
+    expect(post).toHaveBeenCalledExactlyOnceWith("/api/integrations/slack/test", input, 30_000);
+    expect(TOOL_ANNOTATIONS.integrations_slack_test).toMatchObject({ readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true });
+    for (const invalid of [{ ...input, revision: "bad" }, { revision: input.revision }, { ...input, channel: "COTHER" }, { ...input, text: "hello" }]) await expect(call("integrations_slack_test", invalid)).rejects.toThrow();
+  });
+  it("preserves Slack dashboard errors without replaying the test", async () => {
+    const { call, post } = setup();
+    post.mockRejectedValue(new DashboardHttpError(409, { error: "Settings changed." }, "Settings changed."));
+    expect(await call("integrations_slack_test", { revision: "a".repeat(64), requestId })).toMatchObject({ isError: true });
+    expect(post).toHaveBeenCalledTimes(1);
+  });
   it("lists alert destinations and chat config without writes or enabling tools", async () => {
     const { call, tools, get, post } = setup();
     await call("integrations_alert_destinations"); await call("integrations_chat_status");
     expect(get).toHaveBeenCalledWith("/api/integrations/alerts");
     expect(get).toHaveBeenCalledWith("/api/integrations/chat/config");
     expect(post).not.toHaveBeenCalled();
-    expect([...tools.keys()].filter((name) => /integrations_.*(enable|save|confirm)/.test(name))).toEqual([]);
+    expect([...tools.keys()].filter((name) => /integrations_.*(enable|save)/.test(name))).toEqual([]);
     expect(TOOL_ANNOTATIONS.integrations_alert_destinations).toMatchObject({ readOnlyHint: true });
     expect(TOOL_ANNOTATIONS.integrations_chat_status).toMatchObject({ readOnlyHint: true });
   });
@@ -73,6 +102,7 @@ describe("reviewed integration tools", () => {
   });
   it.each([
     issue,
+    { ...issue, parentKey: "APP-1", taskId: requestId },
     { action: "issue.transition", provider: "jira", account: "default", ref: { provider: "jira", account: "default", kind: "issue", id: "APP-12" }, transitionId: "31" },
     { action: "pr.create", provider: "github", account: "default", repo: "acme/payments", head: "fix/retries", base: "main", title: "Fix retries", body: "Checked locally.", draft: true },
     { action: "pr.update", provider: "github", account: "default", ref: { provider: "github", account: "default", kind: "pr", id: "acme/payments/12" }, title: "Fix retries", body: "Checked locally." },
@@ -82,13 +112,17 @@ describe("reviewed integration tools", () => {
     await call("integrations_propose", { input });
     expect(post).toHaveBeenCalledExactlyOnceWith("/api/integrations/writes", { action: "propose", input }, 60_000);
   });
-  it("reviews by id, never exposes a confirm or cancel tool", async () => {
+  it("reviews by id; confirming needs the digest and the user's own words, and there is still no cancel tool", async () => {
     const { call, post, tools } = setup();
     await call("integrations_review", { id: requestId });
     expect(post).toHaveBeenCalledExactlyOnceWith("/api/integrations/writes", { action: "review", id: requestId }, 60_000);
-    expect([...tools.keys()].filter((name) => /integrations_.*(confirm|execute|cancel)/.test(name))).toEqual([]);
+    expect([...tools.keys()].filter((name) => /integrations_.*(execute|cancel)/.test(name))).toEqual([]);
     await expect(call("integrations_review", { id: requestId, action: "confirm", confirmed: true })).rejects.toThrow();
     expect(post).toHaveBeenCalledTimes(1);
+    const digest = "a".repeat(64);
+    await expect(call("integrations_confirm", { id: requestId, digest })).rejects.toThrow();
+    await call("integrations_confirm", { id: requestId, digest, approvedBy: "Yes, move PTF-1 to Done" });
+    expect(post).toHaveBeenLastCalledWith("/api/integrations/writes", { action: "confirm", id: requestId, digest, confirmed: true, via: "chat", quote: "Yes, move PTF-1 to Done" }, 60_000);
   });
   it.each([
     { ...issue, title: " " }, { ...issue, action: "confirm" }, { ...issue, confirmed: true },

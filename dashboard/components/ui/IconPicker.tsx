@@ -19,7 +19,7 @@ import {
   DEVHUB_BRAND_LABEL,
   HAS_PLUGIN_BRAND,
 } from "@/lib/brand-mark";
-import { syncDesktopAppIcon } from "@/lib/desktop/app-icon";
+import { subscribeDesktopAppIcon, syncDesktopAppIcon } from "@/lib/desktop/app-icon";
 import { getSeasonalEntry, getCurrentSeasonalEntries } from "@/lib/seasonal";
 import {
   decodePinnedGlyph,
@@ -843,7 +843,7 @@ export function LogoIcon({
 
   useEffect(() => {
     if (!hydrated) return;
-    void syncDesktopAppIcon(stored);
+    return subscribeDesktopAppIcon(stored);
   }, [hydrated, stored]);
 
   const glyphProps = { markPixels: glyphMarkPx, emojiPixels: glyphEmojiPx };
@@ -853,7 +853,7 @@ export function LogoIcon({
       lucidePx <= BRAND_LUCIDE_COLLAPSED_PX ? BRAND_MARK_COLLAPSED_PX : BRAND_MARK_EXPANDED_PX;
     // BOTTLE_VALUE = the active brand (whitelabel logo if a plugin set one); DEVHUB_VALUE
     // = always the stock DevHub mark. Light surfaces swap via .devhub-mark; Hollow overrides
-    // .theme-brand-image with the October jack-o'-lantern.
+    // .theme-brand-image with the Halloween Shift Dock variant.
     const showingDevhubArt = isDevhubStored(stored) || !HAS_PLUGIN_BRAND;
     const brandSrc = isDevhubStored(stored) ? DEVHUB_BRAND_IMAGE : BRAND_BOTTLE_IMAGE_SRC;
     return (

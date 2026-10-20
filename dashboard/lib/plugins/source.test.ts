@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { parseGitHubRepoUrl } from "./github-url";
 import {
   accessCommands,
@@ -186,6 +186,26 @@ describe("GitHub CLI status", () => {
 });
 
 describe("accessCommands", () => {
+  const runtimeGh = path.join(path.dirname(process.execPath), process.platform === "win32" ? "gh.exe" : "gh");
+  beforeEach(() => {
+    const access = fs.accessSync;
+    // A test launched by DevHub.app may have gh beside Node, even with an isolated PATH.
+    vi.spyOn(fs, "accessSync").mockImplementation((file, mode) => {
+      if (file === runtimeGh) throw Object.assign(new Error("No bundled gh in this fixture"), { code: "ENOENT" });
+      return access(file, mode);
+    });
+  });
+  afterEach(() => vi.restoreAllMocks());
+
+  it("prefers gh beside Node even when the supplied PATH is empty", () => {
+    vi.mocked(fs.accessSync).mockImplementation((file) => {
+      if (file !== runtimeGh) throw Object.assign(new Error("Missing executable"), { code: "ENOENT" });
+    });
+    expect(accessCommands(repo, "macos", testEnv({ PATH: scratchDir() })).gh[0])
+      .toBe(`${ghInvocation(runtimeGh)} auth login --hostname github.com --git-protocol https --web`);
+    expect(ghAuthLoginCommand(testEnv({ PATH: scratchDir() }))).toBe(`${ghInvocation(runtimeGh)} auth login`);
+  });
+
   it("quotes the repository and offers only the documented sign-in commands", () => {
     const commands = accessCommands(repo, "macos", testEnv({ PATH: "/usr/bin" }));
     expect(commands.gh).toEqual([

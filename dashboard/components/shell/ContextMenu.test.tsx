@@ -1,5 +1,5 @@
 /** @vitest-environment jsdom */
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import {
   clampMenuPosition,
@@ -20,6 +20,81 @@ const groups: ContextMenuGroup[] = [
     items: [{ id: "noop", label: "Do the thing", onSelect: () => {} }],
   },
 ];
+
+describe("RowMenuKebab", () => {
+  it("anchors keyboard activation to the trigger and keeps pointer coordinates", () => {
+    const onOpen = vi.fn();
+    render(<RowMenuKebab label="Task actions" onOpen={onOpen} />);
+    const trigger = screen.getByRole("button", { name: "Task actions" });
+    vi.spyOn(trigger, "getBoundingClientRect").mockReturnValue({ x: 300, y: 200, left: 300, top: 200, right: 332, bottom: 232, width: 32, height: 32, toJSON: () => ({}) });
+    fireEvent.click(trigger, { clientX: 0, clientY: 0 });
+    expect(onOpen).toHaveBeenLastCalledWith(300, 232);
+    fireEvent.click(trigger, { clientX: 315, clientY: 210 });
+    expect(onOpen).toHaveBeenLastCalledWith(315, 210);
+  });
+});
+
+describe("ContextMenu keyboard groups", () => {
+  it("arrows across labels, skips disabled actions and searches labels rather than descriptions", () => {
+    Element.prototype.scrollIntoView = vi.fn();
+    render(<ContextMenu open position={{ x: 10, y: 10 }} onClose={vi.fn()} groups={[
+      { id: "task", label: "Task", items: [
+        { id: "complete", label: "Complete", description: "Start here", onSelect: vi.fn() },
+        { id: "edit", label: "Edit", disabled: true, onSelect: vi.fn() },
+      ] },
+      { id: "agent", label: "Agent", items: [
+        { id: "start", label: "Start on auto", onSelect: vi.fn() },
+        { id: "switch", label: "Switch to manual", onSelect: vi.fn() },
+      ] },
+    ]} />);
+    const menu = screen.getByRole("menu", { hidden: true });
+    const items = within(menu).getAllByRole("menuitem", { hidden: true });
+    items[0].focus();
+    fireEvent.keyDown(menu, { key: "ArrowDown" });
+    expect(items[2]).toHaveFocus();
+    fireEvent.keyDown(menu, { key: "ArrowUp" });
+    expect(items[0]).toHaveFocus();
+    fireEvent.keyDown(menu, { key: "s" });
+    expect(items[2]).toHaveFocus();
+    fireEvent.keyDown(menu, { key: "s" });
+    expect(items[3]).toHaveFocus();
+    fireEvent.keyDown(menu, { key: "w" });
+    expect(items[3]).toHaveFocus();
+    fireEvent.keyDown(menu, { key: "Home" });
+    expect(items[0]).toHaveFocus();
+    fireEvent.keyDown(menu, { key: "End" });
+    expect(items[3]).toHaveFocus();
+  });
+});
+
+describe("ContextMenu submenus", () => {
+  it.each(["ArrowRight", "Enter"])("opens with %s, closes just the submenu with Escape, restores focus, and selects a destination", async (key) => {
+    Element.prototype.scrollIntoView = vi.fn();
+    const select = vi.fn();
+    const close = vi.fn();
+    render(<ContextMenu open position={{ x: 10, y: 10 }} onClose={close} groups={[{ id: "position", items: [{
+      id: "move", label: "Move to…", onSelect: vi.fn(), submenu: [
+        { id: "todo", label: "To do", onSelect: select },
+        { id: "done", label: "Done", disabled: true, onSelect: vi.fn() },
+      ],
+    }] }]} />);
+    const menu = screen.getByRole("menu", { hidden: true });
+    const trigger = within(menu).getByRole("menuitem", { name: "Move to…", hidden: true });
+    expect(trigger).toHaveAttribute("aria-haspopup", "menu");
+    expect(within(menu).queryByText("To do")).toBeNull();
+    trigger.focus();
+    fireEvent.keyDown(trigger, { key });
+    await waitFor(() => expect(within(menu).getByRole("menuitem", { name: "To do", hidden: true })).toHaveFocus());
+    expect(within(menu).getByRole("menuitem", { name: "Done", hidden: true })).toBeDisabled();
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(close).not.toHaveBeenCalled();
+    await waitFor(() => expect(within(menu).getByRole("menuitem", { name: "Move to…", hidden: true })).toHaveFocus());
+    fireEvent.click(within(menu).getByRole("menuitem", { name: "Move to…", hidden: true }));
+    fireEvent.click(within(menu).getByRole("menuitem", { name: "To do", hidden: true }));
+    expect(select).toHaveBeenCalledOnce();
+    expect(close).toHaveBeenCalledOnce();
+  });
+});
 
 function LongPressHarness({ onOpen }: { onOpen: (x: number, y: number) => void }) {
   const menu = useContextMenu<string>();
@@ -465,4 +540,3 @@ describe("ContextMenu unrelated scroll", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 });
-

@@ -1,0 +1,95 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>DevHub mock · Auto, Jev QA, visual notes</title>
+<style>
+:root{--bg:#111416;--side:#0c1011;--surf:#1a1f21;--elev:#242b2d;--ov:#30383a;--bd:#495455;--bdm:#30393a;--tx:#f0f3ed;--mut:#c2ccc5;--sub:#a9b5ae;--ac:#9ed84a;--act:#b8ec62;--acd:rgba(158,216,74,.12);--acf:#121710;--ok:#83dfad;--okd:rgba(131,223,173,.1);--warn:#f0cc80;--warnd:rgba(240,204,128,.1);--bad:#ffaaa5;--badd:rgba(255,170,165,.1);--info:#94caff;--infod:rgba(148,202,255,.1);--vio:#c5afff;--sh:0 4px 16px -8px rgba(0,0,0,.6)}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--tx);font:14px/1.5 Inter,system-ui,-apple-system,sans-serif;display:flex;min-height:100vh}
+nav{width:220px;background:var(--side);border-right:1px solid var(--bdm);padding:16px}nav h1{font-size:15px;margin:0 0 16px;color:var(--act)}
+nav button{display:block;width:100%;text-align:left;background:none;border:0;color:var(--mut);padding:8px 10px;border-radius:6px;cursor:pointer;font:inherit}
+nav button.on{background:var(--acd);color:var(--act)}nav small{color:var(--sub);display:block;margin-top:20px}
+main{flex:1;padding:24px 32px;max-width:1100px}section{display:none}section.on{display:block}
+h2{margin:0 0 4px;font-size:22px}.lead{color:var(--sub);margin:0 0 20px}
+.card{background:var(--surf);border:1px solid var(--bdm);border-radius:14px;padding:16px;box-shadow:var(--sh);margin-bottom:14px}
+.row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}
+label{color:var(--sub);font-size:12px;display:block;margin-bottom:4px}select,textarea,input{background:var(--elev);color:var(--tx);border:1px solid #87958b;border-radius:6px;padding:7px 9px;font:inherit;width:100%}
+.btn{background:var(--ac);color:var(--acf);border:0;border-radius:6px;padding:8px 14px;font-weight:600;cursor:pointer}.btn.g{background:var(--elev);color:var(--tx);border:1px solid var(--bd)}
+.chip{display:inline-block;padding:2px 8px;border-radius:99px;font-size:12px;background:var(--elev);color:var(--mut)}.c-ok{background:var(--okd);color:var(--ok)}.c-w{background:var(--warnd);color:var(--warn)}.c-b{background:var(--badd);color:var(--bad)}.c-i{background:var(--infod);color:var(--info)}.c-a{background:var(--acd);color:var(--act)}
+.steps{display:flex;gap:6px;margin:8px 0 18px}.step{flex:1;padding:8px;border-radius:6px;background:var(--elev);color:var(--sub);font-size:12px;text-align:center}.step.done{background:var(--okd);color:var(--ok)}.step.now{background:var(--acd);color:var(--act);outline:1px solid var(--ac)}
+.log div{padding:6px 0;border-bottom:1px solid var(--bdm);color:var(--mut)}.log b{color:var(--tx)}
+.shot{height:150px;border-radius:10px;background:linear-gradient(135deg,#242b2d,#30383a);display:flex;align-items:center;justify-content:center;color:var(--sub);border:1px solid var(--bdm);position:relative}
+.shot .play{width:44px;height:44px;border-radius:50%;background:var(--acd);border:1px solid var(--ac);display:flex;align-items:center;justify-content:center;color:var(--act)}
+.shot span.tag{position:absolute;top:8px;left:8px}
+.note h3{font-family:Georgia,serif;font-size:26px;margin:0}.note h4{margin:22px 0 8px;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--sub)}
+.dec{border-left:3px solid var(--vio);padding:8px 12px;background:var(--elev);border-radius:0 6px 6px 0;margin-bottom:8px}.q{border-left:3px solid var(--warn);background:var(--warnd);padding:10px 12px;border-radius:0 6px 6px 0}
+.bug{border-left:3px solid var(--bad);background:var(--badd);padding:8px 12px;border-radius:0 6px 6px 0;margin-bottom:8px}
+.next{margin-top:16px}code{font-family:ui-monospace,Menlo,monospace;color:var(--act);font-size:12px}
+</style></head><body>
+<nav><h1>◆ DevHub</h1>
+<button data-s="s1" class="on">1 · Launch Implement</button><button data-s="s2">2 · Auto run</button><button data-s="s3">3 · Draft PR checkpoint</button><button data-s="s4">4 · Jev QA</button><button data-s="s5">5 · Ready for review</button><button data-s="s6">6 · Task note</button>
+<small>Static mock for <code>docs/plans/auto-qa-visual-notes.md</code>. Nothing here is wired.</small></nav>
+<main>
+<section id="s1" class="on"><h2>Implement · VB-14 Second stage: first vow</h2><p class="lead">Launched from the task row. The model set comes from your saved defaults.</p>
+<div class="card"><div class="grid">
+<div><label>Mode</label><select><option>Auto: commits and pushes on its branch, stops at a draft PR</option><option>Manual</option></select></div>
+<div><label>Board</label><select><option>Vowbreak (Gaming)</option><option>New board…</option></select></div></div></div>
+<div class="card"><div class="row" style="justify-content:space-between"><b>Model set</b><span class="chip c-a">Saved default · used 6 times</span></div><p class="lead" style="margin:4px 0 12px">Jev picks a tier at each step and records why.</p>
+<div class="grid">
+<div><label>Fast · summaries, notes</label><select><option>Haiku 5</option></select><select style="margin-top:6px"><option>Effort: low</option></select></div>
+<div><label>Standard · plan, most implement</label><select><option>Sonnet 5.5</option></select><select style="margin-top:6px"><option>Effort: medium</option></select></div>
+<div><label>Heavy · big diffs, repeated failures</label><select><option>Opus 5</option></select><select style="margin-top:6px"><option>Effort: high</option></select></div>
+<div><label>QA · Jev</label><select><option>Jev (default)</option></select><select style="margin-top:6px"><option>Effort: default</option></select></div></div>
+<div class="row" style="margin-top:12px"><label style="margin:0"><input type="checkbox" checked style="width:auto"> Save as default</label><label style="margin:0"><input type="checkbox" checked style="width:auto"> Record a before demo (touches UI)</label></div></div>
+<button class="btn next" data-go="s2">Start on Auto →</button></section>
+
+<section id="s2"><h2>On auto · implementing</h2><p class="lead">Runs in a worktree on <code>auto/vb-14-first-vow</code>. Never touches main.</p>
+<div class="steps"><div class="step done">Before demo</div><div class="step done">Plan</div><div class="step now">Implement</div><div class="step">Checks</div><div class="step">Draft PR</div><div class="step">Your feedback</div><div class="step">Ready</div></div>
+<div class="card log">
+<div><span class="chip c-ok">done</span> <b>Before demo</b> recorded, 0:42 <span class="chip">Jev</span></div>
+<div><span class="chip c-ok">done</span> <b>Plan</b> 5 steps, written to the note <span class="chip">Sonnet 5.5 · medium</span></div>
+<div><span class="chip c-i">routing</span> Jev chose <b>Heavy</b> for step 3: 14 files, new boss state machine <span class="chip">Opus 5 · high</span></div>
+<div><span class="chip c-a">running</span> <b>Implement</b> step 3 of 5: vow room hazards</div>
+<div><span class="chip">note</span> Decision added: "Hazards as tile layer, not entities"</div></div>
+<div class="row"><button class="btn g">Switch to manual</button><button class="btn g">Pause</button><button class="btn next" data-go="s3">Skip ahead →</button></div></section>
+
+<section id="s3"><h2>Draft PR ready · needs you</h2><p class="lead">PR <code>#212</code> is open as a draft. Answer or give feedback, then approve.</p>
+<div class="card"><div class="row" style="justify-content:space-between"><b>#212 Second stage: first vow</b><span class="chip c-w">Draft</span></div><p class="lead" style="margin:4px 0">+1,204 −88 · 23 files · CI passing · e2e 34/34</p></div>
+<div class="card"><b>Questions</b>
+<div class="q" style="margin-top:10px">Should the vow room reuse the atrium music, or wait for a new track? <div class="row" style="margin-top:8px"><button class="btn g">Reuse atrium</button><button class="btn g">Leave silent for now</button></div></div></div>
+<div class="card"><label>Feedback for another round (optional)</label><textarea rows="3">Make the floor hazard telegraph half a second longer.</textarea>
+<div class="row" style="margin-top:10px"><button class="btn g">Send feedback, keep as draft</button><button class="btn" data-go="s4">See Jev QA →</button></div></div></section>
+
+<section id="s4"><h2>Jev QA · review</h2><p class="lead">Same demo script on main (before) and on the branch (after).</p>
+<div class="grid"><div class="card"><label>Before · main</label><div class="shot"><span class="tag chip">0:42</span><div class="play">▶</div></div></div>
+<div class="card"><label>After · auto/vb-14</label><div class="shot"><span class="tag chip c-a">1:10</span><div class="play">▶</div></div></div></div>
+<div class="card"><b>Bugs found · 2</b>
+<div class="bug" style="margin-top:10px"><span class="chip c-b">blocker</span> Player can walk through the east wall after the second hazard cycle. <code>repro: 3 steps</code> · sent back to implement once, fixed in <code>a41c2e0</code></div>
+<div class="bug"><span class="chip c-w">low</span> Pause menu text overlaps the vow counter at 1280×720.</div></div>
+<div class="grid"><div class="shot">Screenshot · vow room</div><div class="shot">Screenshot · hazard telegraph</div><div class="shot">Screenshot · overlap bug</div></div>
+<button class="btn next" data-go="s5">Approve → ready for review</button></section>
+
+<section id="s5"><h2>Ready for review</h2><p class="lead"><code>gh pr ready 212</code> ran. Copy the review request and send it yourself.</p>
+<div class="steps"><div class="step done">Before demo</div><div class="step done">Plan</div><div class="step done">Implement</div><div class="step done">Checks</div><div class="step done">Draft PR</div><div class="step done">Your feedback</div><div class="step now">Ready</div></div>
+<div class="card"><div class="row" style="justify-content:space-between"><b>PR review request</b><button class="btn g">Copy</button></div>
+<pre style="white-space:pre-wrap;background:var(--elev);border:1px solid var(--bdm);border-radius:6px;padding:12px;margin:10px 0 0;font:12px/1.5 ui-monospace,Menlo,monospace;color:var(--tx)">Hey team, could I get a review on PR #212 (VB-14 Second stage: first vow)?
+https://github.com/jmcelreavey/vowbreak/pull/212
+23 files · CI passing · Jev QA: 1 low bug open (pause text overlap at 720p)</pre></div>
+<button class="btn next" data-go="s6">Open task note →</button></section>
+
+<section id="s6"><div class="card note">
+<div class="row" style="justify-content:space-between"><h3>Second stage: first vow</h3><div class="row"><span class="chip c-ok">Ready for review</span><span class="chip c-i">PR #212</span><span class="chip">$3.84</span></div></div>
+<h4>Summary</h4><p>Adds the first vow room after the atrium: a flooded hall with a timed floor hazard and the vow seal as a mini-boss. Letter 3 setup now pays off. One minor UI overlap left.</p>
+<h4>Status</h4><p><span class="chip c-a">Next</span> Review PR #212. Optional: new music track.</p>
+<h4>Questions for John</h4><div class="q">Vow room music: answered "Leave silent for now".</div>
+<h4>Decisions</h4>
+<div class="dec"><b>Hazards as a tile layer, not entities.</b> Cheaper collision and easier to telegraph. Rejected: per-tile sprites.</div>
+<div class="dec"><b>Opus for step 3.</b> 14 files and a new state machine. Jev routing.</div>
+<h4>Screenshots and video</h4><div class="grid"><div class="shot"><span class="tag chip">before</span><div class="play">▶</div></div><div class="shot"><span class="tag chip c-a">after</span><div class="play">▶</div></div><div class="shot">Vow room</div></div>
+<h4>Bugs</h4><div class="bug"><span class="chip c-ok">fixed</span> Walk-through east wall</div><div class="bug"><span class="chip c-w">open</span> Pause text overlap at 720p</div>
+<h4>Points of interest</h4><p><code>src/stages/vow1/hazards.ts</code>: timing constants · <code>src/boss/sealState.ts</code>: new state machine</p>
+<h4>Waypoints</h4><p>✓ Plan · ✓ Room layout · ✓ Hazards · ✓ Seal mini-boss · ✓ Letter hook</p>
+<details><summary style="color:var(--sub);cursor:pointer">Log (14 entries)</summary><p style="color:var(--sub)">Agents append here; the sections above are rewritten as work moves on.</p></details>
+</div><button class="btn g" data-go="s1">↺ Start over</button></section>
+</main>
+<script>
+const show=id=>{document.querySelectorAll('section').forEach(s=>s.classList.toggle('on',s.id===id));document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.s===id));scrollTo(0,0)};
+document.querySelectorAll('[data-s]').forEach(b=>b.onclick=()=>show(b.dataset.s));document.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>show(b.dataset.go));
+</script></body></html>

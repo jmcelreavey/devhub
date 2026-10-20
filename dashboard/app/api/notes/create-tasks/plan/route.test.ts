@@ -55,18 +55,58 @@ describe("POST /api/notes/create-tasks/plan", () => {
     });
   }
 
+  it("returns source titles without requesting AI refinement", async () => {
+    vi.mocked(suggestWorkItemTitles).mockImplementation(async (_title, items) =>
+      items.map((item) => ({ ...item, summary: "An AI suggestion" })),
+    );
+    const { POST } = await import("./route");
+    const res = await POST(request({ notePath: "projects/sample-plan" }));
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(suggestWorkItemTitles).not.toHaveBeenCalled();
+    expect(body.workItems[0]).toMatchObject({
+      summary: "WebApp: signup events", description: "Track page views.",
+    });
+  });
+
   it("returns generated titles with source descriptions", async () => {
     vi.mocked(suggestWorkItemTitles).mockImplementation(async (_title, items) =>
       items.map((item) => ({ ...item, summary: "Track signup page views" })),
     );
     const { POST } = await import("./route");
-    const res = await POST(request({ notePath: "projects/sample-plan" }));
+    const res = await POST(request({ notePath: "projects/sample-plan", refineTitles: true }));
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.workItems[0]).toMatchObject({
       id: "pr-1", summary: "Track signup page views", description: "Track page views.",
     });
     expect(body.warning).toBeUndefined();
+  });
+
+  it("forwards the selected provider, model and effort", async () => {
+    vi.mocked(suggestWorkItemTitles).mockImplementation(async (_title, items) => items);
+    const { POST } = await import("./route");
+    const res = await POST(request({
+      notePath: "projects/sample-plan", refineTitles: true,
+      provider: "chatgpt-cli", model: " gpt-6-sol ", effort: "low",
+    }));
+    expect(res.status).toBe(200);
+    expect(suggestWorkItemTitles).toHaveBeenCalledWith(
+      "Sample plan", expect.any(Array), expect.any(AbortSignal),
+      { provider: "chatgpt-cli", model: "gpt-6-sol", effort: "low" },
+    );
+  });
+
+  it.each([
+    { provider: "unknown" },
+    { model: "gpt-\nmodel" },
+    { model: "m".repeat(257) },
+    { effort: "low high" },
+  ])("rejects invalid suggestion settings: %j", async (settings) => {
+    const { POST } = await import("./route");
+    const res = await POST(request({ notePath: "projects/sample-plan", refineTitles: true, ...settings }));
+    expect(res.status).toBe(400);
+    expect(suggestWorkItemTitles).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -97,7 +137,7 @@ describe("POST /api/notes/create-tasks/plan", () => {
       }),
     );
 
-    const response = POST(request({ notePath: "projects/sample-plan" }));
+    const response = POST(request({ notePath: "projects/sample-plan", refineTitles: true }));
     await started;
     await vi.advanceTimersByTimeAsync(duration);
     const body = await (await response).json();
@@ -106,9 +146,9 @@ describe("POST /api/notes/create-tasks/plan", () => {
       expect(body.warning).toBeUndefined();
     } else {
       expect(body.workItems[0].summary).toContain("signup events");
-      expect(body.warning).toContain("Work items detected");
-      expect(body.warning).toContain("AI title refinement timed out");
-      expect(body.warning).toContain("titles taken from the note");
+      expect(body.warning).toContain("AI title suggestions timed out");
+      expect(body.warning).toContain("Your current titles are unchanged");
+      expect(body.warning).toContain("Try another model");
     }
   });
 
@@ -116,13 +156,13 @@ describe("POST /api/notes/create-tasks/plan", () => {
     vi.mocked(suggestWorkItemTitles).mockRejectedValue(new Error("Unavailable"));
     vi.spyOn(console, "warn").mockImplementation(() => {});
     const { POST } = await import("./route");
-    const res = await POST(request({ notePath: "projects/sample-plan" }));
+    const res = await POST(request({ notePath: "projects/sample-plan", refineTitles: true }));
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.workItems[0].summary).toContain("signup events");
-    expect(body.warning).toContain("Work items detected");
-    expect(body.warning).toContain("AI title refinement failed");
-    expect(body.warning).toContain("titles taken from the note");
+    expect(body.warning).toContain("AI title suggestions failed");
+    expect(body.warning).toContain("Your current titles are unchanged");
+    expect(body.warning).toContain("Unavailable");
   });
 
   it("validates the request and missing notes before generating titles", async () => {

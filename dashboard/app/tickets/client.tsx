@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import Link from "next/link";
 import { Ticket, RefreshCw } from "lucide-react";
 import { useLive } from "@/lib/hooks/use-fetch";
 import type { JiraTicket } from "@/lib/jira/client";
@@ -8,30 +9,36 @@ import { useMarkTicketsSeen } from "@/lib/hooks/use-sidebar-counts";
 import ticketStyles from "@/components/jira/JiraTicketRow.module.css";
 import { JiraTicketRow } from "@/components/jira/JiraTicketRow";
 import { FetchError, EmptyState, InlineSearch, SkeletonRows } from "@/components";
-import { filterTickets } from "@/lib/jira/ticket-search";
 import { BootScreen, useBootGate } from "@/components/today/TodayBootScreen";
+import { ticketMatchesStatusFilter, ticketStatusTabs, workViewTickets } from "@/lib/storyboard/view-state";
+import type { BoardCard, BoardFilters } from "@/lib/storyboard/notes-board-shared";
+
+const NO_FILTERS: BoardFilters = {};
+const NO_CARDS: readonly BoardCard[] = [];
 
 interface JiraResponse {
   tickets?: JiraTicket[];
   configured?: boolean;
 }
 
-const STATUS_GROUPS = ["All", "To Do", "In Progress", "In Review", "Done"] as const;
-
-function ticketMatchesStatusFilter(status: string, filter: string): boolean {
-  const s = status.toLowerCase();
-  const f = filter.toLowerCase();
-  if (f === "in review") {
-    return s.includes("review");
-  }
-  return s.includes(f);
-}
-
-export default function TicketsPage() {
+export default function TicketsPage({ embedded = false, query: sharedQuery, filters = NO_FILTERS, cards = NO_CARDS, date, attentionIds, statusFilter, onStatusFilterChange }: {
+  embedded?: boolean;
+  query?: string;
+  filters?: BoardFilters;
+  cards?: readonly BoardCard[];
+  date?: string;
+  attentionIds?: ReadonlySet<string>;
+  statusFilter?: string;
+  onStatusFilterChange?: (status: string) => void;
+} = {}) {
   const { data, error, isLoading, mutate, isValidating } = useLive<JiraResponse>("/api/jira/tickets");
   const boot = useBootGate(data !== undefined || !!error);
-  const [filter, setFilter] = useState<string>("All");
-  const [query, setQuery] = useState("");
+  const [localFilter, setLocalFilter] = useState<string>("All");
+  const filter = statusFilter ?? localFilter;
+  const setFilter = onStatusFilterChange ?? setLocalFilter;
+  const [localQuery, setQuery] = useState("");
+  const query = sharedQuery ?? localQuery;
+  const Heading = embedded ? "h2" : "h1";
 
   const tickets = useMemo(() => {
     const list = data?.tickets ?? [];
@@ -40,24 +47,24 @@ export default function TicketsPage() {
   useMarkTicketsSeen();
   const configured = data?.configured ?? false;
 
+  const statusTabs = ticketStatusTabs(tickets);
   const byStatus =
     filter === "All" ? tickets : tickets.filter((t) => ticketMatchesStatusFilter(t.status, filter));
-  const filtered = filterTickets(byStatus, query);
+  const filtered = workViewTickets(tickets, query, filters, cards, filter, date, attentionIds);
 
   if (!isLoading && !error && !configured) {
     return (
-      <div className="page-wrapper">
-      <BootScreen state={boot} />
+      <div className={embedded ? undefined : "page-wrapper"}>
+      {!embedded ? <BootScreen state={boot} /> : null}
         <div className="page-header">
-          <h1 className="page-title">Tickets</h1>
+          <Heading className="page-title">Jira</Heading>
         </div>
         <EmptyState
           icon={<Ticket size={28} />}
           title="No Jira connection."
           subtitle={
             <>
-              Set <code>JIRA_DOMAIN</code>, <code>JIRA_EMAIL</code>, and <code>JIRA_API_TOKEN</code> in{" "}
-              <code>.env.local</code>.
+              Connect Jira in <Link href="/setup" className="text-accent hover:underline">Setup</Link> to see your tickets.
             </>
           }
         />
@@ -66,10 +73,10 @@ export default function TicketsPage() {
   }
 
   return (
-    <div className="page-wrapper">
-      <BootScreen state={boot} />
+    <div className={embedded ? undefined : "page-wrapper"}>
+      {!embedded ? <BootScreen state={boot} /> : null}
       <div className="page-header">
-        <h1 className="page-title">Tickets</h1>
+        <Heading className="page-title">{embedded ? "Jira" : "Tickets"}</Heading>
         <div className="flex items-center gap-2">
           <span className="badge badge-muted">{tickets.length}</span>
           <button
@@ -97,8 +104,8 @@ export default function TicketsPage() {
       )}
 
       {/* Status filter tabs */}
-      <div className="flex gap-1 mb-4" style={{ borderBottom: "1px solid var(--border-muted)" }}>
-        {STATUS_GROUPS.map((g) => (
+      <div className="flex flex-wrap gap-1 mb-4" style={{ borderBottom: "1px solid var(--border-muted)" }}>
+        {statusTabs.map(({ status: g, count }) => (
           <button
             key={g}
             type="button"
@@ -113,12 +120,12 @@ export default function TicketsPage() {
             }}
             aria-pressed={filter === g}
           >
-            {g}
+            {g} <span className="text-text-subtle">{count}</span>
           </button>
         ))}
       </div>
 
-      <div className="mb-4">
+      {sharedQuery === undefined ? <div className="mb-4">
         <InlineSearch
           id="tickets-search"
           label="Search tickets"
@@ -127,14 +134,14 @@ export default function TicketsPage() {
           onChange={setQuery}
           hint={query.trim() ? `${filtered.length} of ${byStatus.length}` : undefined}
         />
-      </div>
+      </div> : null}
 
       {isLoading && !data && <SkeletonRows count={5} height={40} variant="list" />}
 
       {filtered.length > 0 && (
         <div className={`card ${ticketStyles.list}`} role="list" aria-label="Jira tickets">
           {filtered.map((t) => (
-            <JiraTicketRow key={t.key} ticket={t} density="comfortable" showAssignee={false} showDetails />
+            <JiraTicketRow key={t.key} ticket={t} density="comfortable" showAssignee={false} showDetails boardIntake={embedded} />
           ))}
         </div>
       )}

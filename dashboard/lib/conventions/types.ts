@@ -106,6 +106,8 @@ export interface MineRun {
   provider?: string;
   /** Model override in force, or `default`. */
   model?: string;
+  /** Effort in force for this run, when one was chosen. */
+  effort?: string;
   guidanceFiles: string[];
 }
 
@@ -134,6 +136,8 @@ export interface ConventionsPrefs {
   provider: AiProviderId | "";
   /** Blank = that provider's configured model. */
   model: string;
+  /** Blank sends the provider default. */
+  effort: string;
 }
 
 export interface ConventionsSummary {

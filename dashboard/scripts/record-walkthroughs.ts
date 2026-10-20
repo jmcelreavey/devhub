@@ -115,7 +115,7 @@ const CLIPS: Clip[] = [
     name: "work",
     start: "/work",
     ready: "Review search rewrite plan",
-    caption: "Work: every open task, filterable by tag, date or status",
+    caption: "Tasks: every open task, filterable by tag, date or status",
     warm: ["/work?tab=history", "/review"],
     async walk(page) {
       await beat(page, 1500);
@@ -131,8 +131,9 @@ const CLIPS: Clip[] = [
       await beat(page, 1200);
       await clickOn(page, page.getByRole("button", { name: /^Done/ }).first());
       await beat(page, 1800);
-      await setCaption(page, "Review: the week in numbers, and what keeps slipping");
-      await clickOn(page, sidebarLink(page, "Review"));
+      await setCaption(page, "Weekly review: the week in numbers, and what keeps slipping");
+      // Reached from History; the sidebar no longer has a Review row.
+      await clickOn(page, page.getByRole("link", { name: /^Weekly review/ }).first());
       await expect(page.getByText("Throughput")).toBeVisible({ timeout: 30_000 });
       await beat(page, 2600);
       await keyFrame(page, "work", "review");
@@ -253,7 +254,7 @@ const CLIPS: Clip[] = [
     gif: false,
     start: "/status",
     ready: "Sync & changes",
-    caption: "System: sync health, runtime and maintenance in one place",
+    caption: "Settings: sync health, runtime and maintenance in one place",
     warm: ["/setup"],
     async walk(page) {
       await beat(page, 2000);

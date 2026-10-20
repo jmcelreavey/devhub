@@ -9,11 +9,20 @@ vi.mock("@/lib/github/skipped-prs", () => ({
 }));
 
 import { execGh } from "@/lib/gh-exec";
-import { fetchMyGithubPrs, resolveCanonicalRepoFullName } from "./prs";
+import { fetchMyGithubPrs, fetchPrListMetaByUrl, resolveCanonicalRepoFullName } from "./prs";
 
 function emptySearch(): { stdout: string; stderr: string } {
   return { stdout: JSON.stringify({ total_count: 0, items: [] }), stderr: "" };
 }
+
+it("captures timestamped review, inline and issue feedback in the existing single bulk query", async () => {
+  const url = "https://github.com/acme/app/pull/1";
+  vi.mocked(execGh).mockResolvedValueOnce({ stdout: JSON.stringify({ data: { viewer: { login: "john" }, feedback: { nodes: [{ url, state: "MERGED", headRefName: "feedback", headRepository: { nameWithOwner: "acme/app" }, reviews: { nodes: [{ author: { login: "reviewer" }, submittedAt: "2026-10-19T10:00:00Z", body: "Review", state: "CHANGES_REQUESTED" }] }, comments: { nodes: [{ author: { login: "peer" }, createdAt: "2026-10-19T11:00:00Z", body: "Issue comment" }] }, reviewThreads: { nodes: [{ comments: { nodes: [{ author: { login: "ci", __typename: "Bot" }, createdAt: "2026-10-19T12:00:00Z", body: "Inline comment" }] } }] } }] } } }), stderr: "" });
+  const meta = await fetchPrListMetaByUrl();
+  expect(meta.get(url)?.feedback).toMatchObject({ url, state: "MERGED", self: "john", repo: "acme/app", headBranch: "feedback", activity: [{ author: "reviewer", at: "2026-10-19T10:00:00Z" }, { author: "peer", at: "2026-10-19T11:00:00Z" }, { author: "ci", bot: true, at: "2026-10-19T12:00:00Z" }] });
+  expect(execGh).toHaveBeenCalledOnce();
+  expect(vi.mocked(execGh).mock.calls[0][0].slice(0, 2)).toEqual(["api", "graphql"]);
+});
 
 function searchWith(url: string): { stdout: string; stderr: string } {
   return {
@@ -146,6 +155,15 @@ describe("fetchMyGithubPrs", () => {
     const { authored } = await fetchMyGithubPrs();
 
     expect(authored[0]?.approved).toBeUndefined();
+    expect(authored[0]?.reviewDecision).toBe("CHANGES_REQUESTED");
+  });
+
+  it("keeps changes requested actionable when the repository has no required review decision", async () => {
+    const url = "https://github.com/acme/demo/pull/1";
+    vi.mocked(execGh).mockImplementation(async (args) => isGraphql(args)
+      ? approvalSearch([{ url, reviewDecision: null, states: ["CHANGES_REQUESTED"] }])
+      : queryFromCall(args).includes("author:@me") ? searchWith(url) : emptySearch());
+    expect((await fetchMyGithubPrs()).authored[0]?.reviewDecision).toBe("CHANGES_REQUESTED");
   });
 
   it("folds CI check buckets from the same GraphQL meta lookup", async () => {

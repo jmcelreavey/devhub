@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { SlackSettingsSchema } from "@/lib/integrations/slack/shared";
 import { PASTE_EXPIRY_OPTIONS } from "@/lib/share/privatebin/crypto";
 
 export const EntityRefSchema = z.object({
@@ -15,6 +16,7 @@ export const TaskCreateSchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "date must be YYYY-MM-DD").optional(),
   links: z.array(EntityRefSchema).max(20).optional(),
   stage: z.enum(["draft"]).optional(),
+  parentKey: z.string().regex(/^[A-Z][A-Z0-9_]*-[1-9][0-9]*$/).optional(),
 });
 
 export const TaskPatchSchema = z
@@ -22,6 +24,7 @@ export const TaskPatchSchema = z
     id: z.string().min(1, "id is required"),
     text: z.string().min(1).max(500).optional(),
     done: z.boolean().optional(),
+    completion: z.boolean().optional(),
     due: z.union([z.string().regex(/^\d{4}-\d{2}-\d{2}$/), z.null()]).optional(),
     date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
     status: z.enum(["abandoned", "active"]).optional(),
@@ -34,12 +37,13 @@ export const TaskPatchSchema = z
     (v) =>
       v.text !== undefined ||
       v.done !== undefined ||
+      v.completion !== undefined ||
       v.due !== undefined ||
       v.status !== undefined ||
       v.timer !== undefined ||
       v.links !== undefined ||
       v.stage !== undefined,
-    { message: "Provide text, done, due, status, timer, links, or stage" },
+    { message: "Provide text, done, completion, due, status, timer, links, or stage" },
   );
 
 export const TaskDeleteSchema = z.object({
@@ -65,12 +69,16 @@ export const JiraCreateIssueSchema = z.object({
 });
 
 export const JiraTransitionSchema = z.object({
-  transitionId: z.string().min(1, "transitionId is required"),
-});
+  transitionId: z.string().min(1).optional(),
+  /** Undo: move to this status by whichever transition the workflow offers from here. */
+  toStatusId: z.string().regex(/^[0-9]+$/).optional(),
+}).refine((value) => Boolean(value.transitionId) !== Boolean(value.toStatusId), "Send either transitionId or toStatusId.");
 
 export const NotePutSchema = z.object({
   content: z.unknown(),
   expectedModified: z.number().finite().nonnegative().nullable().optional(),
+  /** Task notes: when `expectedModified` is stale, keep the newer standard sections and apply only this save's free-form blocks. */
+  mergeAgentSections: z.boolean().optional(),
 });
 
 const EmptyableStringSchema = z.union([z.string().max(500), z.null()]);
@@ -210,6 +218,8 @@ export const RepoInitSchema = z.object({
 
 // ─── Setup ───
 
+export const TypesafeCheckSchema = z.object({ apiKey: z.string().max(500).optional() });
+
 export const DatadogCheckSchema = z.object({
   apiKey: z.string().max(200).optional(),
   applicationKey: z.string().max(200).optional(),
@@ -329,5 +339,7 @@ export const SetupSaveSchema = z.object({
       cursorModel: z.string().max(200).optional(),
     })
     .optional(),
-
+  /** Jev, the model behind QA runs. null removes the saved key. */
+  typesafe: z.union([z.object({ apiKey: z.string().max(500).optional() }), z.null()]).optional(),
+  slack: SlackSettingsSchema.nullable().optional(),
 });

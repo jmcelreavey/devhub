@@ -16,6 +16,7 @@ import { HoverTip } from "@/components/ui/HoverTip";
 export interface ToggleOption<T extends string> {
   value: T;
   label?: string;
+  count?: number;
   /** Active border + text colour override (CSS value). */
   activeColor?: string;
   /** Active background override (CSS value). */
@@ -75,6 +76,7 @@ export function ToggleGroup<T extends string>({
               onClick={() => !opt.disabled && onChange(opt.value)}
               disabled={opt.disabled}
               aria-pressed={active}
+              aria-label={opt.count !== undefined ? `${opt.label ?? opt.value} ${opt.count}` : undefined}
             >
               {opt.dotColor && (
                 <span
@@ -84,6 +86,7 @@ export function ToggleGroup<T extends string>({
                 />
               )}
               {opt.label ?? opt.value}
+              {opt.count !== undefined ? <span className="badge badge-muted ml-1">{opt.count}</span> : null}
             </button>
           </HoverTip>
         );

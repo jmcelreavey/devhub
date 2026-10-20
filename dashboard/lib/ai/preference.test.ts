@@ -101,6 +101,15 @@ describe("resolveAiProvider", () => {
     }
   });
 
+  it("substitutes another ready provider by default, but not when fallback is off", () => {
+    vi.mocked(isOpenCodeConfigured).mockReturnValue(true);
+    expect(resolveAiProvider({ prefer: "cursor-cli" })).toMatchObject({ provider: "opencode", fallback: true });
+    expect(resolveAiProvider({ prefer: "cursor-cli", fallback: false })).toMatchObject({ provider: null, configured: "cursor-cli" });
+    expect(resolveAiProvider({ prefer: null, fallback: false }).provider).toBeNull();
+    vi.mocked(isCursorAgentInstalled).mockReturnValue(true);
+    expect(resolveAiProvider({ prefer: "cursor-cli", fallback: false })).toMatchObject({ provider: "cursor-cli", fallback: false });
+  });
+
   it("returns null when nothing is available", () => {
     const r = resolveAiProvider();
     expect(r.provider).toBeNull();

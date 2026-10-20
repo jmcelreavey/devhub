@@ -100,6 +100,7 @@ When `DEVHUB_API_SECRET` is set, also send `X-DevHub-Secret`.
 - `tasks_agent_runs` — list (`taskId` only) or upsert (`taskId` + `runId` + fields)
 - `tasks_agent_handoff_get` / `tasks_agent_handoff_set`
 - `tasks_agent_resume` — same behaviour as the UI Resume action (`POST /api/tasks/agent-runs/resume`)
+- `tasks_agent_plan` — a plan-only run, same as the UI's Write plan with agent (`POST /api/tasks/agent-runs/plan`): one read-only `plan` run that writes Plan / Acceptance / Open questions into the task note and stops. It never starts auto mode or implements
 - `tasks_implement_review_settings_get` / `tasks_implement_review_settings_set` — which assistant reviews a finished implementation
 - `tasks_implement_review` — start that reviewer on an implementation checkout (see [Review with another assistant](#review-with-another-assistant))
 

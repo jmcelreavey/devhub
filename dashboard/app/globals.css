@@ -56,6 +56,10 @@
   --font-display: var(--font-display-loaded, var(--font-sans));
   --font-mono:
     "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  /* Long-form titles (task notes); system serif, no webfont to load */
+  --font-serif:
+    "Iowan Old Style", "Palatino Linotype", Palatino, Georgia,
+    "Times New Roman", serif;
 
   /* Content measure — wide enough for tables, narrow enough to read */
   --page-max: 1240px;
@@ -681,20 +685,54 @@ h3,
   min-width: 0;
 }
 
-/* Scrollbar */
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+/*
+ * Scrollbars: thin, a subtle thumb mixed from the theme's own text colour, no track.
+ * color-scheme makes any native scrollbar or form control match the theme, so a
+ * panel the custom styles miss still draws dark on a dark theme, not white.
+ * Each theme gets this for free; a preset can override the two thumb tokens.
+ * Hover moves the thumb towards the text colour: brighter on dark, darker on light.
+ */
+:root,
+:root[data-theme="dark"] {
+  color-scheme: dark;
 }
-::-webkit-scrollbar-track {
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+:root {
+  --scrollbar-thumb: color-mix(in srgb, var(--text-subtle) 26%, transparent);
+  --scrollbar-thumb-hover: color-mix(in srgb, var(--text-subtle) 46%, transparent);
+}
+/* Firefox has no ::-webkit-scrollbar; the standard properties inherit into every nested panel. */
+@supports not selector(::-webkit-scrollbar) {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thumb) transparent;
+  }
+  *:hover {
+    scrollbar-color: var(--scrollbar-thumb-hover) transparent;
+  }
+}
+/* WebKit (the desktop app's webview, Safari) and Chromium. */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+  background: transparent;
+}
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: var(--border);
-  border-radius: 3px;
+  background-color: var(--scrollbar-thumb);
+  /* A transparent border insets a 4px thumb inside the 8px gutter. */
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  border-radius: 999px;
 }
-::-webkit-scrollbar-thumb:hover {
-  background: var(--text-subtle);
+::-webkit-scrollbar-thumb:hover,
+::-webkit-scrollbar-thumb:active {
+  background-color: var(--scrollbar-thumb-hover);
 }
 
 /* Jira hub widget: ticket list has no inner max-height (page <main> scrolls instead). */
@@ -1193,6 +1231,143 @@ body[data-motion="off"] .search-field {
   padding: 2px 0;
 }
 
+/* ─── Notes editor typography ───
+   Matches how John writes: H1 title, short summary paragraph, H2 sections,
+   bullets with **Label:** lead-ins, inline code, dividers. Calmer than
+   BlockNote's defaults (3em H1, tight lists, plain code).
+
+   Scoped to `.note-editor`, the wrapper BlockNoteEditor puts around the notes
+   editor. Hooks are BlockNote's documented data attributes (`data-content-type`,
+   `data-level`, `data-style-type`, `data-checked`) rather than tag names or
+   `:has()` over its wrapper structure. BlockNote leaves `data-level` off H1 (the
+   default level), so H1 is "no level or level 1". */
+.note-editor {
+  max-width: 820px;
+  margin-inline: auto;
+}
+.note-editor .bn-editor {
+  font-size: 15px;
+  line-height: 1.65;
+  color: var(--text);
+}
+.note-editor [data-content-type="heading"] {
+  padding-top: 14px;
+}
+.note-editor .bn-block-outer:not([data-prev-type]) > .bn-block > [data-content-type="heading"] {
+  padding-top: 0;
+}
+.note-editor [data-content-type="heading"] .bn-inline-content {
+  font-family: var(--font-sans);
+  color: var(--text);
+  letter-spacing: -0.01em;
+}
+.note-editor [data-content-type="heading"]:is(:not([data-level]), [data-level="1"]) .bn-inline-content {
+  font-family: var(--font-serif, var(--font-sans));
+  font-size: 30px;
+  line-height: 1.2;
+  font-weight: 600;
+}
+.note-editor [data-content-type="heading"][data-level="2"] .bn-inline-content {
+  font-size: 20px;
+  line-height: 1.3;
+  font-weight: 650;
+}
+.note-editor [data-content-type="heading"][data-level="3"] .bn-inline-content {
+  font-size: 16px;
+  line-height: 1.35;
+  font-weight: 650;
+  color: var(--text-muted);
+}
+.note-editor .bn-block-content:is(
+    [data-content-type="bulletListItem"],
+    [data-content-type="numberedListItem"],
+    [data-content-type="checkListItem"]
+  ) {
+  padding: 1px 0;
+}
+.note-editor [data-content-type="bulletListItem"]::before,
+.note-editor [data-content-type="numberedListItem"]::before {
+  color: var(--text-subtle);
+}
+.note-editor [data-style-type="code"] {
+  font-family: var(--font-mono);
+  font-size: 0.86em;
+  padding: 1px 5px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-muted);
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.note-editor .bn-inline-content a {
+  color: var(--accent-text);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--accent-text) 40%, transparent);
+  text-underline-offset: 3px;
+  overflow-wrap: anywhere;
+}
+.note-editor .bn-inline-content a:hover {
+  color: var(--accent-text-hover);
+  text-decoration-color: currentColor;
+}
+.note-editor [data-content-type="checkListItem"] input[type="checkbox"] {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.note-editor [data-content-type="checkListItem"][data-checked="true"] .bn-inline-content {
+  color: var(--text-subtle);
+  text-decoration: line-through;
+}
+.note-editor [data-content-type="image"] img,
+.note-editor .bn-visual-media {
+  border-radius: var(--radius);
+  border: 1px solid var(--border-muted);
+  box-shadow: var(--graphite-card-shadow, none);
+  max-width: 100%;
+  height: auto;
+}
+.note-editor [data-content-type="divider"] hr {
+  border: 0;
+  border-top: 1px solid var(--border-muted);
+  margin: 10px 0;
+}
+.note-editor [data-content-type="quote"] {
+  border-left: 3px solid var(--border);
+  color: var(--text-muted);
+}
+.note-editor [data-content-type="table"] {
+  font-size: 14px;
+}
+/* An empty list item reads as a quiet marker, not an italic "List" placeholder.
+   BlockNote draws that placeholder as the block content's ::after. */
+.note-editor .bn-block-content:is(
+    [data-content-type="bulletListItem"],
+    [data-content-type="numberedListItem"],
+    [data-content-type="checkListItem"]
+  )::after {
+  content: none !important;
+}
+
+/* "Tags: #a #b" lines in task notes (see lib/blocknote/tag-line-extension.ts). The text
+   stays plain markdown; these classes only dress the tokens as pills. */
+.note-editor .note-tag-label {
+  color: var(--text-subtle);
+  font-size: 0.86em;
+  margin-right: 2px;
+}
+.note-editor .note-tag-chip {
+  display: inline-block;
+  padding: 0 9px;
+  margin: 0 2px;
+  border-radius: 99px;
+  background: var(--bg-elevated);
+  color: var(--text-muted);
+  font-size: 0.86em;
+  line-height: 1.6;
+}
+
 /* Custom checklist block: keep Lucide SVGs visible inside ProseMirror */
 [data-devhub-shared-checklist-id] button svg,
 [data-devhub-shared-checklist-id] svg {
@@ -1406,6 +1581,10 @@ a:not([class]):focus-visible,
 }
 .toast-action:hover {
   background: var(--accent-dim);
+}
+a.toast-action {
+  text-decoration: none;
+  white-space: nowrap;
 }
 .toast-dismiss {
   background: transparent;
@@ -1914,7 +2093,7 @@ body[data-grid-resizing="true"] * {
 .focus-preset {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 8px;
   padding: 7px 10px;
   border-radius: 6px;
   background: transparent;
@@ -1930,14 +2109,13 @@ body[data-grid-resizing="true"] * {
   background: var(--bg-overlay);
 }
 .focus-preset-mins {
+  margin-left: auto;
   font-family: var(--font-mono);
   color: var(--text-subtle);
   font-size: 11px;
 }
 .focus-preset-custom {
-  margin-top: 4px;
-  border-top: 1px solid var(--border-muted);
-  padding-top: 11px;
+  margin-top: 0;
 }
 
 /* Standup config popover */
@@ -2348,6 +2526,7 @@ body[data-grid-resizing="true"] * {
   padding: 4px 8px 0;
   min-width: 0;
   scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
 }
 .workspace-tab {
   display: inline-flex;
@@ -2625,18 +2804,116 @@ body[data-grid-resizing="true"] * {
   flex-direction: column;
   max-height: 240px;
   overflow-y: auto;
-  gap: var(--space-1);
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.hub-profile-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  border-radius: var(--radius-sm, 6px);
+}
+
+.hub-profile-row:hover,
+.hub-profile-row:focus-within {
+  background: var(--bg-elevated);
+}
+
+.hub-profile-row[data-active] {
+  background: var(--accent-dim);
 }
 
 .hub-profile-option {
-  justify-content: space-between;
-  overflow-wrap: anywhere;
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 6px 8px;
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 13px;
   text-align: left;
+  cursor: pointer;
 }
 
 .hub-profile-option[aria-pressed="true"] {
-  background: var(--accent-dim);
   color: var(--text);
+  font-weight: 600;
+}
+
+.hub-profile-name {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.hub-profile-count {
+  color: var(--text-subtle);
+  font-size: 11px;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+
+.hub-profile-delete {
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  margin-right: 4px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-subtle);
+  opacity: 0;
+  cursor: pointer;
+}
+
+.hub-profile-row:hover .hub-profile-delete:not(:disabled),
+.hub-profile-delete:focus-visible {
+  opacity: 1;
+}
+
+.hub-profile-delete:hover {
+  color: var(--danger);
+}
+
+.hub-profile-delete:disabled {
+  cursor: default;
+}
+
+.hub-profile-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border: 1px solid var(--border-muted);
+  border-radius: var(--radius-sm, 6px);
+}
+
+.hub-profile-new {
+  display: inline-flex;
+  align-self: flex-start;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.hub-profile-new:hover {
+  color: var(--text);
+  text-decoration: underline;
 }
 
 .hub-profile-form {
@@ -3234,6 +3511,24 @@ body[data-motion="off"] .task-timer-dot {
   max-width: 100%;
   margin-left: auto;
   margin-top: -4px;
+}
+
+/* Start on auto is a row's one direct action, but a list of them shouldn't be a
+   wall of solid buttons: compact and quiet (outline) until the row is hovered or
+   focused, like the Storyboard card. Touch screens have no hover, so they keep
+   the full button. */
+.task-row-actions .task-row-start-auto {
+  min-height: 24px;
+  padding: 2px 10px;
+  font-size: 12px;
+  margin-right: 4px;
+}
+@media (hover: hover) {
+  .task-row:not(:hover):not(:focus-within) .task-row-start-auto:not(:disabled) {
+    background: transparent;
+    color: var(--accent-text, var(--accent));
+    border-color: var(--accent);
+  }
 }
 
 /* Match the links button's hit-area so the icon column reads as a grid. */
@@ -4230,6 +4525,55 @@ body[data-density="compact"] .card {
   color: var(--text);
   line-height: 1.2;
 }
+/* Collapsed briefing: weather rides inline in the header row. The header is the
+   container so the chip sheds condition, then range, as the card narrows. */
+.mbw-head {
+  container-type: inline-size;
+  container-name: mbw-head;
+}
+.mbw-wx-inline {
+  display: inline-flex;
+  min-width: 0;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: 6px;
+  padding-left: 8px;
+  border-left: 1px solid var(--border-muted);
+  font-size: 12px;
+  line-height: 1.2;
+  white-space: nowrap;
+  color: var(--text-muted);
+}
+.mbw-wx-inline-icon {
+  flex: none;
+  color: var(--text-muted);
+}
+.mbw-wx-inline-temp {
+  flex: none;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+.mbw-wx-inline-cond {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.mbw-wx-inline-range {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-subtle);
+}
+@container mbw-head (max-width: 480px) {
+  .mbw-wx-inline-cond {
+    display: none;
+  }
+}
+@container mbw-head (max-width: 390px) {
+  .mbw-wx-inline-range {
+    display: none;
+  }
+}
 /* Narrow / short grid tiles — collapse like other Today widgets. */
 .mbw-wx[data-size="1x1"] .mbw-wx-temp {
   font-size: 32px;
@@ -4910,6 +5254,8 @@ body[data-motion="off"] .briefing-wx-card {
   color: inherit;
   overflow: auto;
   box-sizing: border-box;
+  /* The full-screen backdrop is not a control; its children keep their focus rings. */
+  outline: none;
 }
 .modal-shell-dialog-top {
   align-items: flex-start;
@@ -5718,7 +6064,9 @@ html[data-logo="plugin"] .boot-logo-devhub {
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
 }
 .terminal-dock-template-item {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 8px;
   width: 100%;
   text-align: left;
   padding: 5px 8px;
@@ -6078,6 +6426,7 @@ body[data-motion="off"] .terminal-agent-strip-pulse {
 }
 .context-menu-icon {
   display: inline-flex;
+  flex-shrink: 0;
   margin-top: 2px;
   color: var(--text-subtle);
 }
@@ -6092,6 +6441,9 @@ body[data-motion="off"] .terminal-agent-strip-pulse {
   line-height: 1.3;
 }
 .context-menu-description {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 10.5px;
   line-height: 1.35;
   color: var(--text-subtle);
@@ -6466,6 +6818,18 @@ body[data-motion="off"] .context-menu:not([hidden]) {
   color: var(--warning);
 }
 
+.pr-status-pill {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  padding: 0 6px;
+  border: 1px dashed var(--border-muted);
+  border-radius: 999px;
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 16px;
+}
+
 .task-agent-chip {
   display: inline-flex;
   flex-shrink: 0;
@@ -6506,6 +6870,29 @@ button.task-agent-chip {
   font: inherit;
   font-size: 11px;
 }
+/* Auto/Manual switch: a chip with a tiny track so the state reads as a toggle. */
+.auto-mode-switch-track {
+  position: relative;
+  display: inline-block;
+  width: 18px;
+  height: 10px;
+  border-radius: 999px;
+  background: var(--border-muted);
+}
+.auto-mode-switch-thumb {
+  position: absolute;
+  top: 1px;
+  left: 1px;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--text-muted);
+  transition: transform var(--dur-base) var(--ease-swift);
+}
+.auto-mode-switch[data-mode="auto"] .auto-mode-switch-track { background: color-mix(in oklab, var(--accent) 45%, transparent); }
+.auto-mode-switch[data-mode="auto"] .auto-mode-switch-thumb { transform: translateX(8px); background: var(--accent-text, var(--accent)); }
+.auto-mode-switch:disabled { opacity: 0.6; cursor: progress; }
+.repo-answer { flex-basis: 100%; max-width: 420px; }
 
 /* ── Generic launcher dropdowns ── */
 .launch-menu-wrap {
@@ -6513,6 +6900,11 @@ button.task-agent-chip {
   display: inline-flex;
 }
 .launch-menu {
+  max-width: min(360px, calc(100vw - 16px));
+  max-height: calc(100dvh - 16px);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   /* Popover top-layer when open; inset/margin reset beats UA popover defaults. */
   position: fixed;
   inset: unset;
@@ -6576,6 +6968,7 @@ button.task-agent-chip {
 }
 .launch-menu-icon {
   display: inline-flex;
+  flex-shrink: 0;
   margin-top: 1px;
   color: var(--accent-text, var(--accent));
 }
@@ -6591,6 +6984,9 @@ button.task-agent-chip {
   color: var(--text);
 }
 .launch-menu-description {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 11px;
   line-height: 1.35;
   color: var(--text-subtle);

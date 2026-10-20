@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { withErrorHandler } from "@/lib/api-utils";
 import {
   CALENDAR_TODAY_TTL_MS,
   getTodayCalendarCache,
@@ -6,7 +7,7 @@ import {
 } from "@/lib/calendar-cache";
 import { getTodayEvents, isGoogleCalendarAuthError } from "@/lib/google-calendar";
 
-export async function GET() {
+export const GET = withErrorHandler<[request?: Request]>(async () => {
   const cache = getTodayCalendarCache();
   if (cache && Date.now() - cache.ts < CALENDAR_TODAY_TTL_MS) {
     return NextResponse.json({ events: cache.events, cached: true });
@@ -27,4 +28,4 @@ export async function GET() {
       { status: 500 }
     );
   }
-}
+}, "calendar.get");

@@ -6,7 +6,7 @@ import { useLive } from "@/lib/hooks/use-fetch";
 import type { DailyBriefing } from "@/lib/morning-briefing";
 import { TodayCollapseButton } from "@/components/today/TodayCollapseButton";
 import { onTodayCardHeaderClick, TodayViewAllLink } from "@/components/today/TodayViewAllLink";
-import { DashboardBriefingWeather } from "@/components/briefing/DashboardBriefingWeather";
+import { DashboardBriefingWeather, DashboardBriefingWeatherInline } from "@/components/briefing/DashboardBriefingWeather";
 import { BriefingOwnedReposDigest, type BriefingRepoAttentionRow } from "@/components/briefing/BriefingOwnedReposDigest";
 import { BriefingPlanStatus } from "@/components/briefing/BriefingPlanStatus";
 
@@ -51,14 +51,23 @@ export function MorningBriefingWidget({ collapsed = false, onToggle }: MorningBr
     <div
       className="card today-grid-drag-handle"
       data-collapsed={collapsed ? "true" : undefined}
-      style={{ padding: "var(--space-3) var(--space-3)" }}
+      // Collapsed is one tight row, centred in its two-row grid slot.
+      style={{
+        padding: collapsed ? "var(--space-2) var(--space-3)" : "var(--space-3) var(--space-3)",
+        justifyContent: collapsed ? "center" : undefined,
+      }}
     >
-      <div className="flex items-center gap-2" style={{ marginBottom: "var(--space-2)" }} onClick={onTodayCardHeaderClick}>
-        <Sun size={13} className="text-warning" aria-hidden />
-        <span className="text-xs font-semibold text-text">
+      <div
+        className="mbw-head flex items-center gap-2"
+        style={{ marginBottom: collapsed ? 0 : "var(--space-2)" }}
+        onClick={onTodayCardHeaderClick}
+      >
+        <Sun size={13} className="shrink-0 text-warning" aria-hidden />
+        <span className="shrink-0 whitespace-nowrap text-xs font-semibold text-text">
           Morning briefing
         </span>
-        <span className="ml-auto flex min-w-0 items-center gap-2">
+        {collapsed && b?.weather ? <DashboardBriefingWeatherInline weather={b.weather} /> : null}
+        <span className="ml-auto flex shrink-0 items-center gap-2">
           <TodayViewAllLink href="/briefing" />
           <button
             type="button"

@@ -110,6 +110,39 @@ describe("EntityLinkDialog multiselect", () => {
     expect(onClose).not.toHaveBeenCalled();
   });
 
+  it("limits a parent picker to one Jira ticket, including shift-click", async () => {
+    payloads.set("/api/jira/tickets", { configured: true, tickets: [
+      { key: "PTF-1", summary: "First parent", status: "Open" },
+      { key: "PTF-2", summary: "Second parent", status: "Open" },
+    ] });
+    const onSave = vi.fn(async () => {});
+    render(<EntityLinkDialog open onClose={vi.fn()} onSave={onSave} defaultKind="repo" allowedKinds={["jira"]} multiple={false} />);
+    expect(screen.queryByRole("tablist")).toBeNull();
+    expect(screen.getByRole("listbox").getAttribute("aria-multiselectable")).toBe("false");
+    fireEvent.click(screen.getByRole("option", { name: /First parent/ }));
+    fireEvent.click(screen.getByRole("option", { name: /Second parent/ }), { shiftKey: true });
+    expect(screen.getByRole("option", { name: /First parent/ }).getAttribute("aria-selected")).toBe("false");
+    fireEvent.click(screen.getByRole("button", { name: "Add link" }));
+    await waitFor(() => expect(onSave).toHaveBeenCalledWith([
+      expect.objectContaining({ kind: "jira", id: "PTF-2" }),
+    ]));
+  });
+
+  it("accepts an uncached Jira key while cached tickets are shown", async () => {
+    payloads.set("/api/jira/tickets", { configured: true, tickets: [
+      { key: "PTF-1", summary: "Cached parent", status: "Open" },
+    ] });
+    const onSave = vi.fn(async () => {});
+    render(<EntityLinkDialog open onClose={vi.fn()} onSave={onSave} allowedKinds={["jira"]} multiple={false} />);
+    fireEvent.click(screen.getByRole("option", { name: /Cached parent/ }));
+    fireEvent.change(screen.getByLabelText("Issue key or URL"), { target: { value: "PTF-4891" } });
+    expect(screen.getByRole("option", { name: /Cached parent/ })).toHaveAttribute("aria-selected", "false");
+    fireEvent.click(screen.getByRole("button", { name: "Add link" }));
+    await waitFor(() => expect(onSave).toHaveBeenCalledWith([
+      expect.objectContaining({ kind: "jira", id: "PTF-4891" }),
+    ]));
+  });
+
   it("shift-click selects a range of rows", () => {
     renderDialog();
     fireEvent.click(screen.getByRole("option", { name: /app-poc/ }));

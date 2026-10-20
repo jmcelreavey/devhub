@@ -1,0 +1,41 @@
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { afterEach, expect, it, vi } from "vitest";
+import { SlackGateway, type SlackLayer } from "../../../../gateway/src/gateway";
+import { Registry } from "../../../../gateway/src/registry";
+import { createGatewayClient } from "./gateway-client";
+import { confirmGatewayBinding, readGatewayDevice, registerGatewayDevice } from "./gateway-state";
+import type { SlackSettings } from "./shared";
+import type { SlackTransport } from "./client";
+
+let gateway: SlackGateway | undefined;
+let client: SlackTransport | undefined;
+let root: string | undefined;
+afterEach(async () => { await client?.stop(); await gateway?.close(); if (root) fs.rmSync(root, { recursive: true, force: true }); });
+
+it("re-authenticates after a gateway restart without replaying posts and retains message ownership", async () => {
+  root = fs.mkdtempSync(path.join(os.tmpdir(), "slack-gateway-reconnect-"));
+  const file = path.join(root, "registry.json");
+  const posts = vi.fn<SlackLayer["execute"]>(async (operation) => operation.kind === "postMessage" ? { channel: operation.channel, ts: "1.000" } : undefined);
+  const slack: SlackLayer = { identity: { teamId: "T1", userId: "UBOT", name: "DevHub" }, member: async () => ({ name: "one", dmChannelId: "D1" }), execute: posts };
+  gateway = new SlackGateway({ registry: new Registry(file), slack });
+  const port = await gateway.listen(); const url = `http://127.0.0.1:${port}`;
+  await registerGatewayDevice(url, root); const device = readGatewayDevice(root)!;
+  const settings: SlackSettings = { mode: "gateway", gatewayUrl: url, deviceId: device.deviceId, allowedUserId: "", teamId: "", channelId: "", botToken: "", appToken: "" };
+  client = createGatewayClient(settings, { root, reconnectMs: 10 });
+  const states: string[] = []; client.onState((state) => states.push(state));
+  const connected = client.authenticate(); await gateway.command("T1", "U1", `link ${device.code}`);
+  await vi.waitFor(() => expect(readGatewayDevice(root!)?.binding).toBeDefined());
+  confirmGatewayBinding(device.deviceId, "U1", root); await client.authenticate(); await connected; await client.start();
+  const receipt = await client.postMessage({ channel: "D1", text: "Only once" });
+  const count = posts.mock.calls.filter(([operation]) => operation.kind === "postMessage").length;
+  await gateway.close();
+  await vi.waitFor(() => expect(states).toContain("reconnecting"));
+  await expect(client.postMessage({ channel: "D1", text: "Offline" })).rejects.toThrow("offline");
+  gateway = new SlackGateway({ registry: new Registry(file), slack }); await gateway.listen(port);
+  await vi.waitFor(() => expect(states.filter((state) => state === "connected").length).toBeGreaterThan(2));
+  await client.updateMessage({ ...receipt, text: "Progress after restart" });
+  expect(posts.mock.calls.filter(([operation]) => operation.kind === "postMessage")).toHaveLength(count);
+  expect(posts).toHaveBeenLastCalledWith({ kind: "update", channel: "D1", ts: "1.000", text: "Progress after restart" });
+});

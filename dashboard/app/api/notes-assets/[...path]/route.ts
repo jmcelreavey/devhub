@@ -18,6 +18,7 @@ export const GET = withErrorHandler(async (_req: NextRequest, { params }: Params
     status: 200,
     headers: {
       "Content-Type": contentTypeForAssetPath(relPath),
+      "X-Content-Type-Options": "nosniff",
       "Cache-Control": "private, max-age=3600",
     },
   });

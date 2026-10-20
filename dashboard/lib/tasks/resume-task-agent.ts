@@ -1,3 +1,4 @@
+import { TASK_STATUS_UPDATE_INSTRUCTION } from "@shared/task-note/status-update.ts";
 /**
  * Resume a DevHub task's agent work: prefer follow-up on the latest linked run
  * (POST /api/agent/runs/<id> semantics), else dispatch a new run quoting handoff.
@@ -24,6 +25,8 @@ type TaskAgentRunRecord,
 import { handleTaskPrAttention } from "@/lib/tasks/task-pr-watch";
 import type { Task } from "@/lib/tasks/types";
 
+import { buildFeedbackPrompt } from "./feedback-prompt";
+
 export class TaskAgentResumeError extends Error {
   constructor(
     message: string,
@@ -35,12 +38,18 @@ export class TaskAgentResumeError extends Error {
 }
 
 export interface ResumeTaskAgentInput {
+  worktree?: import("@/lib/agent-runs/run-files").AgentRunWorktree;
+  feedbackBrief?: string;
+  /** Explicit recovery keeps the failed run’s role and original instructions. */
+  retryRunId?: string;
+  guidance?: string;
   taskId: string;
   date: string;
   origin: string;
   /** UI or agent_dispatch provider id. */
   provider?: string;
   model?: string;
+  effort?: string;
   /** Wins over plan/prior-run cwd when set. */
   cwd?: string;
   repoName?: string;
@@ -66,7 +75,7 @@ async function resolveImplementCwd(
   priorAgentCwd: string | undefined,
   task: Task,
 ): Promise<{ cwd: string; repoName?: string }> {
-  const direct = explicit?.trim() || priorAgentCwd?.trim();
+  const direct = explicit?.trim() || task.teamPickup?.cwd || priorAgentCwd?.trim();
   if (direct) return { cwd: direct };
   const repoId = (task.links ?? []).find((l) => l.kind === "repo")?.id;
   if (!repoId) {
@@ -114,6 +123,7 @@ export async function resumeTaskAgent(input: ResumeTaskAgentInput): Promise<Resu
     );
   }
   const prior = latest ? readAgentRun(latest.runId) : null;
+  if (input.retryRunId && (latest?.runId !== input.retryRunId || !prior)) throw new TaskAgentResumeError("The failed run changed or its instructions are unavailable. Refresh before retrying.", 409);
   const priorSessionId = prior?.status.sessionId ?? latest?.sessionId ?? null;
   const provider = await pickInstalledProvider(input.provider ?? latest?.provider ?? prior?.spec.provider);
   const result = (mode: ResumeTaskAgentResult["mode"], run: AgentRun): ResumeTaskAgentResult => ({
@@ -124,6 +134,7 @@ export async function resumeTaskAgent(input: ResumeTaskAgentInput): Promise<Resu
   });
 
   const followUp =
+    (!input.cwd || input.cwd === prior?.spec.cwd) &&
     prior !== null &&
     canResumeTaskAgentRun(latest?.status, priorSessionId) &&
     willResumeFollowUpSession({
@@ -133,11 +144,11 @@ export async function resumeTaskAgent(input: ResumeTaskAgentInput): Promise<Resu
       priorSupportsResume: prior.spec.runtime === "paseo",
     });
 
-  const cwd = followUp ? { cwd: prior.spec.cwd } : await resolveImplementCwd(input.cwd, prior?.spec.cwd, task);
+  const cwd = input.cwd ? { cwd: input.cwd } : followUp ? { cwd: prior.spec.cwd } : await resolveImplementCwd(input.cwd, prior?.spec.cwd, task);
   const activityTrail = prior
     ? formatAgentActivityTrailForResume(readRunEvents(prior.dir, 0, 500).events)
     : "";
-  const prompt = buildTaskAgentResumePrompt({
+  const resumePrompt = buildTaskAgentResumePrompt({
     origin: input.origin,
     taskId: input.taskId,
     date: input.date,
@@ -149,6 +160,7 @@ export async function resumeTaskAgent(input: ResumeTaskAgentInput): Promise<Resu
     activityTrail: activityTrail || undefined,
     ...(latest?.attention ? { attention: { ...latest.attention, prUrl: latest.prUrl } } : {}),
   });
+  const prompt = input.feedbackBrief ? buildFeedbackPrompt({ taskId: input.taskId, brief: input.feedbackBrief, branch: input.worktree?.branch, statusInstruction: TASK_STATUS_UPDATE_INSTRUCTION }) : `${input.retryRunId && prior ? `${TASK_STATUS_UPDATE_INSTRUCTION}\n\n${prior.spec.prompt}` : resumePrompt}${input.guidance ? `\n\nUser guidance for this retry:\n${input.guidance}` : ""}`;
   const common = {
     provider,
     prompt,
@@ -156,8 +168,9 @@ export async function resumeTaskAgent(input: ResumeTaskAgentInput): Promise<Resu
     title: `Resume ${input.taskId.slice(0, 8)}`,
     depth: 0,
     worktree: false,
+    ...(input.worktree ? { inherit: { worktree: input.worktree, baseSha: prior?.spec.baseSha } } : {}),
     parentRunId: latest?.runId,
-    activity: { source: "interactive" as const, action: "resume", taskId: input.taskId, taskDate: input.date },
+    activity: { source: "interactive" as const, action: input.retryRunId ? latest?.role ?? "implement" : "resume", taskId: input.taskId, taskDate: input.date },
   };
 
   if (followUp) {
@@ -165,6 +178,7 @@ export async function resumeTaskAgent(input: ResumeTaskAgentInput): Promise<Resu
       const next = await dispatchAgentRun({
         ...common,
         model: input.model ?? prior.spec.model,
+        effort: input.effort ?? prior.spec.reasoningEffort,
         resumeSessionId: priorSessionId ?? undefined,
         inherit: { baseSha: prior.spec.baseSha, worktree: prior.spec.worktree },
       });
@@ -177,7 +191,7 @@ export async function resumeTaskAgent(input: ResumeTaskAgentInput): Promise<Resu
   }
 
   try {
-    const next = await dispatchAgentRun({ ...common, model: input.model });
+    const next = await dispatchAgentRun({ ...common, model: input.model ?? (input.retryRunId ? prior?.spec.model : undefined), ...(input.effort ? { effort: input.effort } : {}) });
     await linkRun(input.taskId, next, latest);
     return result("new", next);
   } catch (err) {

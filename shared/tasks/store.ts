@@ -8,7 +8,7 @@ import { serializeTask } from "./json.ts";
 import { isTaskId, itemPath, itemsDir, timerPath } from "./paths.ts";
 import { changedRanks, rankBetween } from "./rank.ts";
 import type { Task, TaskStage } from "./types.ts";
-import { isTaskOpen } from "./types.ts";
+import { isTaskOpen, isTaskOwnershipBlocked } from "./types.ts";
 import { compareTasks, isOpenOn, isVisibleOn, projectTask, taskMatchesId } from "./view.ts";
 
 const JIRA_KEY_RE = /\b([A-Z][A-Z0-9]+-\d+)\b/;
@@ -159,8 +159,8 @@ export function removeItem(tasksDir: string, id: string): boolean {
   return true;
 }
 
-function extractJiraKey(text: string): string | undefined {
-  return text.match(JIRA_KEY_RE)?.[1];
+function extractJiraKey(text: string, parentKey?: string): string | undefined {
+  return [...text.matchAll(new RegExp(JIRA_KEY_RE, "g"))].map((match) => match[1]).find((key) => key !== parentKey);
 }
 
 function nextRank(tasksDir: string): string {
@@ -171,6 +171,7 @@ function nextRank(tasksDir: string): string {
 
 export interface NewTaskInput {
   text: string;
+  parentKey?: string;
   startDate?: string;
   due?: string;
   links?: EntityRef[];
@@ -178,12 +179,15 @@ export interface NewTaskInput {
   id?: string;
   notePath?: string;
   createdAt?: string;
+  teamPickup?: Task["teamPickup"];
 }
 
 export function createTask(tasksDir: string, input: NewTaskInput, now = new Date()): Task {
   const startDate = input.startDate ?? todayISO(now);
   const id = input.id ?? randomUUID();
-  const text = input.text;
+  const parentKey = input.parentKey?.trim().toUpperCase();
+  const prefix = input.text.match(/^([A-Z][A-Z0-9_]*-\d+)\b\s*[:—–-]?\s*/);
+  const text = prefix && prefix[1] === parentKey ? input.text.slice(prefix[0].length) || input.text : input.text;
   const task: Task = {
     id,
     text,
@@ -191,10 +195,12 @@ export function createTask(tasksDir: string, input: NewTaskInput, now = new Date
     startDate,
     rank: nextRank(tasksDir),
     createdAt: input.createdAt ?? now.toISOString(),
-    jiraKey: extractJiraKey(text),
+    jiraKey: extractJiraKey(text, parentKey),
+    ...(parentKey ? { parentKey } : {}),
     ...(input.due ? { due: input.due } : {}),
     ...(input.links && input.links.length > 0 ? { links: input.links } : {}),
     ...(input.stage ? { stage: input.stage } : {}),
+    ...(input.teamPickup ? { teamPickup: input.teamPickup } : {}),
   };
   task.notePath = input.notePath ?? taskNotePath({ ...task, date: startDate });
   writeItem(tasksDir, task);
@@ -202,6 +208,7 @@ export function createTask(tasksDir: string, input: NewTaskInput, now = new Date
 }
 
 export interface TaskPatch {
+  parentKey?: string;
   integrationRefs?: Task["integrationRefs"];
   text?: string;
   due?: string | null;
@@ -218,13 +225,15 @@ export interface TaskPatch {
 export function patchTask(tasksDir: string, id: string, patch: TaskPatch, now = new Date()): Task | null {
   const existing = findTask(tasksDir, id);
   if (!existing) return null;
+  if (isTaskOwnershipBlocked(existing)) throw new Error("This task's ownership is pending or handed off and is read-only.");
   const task: Task = { ...existing };
   if (typeof patch.text === "string") {
     task.text = patch.text;
-    if (patch.jiraKey === undefined) task.jiraKey = extractJiraKey(patch.text);
+    if (patch.jiraKey === undefined) task.jiraKey = extractJiraKey(patch.text, patch.parentKey ?? task.parentKey);
   }
   if (patch.jiraKey === null) delete task.jiraKey;
   else if (typeof patch.jiraKey === "string") task.jiraKey = patch.jiraKey;
+  if (patch.parentKey) task.parentKey = patch.parentKey;
   if (patch.due === null) delete task.due;
   else if (typeof patch.due === "string") task.due = patch.due;
   if (patch.links) task.links = patch.links.length > 0 ? patch.links : undefined;
@@ -321,6 +330,7 @@ function writeTombstone(tasksDir: string, tombstone: Tombstone): void {
 export function deleteTask(tasksDir: string, id: string): boolean {
   const existing = findTask(tasksDir, id);
   if (!existing) return false;
+  if (isTaskOwnershipBlocked(existing)) throw new Error("This task's ownership is pending or handed off and is read-only.");
   const legacyIds = [...new Set([existing.id, ...(existing.legacyIds ?? [])])].sort();
   const removed = removeItem(tasksDir, existing.id);
   if (removed && (existing.legacyIds?.length || existing.legacyThrough)) {
@@ -408,6 +418,7 @@ function settleTimer(tasksDir: string, taskId: string, nowMs: number): void {
 
 export function startTimer(tasksDir: string, id: string, now = new Date()): Task | null {
   const task = findTask(tasksDir, id);
+  if (isTaskOwnershipBlocked(task)) throw new Error("This task's ownership is pending or handed off and is read-only.");
   if (!task || !isTaskOpen(task)) return null;
   const current = readTimer(tasksDir);
   if (current && current.taskId !== task.id) settleTimer(tasksDir, current.taskId, now.getTime());

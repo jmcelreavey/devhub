@@ -3,6 +3,7 @@
 import { Suspense, useState, useEffect, useCallback } from "react";
 import dynamic from "next/dynamic";
 import { appShortcutFromEvent, repoPageOwnsShortcut } from "@/lib/app-shortcuts";
+import { NOTES_OPEN_PATH_EVENT, type NotesOpenPathDetail } from "@/lib/notes/open-in-panel";
 
 /**
  * All five surfaces here are keyboard-summoned and invisible at boot, but this
@@ -83,6 +84,8 @@ export function NotesOverlayProvider() {
   const [captureOpen, setCaptureOpen] = useState(false);
   /** Bumped per "open today's note" request so the overlay reacts even when already open. */
   const [todayNoteRequest, setTodayNoteRequest] = useState(0);
+  /** Bumped per "open this note" request (task notes from Implement, task menus, inbox). */
+  const [notePathRequest, setNotePathRequest] = useState<{ path: string; id: number } | null>(null);
 
   /** Toggling a panel is also what mounts it the first time. */
   const togglePanel = useCallback(
@@ -124,6 +127,13 @@ export function NotesOverlayProvider() {
       panels.open("notes");
       setTodayNoteRequest((n) => n + 1);
     }
+    function onNotesOpenPath(event: Event) {
+      const path = (event as CustomEvent<NotesOpenPathDetail>).detail?.path;
+      if (!path) return;
+      summon("notes");
+      panels.open("notes");
+      setNotePathRequest((prev) => ({ path, id: (prev?.id ?? 0) + 1 }));
+    }
     function onTasksToggle() {
       togglePanel("tasks");
     }
@@ -140,6 +150,7 @@ export function NotesOverlayProvider() {
     document.addEventListener("keydown", handleKey);
     window.addEventListener("devhub:notes-toggle", onNotesToggle);
     window.addEventListener("devhub:notes-open-today", onNotesOpenToday);
+    window.addEventListener(NOTES_OPEN_PATH_EVENT, onNotesOpenPath);
     window.addEventListener("devhub:tasks-toggle", onTasksToggle);
     window.addEventListener("devhub:diagrams-toggle", onDiagramsToggle);
     window.addEventListener("devhub:palette-toggle", onPaletteToggle);
@@ -148,6 +159,7 @@ export function NotesOverlayProvider() {
       document.removeEventListener("keydown", handleKey);
       window.removeEventListener("devhub:notes-toggle", onNotesToggle);
       window.removeEventListener("devhub:notes-open-today", onNotesOpenToday);
+      window.removeEventListener(NOTES_OPEN_PATH_EVENT, onNotesOpenPath);
       window.removeEventListener("devhub:tasks-toggle", onTasksToggle);
       window.removeEventListener("devhub:diagrams-toggle", onDiagramsToggle);
       window.removeEventListener("devhub:palette-toggle", onPaletteToggle);
@@ -173,6 +185,7 @@ export function NotesOverlayProvider() {
           open={panels.isOpen("notes")}
           onClose={panels.close}
           todayNoteRequest={todayNoteRequest}
+          notePathRequest={notePathRequest}
         />
       )}
       {hasSummoned("tasks") && (

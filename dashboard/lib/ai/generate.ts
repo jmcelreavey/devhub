@@ -5,6 +5,7 @@
 
 import { generateText, streamText } from "ai";
 import { generateTextViaCli } from "@/lib/ai/cli-runner";
+import { applyEffort } from "@/lib/ai/effort";
 import { getNotesAiCallOptions, getNotesAiModel, type ReasoningEffort } from "@/lib/ai/provider";
 import { startGenerationActivity, type AiActivityOptions } from "@/lib/ai/activity";
 import {
@@ -20,6 +21,8 @@ export interface GenerateAiTextOptions {
   maxOutputTokens?: number;
   /** Override preference for this call only. */
   prefer?: AiProviderId | null;
+  /** False: use only `prefer`, never substitute another provider (default true). */
+  fallback?: boolean;
   /** Model for this call only; blank keeps the provider's configured default. */
   model?: string;
   /**
@@ -27,6 +30,11 @@ export interface GenerateAiTextOptions {
    * Wins over `AI_REASONING_EFFORT`. Blank falls through to that env, then `low` for `gpt-*-luna`.
    */
   reasoningEffort?: ReasoningEffort | null;
+  /**
+   * Effort picker value. Blank sends nothing.
+   * OpenAI maps it onto reasoning effort; GLM onto the thinking switch; CLIs onto their own flags.
+   */
+  effort?: string | null;
   /** CLI timeout override (ignored for API). */
   timeoutMs?: number;
   /** CLI only — give up after this long with no output at all. */
@@ -58,7 +66,7 @@ export interface GenerateAiTextResult {
 export async function generateAiText(
   opts: GenerateAiTextOptions,
 ): Promise<GenerateAiTextResult> {
-  const resolved = resolveAiProvider({ prefer: opts.prefer });
+  const resolved = resolveAiProvider({ prefer: opts.prefer, fallback: opts.fallback });
   if (!resolved.provider) {
     throw new Error(resolved.setupHint ?? "No AI provider available.");
   }
@@ -70,7 +78,9 @@ export async function generateAiText(
     if (!model) {
       throw new Error("AI_API_KEY is not set.");
     }
-    const callOptions = { ...getNotesAiCallOptions(opts.model, opts.reasoningEffort), abortSignal: opts.abortSignal };
+    // A blank model field uses AI_MODEL; effort must follow that resolved model too.
+    const applied = applyEffort({ provider, model: typeof model === "string" ? model : model.modelId, effort: opts.effort });
+    const callOptions = { ...getNotesAiCallOptions(applied.model ?? opts.model, opts.reasoningEffort ?? (applied.reasoningEffort as ReasoningEffort | undefined), applied.glmThinking), abortSignal: opts.abortSignal };
     const images = (opts.images ?? []).filter((img) => img.dataUrl.startsWith("data:image/"));
     const tokenOpts =
       opts.maxOutputTokens !== undefined ? { maxOutputTokens: opts.maxOutputTokens } : {};
@@ -151,6 +161,7 @@ export async function generateAiText(
       idleTimeoutMs: opts.idleTimeoutMs,
       maxOutputTokens: opts.maxOutputTokens,
       model: opts.model,
+      effort: opts.effort ?? undefined,
       cwd: opts.cwd,
       abortSignal: opts.abortSignal,
       onTextDelta: opts.onTextDelta,

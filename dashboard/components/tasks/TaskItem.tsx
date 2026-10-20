@@ -9,41 +9,27 @@
  * without the list around it - so it earns its own module.
  */
 import { useState, useEffect, useRef, type HTMLAttributes } from "react";
-import { useRouter } from "next/navigation";
 import { type Task } from "@/lib/tasks/types";
 import { TaskTextContent } from "@/components/tasks/TaskText";
-import { rewriteTaskKey, stripLinkedJiraKeyFromText, stripTagTokens } from "@/lib/tasks/task-text";
-import { canonicalizeEntityRef, entityKey } from "@/lib/entity-note";
-import { useTagMenuGroup, withTagsGroup } from "@/lib/hooks/use-tag-menu";
+import { stripLinkedJiraKeyFromText } from "@/lib/tasks/task-text";
+import { entityKey } from "@/lib/entity-note";
 import { statusTone } from "@/components/jira/JiraWidget";
 import {
-  X,
-  ExternalLink,
   Circle,
   CheckCircle2,
-  Pencil,
   Ban,
-  RotateCcw,
   ArrowRight,
-  Play,
-  Pause,
   GripVertical,
-  Ticket,
   FileText,
   Link2,
 } from "lucide-react";
 import { JiraKeyChip, JiraParentChip } from "@/components/jira/JiraKeyChip";
 import type { JiraTicketRef } from "@/lib/jira/client";
-import { AddToJiraModal } from "@/components/tasks/AddToJiraModal";
 import { JiraStatusPill } from "@/components/jira/JiraStatusPill";
 import { HoverTip } from "@/components/ui/HoverTip";
 import { SeverityPill } from "@/components/ui/Severity";
 import { useSecondTick } from "@/lib/tickers";
-import { formatDuration, jiraBrowseUrl, todayISO } from "@/lib/utils";
-import { openInBrowser } from "@/lib/desktop/bridge";
-import { buildTaskNoteMarkdown, taskNotePath } from "@/lib/task-note";
-import { createOrOpenVaultNote } from "@/lib/create-vault-note";
-import { useVaultNoteExists } from "@/components/EntityNoteAction";
+import { formatDuration, todayISO } from "@/lib/utils";
 import { SharedEntityChips, isRedundantChip } from "@/components/EntityLinkChips";
 import { TaskLinkButton } from "@/components/TaskLinkButton";
 import {
@@ -54,8 +40,13 @@ import {
 } from "@/components/shell/ContextMenu";
 import { mutate } from "swr";
 import type { EntityRef } from "@/lib/entity-note";
-import { useToast } from "@/lib/hooks/use-toast";
-import { useTaskAgentActions } from "@/components/tasks/useTaskAgentActions";
+import { useTaskMenu } from "@/components/tasks/useTaskMenu";
+import { useTaskActionPending } from "@/lib/storyboard/task-action";
+import { useTaskDetail } from "@/components/storyboard/TaskDetailProvider";
+import { WorkActionButton } from "@/components/storyboard/WorkActionButton";
+import { useWorkAction } from "@/components/storyboard/useWorkAction";
+import { type NextAction } from "@/lib/storyboard/next-action";
+import { resolveWorkPresentation } from "@/lib/storyboard/work-summary";
 
 /** Repo chips shown in the rail before "+N"; the links button holds the full set. */
 const REPO_CHIPS_IN_RAIL = 1;
@@ -87,6 +78,10 @@ export function TaskItem({
   showUpstart = false,
   hideJiraKey = false,
   hideParent = false,
+  showStartAuto = false,
+  showWorkStatus = false,
+  menuGroups,
+  pending = false,
 }: {
   task: Task;
   /** Day file this task lives in (YYYY-MM-DD). Defaults to today. */
@@ -115,14 +110,14 @@ export function TaskItem({
   hideJiraKey?: boolean;
   /** The surrounding group already names the parent. */
   hideParent?: boolean;
+  showStartAuto?: boolean;
+  showWorkStatus?: boolean;
+  menuGroups?: ContextMenuGroup[];
+  pending?: boolean;
 }) {
-  const toast = useToast();
-  const router = useRouter();
   const menu = useContextMenu<Task>();
   const taskDate = date ?? todayISO();
   const [editing, setEditing] = useState(false);
-  const [linkOpen, setLinkOpen] = useState(false);
-  const [jiraDraftOpen, setJiraDraftOpen] = useState(false);
   const [editText, setEditText] = useState(task.text);
   const [showAbandon, setShowAbandon] = useState(false);
   const [abandonReason, setAbandonReason] = useState("");
@@ -134,15 +129,18 @@ export function TaskItem({
   const isMoved = !!task.movedAt || task.endReason === "legacy-moved";
   const slipped = !isMoved && !task.done && !task.abandonedAt && !!task.startDate && task.startDate < taskDate;
   const isInactive = isAbandoned || isMoved || readOnly;
-  const agent = useTaskAgentActions({
-    task,
-    date: taskDate,
-    cwd,
-    repoName,
-    enabled: !isInactive,
-    onComplete: onToggle,
-    onAbandon,
-  });
+  const detail = useTaskDetail();
+  const taskPending = useTaskActionPending(task.id, detail?.profileId);
+  const actionPending = pending || taskPending;
+  const perform = useWorkAction(detail?.profileId);
+  const workCard = detail?.board?.cards.find((card) => card.taskId === task.id);
+  const presentation = workCard ? resolveWorkPresentation(workCard, detail?.workflows.get(task.id), Date.parse(detail?.board?.generatedAt ?? workCard.updatedAt)) : undefined;
+  const rowAction = !isInactive && !task.done ? presentation?.action : null;
+  const onWorkAction = async (action: NextAction) => {
+    if (!workCard) return;
+    if (action.kind !== "finish" && action.kind !== "done") detail?.openTask(task.id);
+    await perform(workCard, action);
+  };
 
   useEffect(() => {
     if (editing) editRef.current?.focus();
@@ -169,16 +167,6 @@ export function TaskItem({
     setAbandonReason("");
   };
 
-  const noteSource = {
-    notePath: task.notePath,
-    id: task.id,
-    text: task.text,
-    date: taskDate,
-    jiraKey: task.jiraKey,
-    jiraUrl: task.jiraKey ? jiraBrowseUrl(task.jiraKey) : undefined,
-    related: task.links,
-  };
-
   const displayText = task.jiraKey
     ? stripLinkedJiraKeyFromText(task.text, task.jiraKey)
     : task.text;
@@ -195,38 +183,6 @@ export function TaskItem({
   );
   const linkCount = rowLinks.length;
 
-  const { group: tagsGroup, modal: tagsModal, openModal: openLinks } = useTagMenuGroup({
-    kind: "task",
-    id: task.id,
-    date: taskDate,
-    label: task.text,
-    title: stripTagTokens(displayText),
-    enabled: menu.target !== null || linkOpen,
-    onRemoveRef: isInactive
-      ? undefined
-      : async (ref) => {
-          // The dialog lists canonical refs; the task may store an alias of
-          // the same link, so match on the canonical key as well as the raw one.
-          const target = entityKey(ref);
-          const next = ((task.links ?? []) as EntityRef[]).filter(
-            (stored) =>
-              entityKey(stored) !== target &&
-              entityKey(canonicalizeEntityRef(stored) ?? stored) !== target,
-          );
-          const res = await fetch("/api/tasks", {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ id: task.id, date: taskDate, links: next }),
-          });
-          if (!res.ok) {
-            toast.error("Couldn't remove link");
-            throw new Error(await res.text());
-          }
-          void mutate("/api/tasks");
-          toast.success("Link removed");
-        },
-    onAddLink: isInactive ? undefined : () => setLinkOpen(true),
-  });
 
   const textStyle: React.CSSProperties = {
     color: task.done || isInactive ? "var(--text-subtle)" : "var(--text)",
@@ -244,116 +200,34 @@ export function TaskItem({
     task.jiraKey && !isAbandoned && !editing && !hideJiraKey && !hideParent ? jiraStatus?.parent : null;
   const showTimerReadout = !isInactive && (!!task.timerStartedAt || (task.timeSpentMs ?? 0) > 0);
 
-  const notePath = taskNotePath(noteSource);
-  const noteExists = useVaultNoteExists(notePath);
-
-  const openTaskNote = async () => {
-    try {
-      const result = await createOrOpenVaultNote({
-        path: notePath,
-        markdown: buildTaskNoteMarkdown(noteSource),
-      });
-      router.push(result.href);
-    } catch {
-      toast.error("Couldn't create task note.");
-    }
-  };
-
-  const menuGroups: ContextMenuGroup[] = withTagsGroup(
-    [
-    {
-      id: "task",
-      items: [
-        {
-          id: "note",
-          label: noteExists ? "Open note" : "Create note",
-          icon: <FileText size={12} aria-hidden />,
-          onSelect: () => void openTaskNote(),
-        },
-        ...agent.menuItems,
-        ...(onTimer && !isInactive
-          ? [
-              {
-                id: "timer",
-                label: task.timerStartedAt ? "Stop timer" : "Start timer",
-                icon: task.timerStartedAt ? <Pause size={12} aria-hidden /> : <Play size={12} aria-hidden />,
-                onSelect: onTimer,
-              },
-            ]
-          : []),
-        ...(!isAbandoned && task.jiraKey
-          ? [
-              {
-                id: "open-jira",
-                label: "Open in Jira",
-                icon: <ExternalLink size={12} aria-hidden />,
-                onSelect: () => void openInBrowser(jiraBrowseUrl(task.jiraKey!)),
-              },
-            ]
-          : []),
-        ...(!isInactive
-          ? [
-              {
-                id: "edit",
-                label: "Edit",
-                icon: <Pencil size={12} aria-hidden />,
-                onSelect: () => {
-                  setEditing(true);
-                  setEditText(task.text);
-                },
-              },
-            ]
-          : []),
-        ...(!isInactive && !task.done
-          ? [{
-              id: "generate-jira",
-              label: "Generate Jira ticket…",
-              icon: <Ticket size={12} aria-hidden />,
-              onSelect: () => setJiraDraftOpen(true),
-            }]
-          : []),
-        ...(!isInactive && !task.done && onAddToJira
-          ? [
-              {
-                id: "jira",
-                label: "Add to Jira manually…",
-                icon: <Ticket size={12} aria-hidden />,
-                onSelect: onAddToJira,
-              },
-            ]
-          : []),
-        ...(isAbandoned && onReactivate
-          ? [
-              {
-                id: "reactivate",
-                label: "Reactivate",
-                icon: <RotateCcw size={12} aria-hidden />,
-                onSelect: onReactivate,
-              },
-            ]
-          : []),
-        ...(!isInactive && !task.done
-          ? [
-              {
-                id: "abandon",
-                label: "Abandon",
-                icon: <Ban size={12} aria-hidden />,
-                onSelect: () => setShowAbandon(true),
-              },
-            ]
-          : []),
-        {
-          id: "delete",
-          label: "Delete",
-          icon: <X size={12} aria-hidden />,
-          onSelect: onDelete,
-          danger: true,
-        },
-      ],
+  const taskMenu = useTaskMenu({
+    task,
+    date: taskDate,
+    cwd,
+    repoName,
+    inactive: isInactive,
+    menuOpen: menu.target !== null,
+    extraGroups: menuGroups,
+    pending: actionPending,
+    notePath: showWorkStatus ? workCard?.notePath ?? undefined : undefined,
+    handlers: {
+      onToggle,
+      onAbandon,
+      onRequestAbandon: () => setShowAbandon(true),
+      onDelete,
+      onEdit,
+      onStartEdit: () => {
+        setEditing(true);
+        setEditText(task.text);
+      },
+      onTimer,
+      onAddToJira,
+      onReactivate,
+      onOpenNote: showWorkStatus && detail ? () => detail.openTask(task.id, "note") : undefined,
     },
-    ],
-    tagsGroup,
-  );
+  });
+  const { agent, noteExists, openTaskNote, openLinks, linkOpen, setLinkOpen } = taskMenu;
+
 
   return (
     <div>
@@ -438,6 +312,7 @@ export function TaskItem({
               onToggle();
             }}
             aria-label={task.done ? "Mark task incomplete" : "Mark task complete"}
+            disabled={actionPending || justCompleted}
             className="task-toggle"
             style={{
               background: "none",
@@ -487,7 +362,7 @@ export function TaskItem({
             />
           ) : (
             <span className="task-row-title text-sm leading-snug" style={textStyle}>
-              <TaskTextContent text={task.jiraKey && !isAbandoned ? displayText : task.text} />
+              <TaskTextContent text={task.jiraKey && !isAbandoned ? displayText : task.text} onTextClick={detail && !isMoved ? () => detail.openTask(task.id) : undefined} />
               {slipped ? <span className="ml-2 text-[11px] font-mono text-text-subtle">slipped</span> : null}
             </span>
           )}
@@ -509,10 +384,13 @@ export function TaskItem({
             </span>
           ) : null}
 
+          {showWorkStatus && presentation ? <span className="text-xs text-text-muted basis-full">{presentation.status}</span> : null}
+
         </div>
 
         {!editing && !showAbandon && (
           <div className="task-row-actions">
+            {showStartAuto && rowAction ? <WorkActionButton action={rowAction} pending={actionPending} onAction={(action) => void onWorkAction(action)} onOpen={detail ? () => detail.openTask(task.id) : undefined} detailHref={detail?.hrefForTask(task.id)} className="task-row-start-auto" /> : null}
             {/* Trailing meta (Jira status, timer) leads the rail so the
                 note/links icons keep the same column across rows. */}
             {(showJiraStatus || showTimerReadout || agent.chip || (showUpstart && agent.upstart)) && (
@@ -592,25 +470,14 @@ export function TaskItem({
           void mutate("/api/tasks");
         }}
       />
-      {agent.dialogs}
-      {jiraDraftOpen && (
-        <AddToJiraModal
-          open
-          task={task}
-          date={taskDate}
-          generateOnOpen
-          onClose={() => setJiraDraftOpen(false)}
-          onCreated={(newKey) => onEdit(rewriteTaskKey(task.text, task.jiraKey, newKey))}
-        />
-      )}
+      {taskMenu.dialogs}
       <ContextMenu
         open={menu.target !== null}
         position={menu.position}
-        groups={menuGroups}
+        groups={taskMenu.groups}
         onClose={menu.close}
         label={`Task actions for ${task.text}`}
       />
-      {tagsModal}
 
       {showAbandon && (
         <div

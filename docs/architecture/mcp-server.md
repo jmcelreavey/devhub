@@ -273,7 +273,7 @@ Cross-entity edges use the shared `EntityRef` contract in `shared/entity-note/`.
 4. `entity_links_read` — parse `## Links` from an existing note path.
 5. `tasks_create` — optional `withNote: true` and/or `links: EntityRef[]` on the new task.
 6. `tasks_update` — pass `links` to replace hop-around refs on an existing task.
-7. `tasks_agent_runs` / `tasks_agent_handoff_get` / `tasks_agent_handoff_set` / `tasks_agent_resume` — durable task↔agent-run links, handoff, and Resume with Agent (`/api/tasks/agent-runs`, `/resume`). See [Task agent handoff](../guides/task-agent-handoff.md).
+7. `tasks_agent_runs` / `tasks_agent_handoff_get` / `tasks_agent_handoff_set` / `tasks_agent_resume` / `tasks_agent_plan` — durable task↔agent-run links, handoff, Resume with Agent, and a plan-only run (`/api/tasks/agent-runs`, `/resume`, `/plan`). See [Task agent handoff](../guides/task-agent-handoff.md).
 8. `tasks_implement_ready` — light ready-to-implement checklist (`GET /api/tasks/implement/ready`). See [Task agent handoff](../guides/task-agent-handoff.md#implement-ready).
 9. `tasks_implement_review_settings_get` / `_set` / `tasks_implement_review` — assign a different assistant to review a finished implementation, and start it (`/api/tasks/implement/review-settings`, `/review`). See [Review with another assistant](../guides/task-agent-handoff.md#review-with-another-assistant).
 
@@ -480,6 +480,9 @@ The `integrations` toolset uses the existing `/api/integrations` and `/api/integ
 | `integrations_alert_destinations` | None | Active-profile destinations, consent revisions and recent deliveries; credential references only, never values. |
 | `integrations_alert_test` | Destination `id`, current `revision`, UUID `requestId` | One fixed test to an already enabled Slack/Telegram destination. Reuse the request ID after uncertain transport; no automatic retry or consent change. |
 | `integrations_chat_status` | None | Command enablement/configuration status, active-profile allowlist counts, webhook paths and variable names; no secrets, allowlist identities or enabling operation. |
+| `integrations_slack_status` | None | Read-only Socket Mode connection status, masked bot settings, current settings revision and active task profile. Never starts a connection or returns tokens. |
+| `integrations_slack_usage` | None | Read-only: today's Slack bot usage (questions, free rule answers, Jev calls and estimated cost, cheap-model calls). No message text or tokens. |
+| `integrations_slack_test` | Current settings `revision`, UUID `requestId` | One fixed test to the saved Slack bot channel. Reuse the request ID after uncertain transport; never changes settings, enables alerts or runs task actions. |
 
 For example, `integrations_propose` accepts:
 
@@ -581,7 +584,7 @@ plugin MCP packages. See [Plugin System](plugins.md) and
 | `db_connect` still unavailable          | Check Tailscale / AWS profile from Ops. `fix: true` only applies remedies the provider declared.                                 |
 | `agent_dispatch` `503` “Paseo is unavailable” | Open `/agents?view=connection` and run setup or restart. Local dashboard only. |
 | `agent_dispatch` `400` maxTurns         | Paseo has no turn override. Drop `maxTurns` or use the agent's own controls. |
-| `agent_dispatch` `429`                  | Wait, cancel on Activity, or raise `DEVHUB_AGENT_MAX_RUNS` / `DEVHUB_AGENT_MAX_COST_USD`. |
+| `agent_dispatch` `429`                  | Wait, cancel on Activity, or raise `DEVHUB_AGENT_MAX_RUNS` / `DEVHUB_AGENT_MAX_COST_USD`. A limit refusal names the runs holding it (`code: "capacity"`); `GET /api/agent/runs/capacity` lists them and `POST /api/agent/runs/<id>/clear` drops one DevHub can no longer follow. |
 
 ## Safety Model
 

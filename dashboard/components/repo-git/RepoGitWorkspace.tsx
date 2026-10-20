@@ -628,7 +628,7 @@ export function RepoGitWorkspace({
                   <p className="repo-git-modal-sub">
                     {page ? (
                       <Link href={`/repos/${encodeURIComponent(repoName)}`} className="repo-git-page-back">
-                        <ArrowLeft size={12} aria-hidden /> Repository
+                        <ArrowLeft size={12} aria-hidden /> Repo home
                       </Link>
                     ) : <span className="font-mono">{repoName}</span>}
                     <span className="repo-git-modal-path" title={repoPath}>

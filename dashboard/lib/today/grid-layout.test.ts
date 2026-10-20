@@ -5,6 +5,7 @@ import {
   mergeTodayGridLayouts,
   preserveHiddenTodayGridLayouts,
   TODAY_GRID_COLLAPSED_HEIGHT,
+  collapsedHeightForSlot,
   TODAY_GRID_DEFAULT_LAYOUTS,
   type TodayGridBreakpoint,
   type TodayGridSlotId,
@@ -115,7 +116,9 @@ describe("applyCollapsedHeights after remount merge", () => {
       merged,
       new Set<TodayGridSlotId>(["briefing", "calendar", "main"]),
     );
-    expect(collapsed.lg?.find((item) => item.i === "briefing")?.h).toBe(TODAY_GRID_COLLAPSED_HEIGHT);
+    // The briefing keeps its weather in the header row, so it needs no summary line.
+    expect(collapsed.lg?.find((item) => item.i === "briefing")?.h).toBe(collapsedHeightForSlot("briefing"));
+    expect(collapsedHeightForSlot("briefing")).toBeLessThan(TODAY_GRID_COLLAPSED_HEIGHT);
     expect(collapsed.lg?.find((item) => item.i === "calendar")?.h).toBe(TODAY_GRID_COLLAPSED_HEIGHT);
     expect(collapsed.lg?.find((item) => item.i === "main")?.h).toBe(TODAY_GRID_COLLAPSED_HEIGHT);
     expect(collapsed.lg?.find((item) => item.i === "briefing")?.minH).toBe(6);

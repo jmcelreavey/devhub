@@ -49,6 +49,28 @@ describe("room events", () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
+  it("cancels trails and rare timers while an editor has focus", async () => {
+    render(<><input /><div className="card">Card</div><div className="hollow-fx">
+      <HollowRoom plan={hollowRuntimePlan(HOLLOW_EFFECT_DEFAULTS, true)} />
+    </div></>);
+    const leave = () => document.querySelector(".card")!.dispatchEvent(new MouseEvent("pointerout", {
+      bubbles: true, relatedTarget: document.body, clientX: 800, clientY: 500,
+    }));
+    act(leave);
+    expect(Element.prototype.animate).toHaveBeenCalledTimes(1);
+    act(() => { document.querySelector("input")!.focus(); });
+    expect(cancel).toHaveBeenCalledTimes(1);
+    act(() => { vi.advanceTimersByTime(300000); });
+    expect(document.querySelector(".is-rare")).toBeNull();
+    act(leave);
+    expect(Element.prototype.animate).toHaveBeenCalledTimes(1);
+    await act(async () => { document.querySelector("input")!.blur(); });
+    act(() => { vi.advanceTimersByTime(180000); });
+    expect(document.querySelector(".is-rare")).not.toBeNull();
+    act(leave);
+    expect(Element.prototype.animate).toHaveBeenCalledTimes(2);
+  });
+
   it("uses four pooled trails on card exit, never reads pointer geometry, and cancels on hide", () => {
     const view = render(<><div className="card"><span>Copy</span></div><HollowRoom plan={hollowRuntimePlan(HOLLOW_EFFECT_DEFAULTS, true)} /></>);
     const geometry = vi.spyOn(Element.prototype, "getBoundingClientRect");
@@ -59,7 +81,7 @@ describe("room events", () => {
     expect(document.querySelectorAll(".hollow-spectral-trail")).toHaveLength(4);
     expect(Element.prototype.animate).toHaveBeenCalledTimes(6);
     expect(geometry).not.toHaveBeenCalled();
-    expect(vi.mocked(Element.prototype.animate).mock.calls[0][1]).toMatchObject({ duration: 600 });
+    expect(vi.mocked(Element.prototype.animate).mock.calls[0][1]).toMatchObject({ duration: 300 });
     act(() => { document.dispatchEvent(new Event("visibilitychange")); });
     expect(cancel).toHaveBeenCalledTimes(6);
     view.unmount();

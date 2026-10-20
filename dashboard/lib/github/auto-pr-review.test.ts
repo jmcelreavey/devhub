@@ -13,6 +13,7 @@ import {
   shouldRetryAutoReview,
 } from "@/lib/github/auto-pr-review";
 import { saveAutoPrReviewPrefs } from "@/lib/github/auto-pr-review-prefs";
+import { getTaskProfileOverview } from "@/lib/tasks/profiles";
 import { getAutoPrReviewRecord } from "@/lib/github/auto-pr-review-state";
 
 function pr(partial: Partial<GithubPrRow> & Pick<GithubPrRow, "number" | "repo" | "url">): GithubPrRow {
@@ -230,6 +231,7 @@ describe("runAutoPrReview", () => {
     expect(startedIds).toHaveLength(1);
     expect(result.started).toHaveLength(1);
     expect(result.started[0]?.sessionId).toBe("ses-1");
+    expect(getAutoPrReviewRecord(rows[0].url)?.workProfile).toBe(getTaskProfileOverview().active ?? "default");
     expect(result.skipped.some((s) => s.reason === "concurrency-cap")).toBe(true);
   });
 

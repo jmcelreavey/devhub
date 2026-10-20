@@ -15,10 +15,13 @@ export function WorkingFolderField({
   cwd,
   repoName,
   onChange,
+  onPick,
 }: {
   cwd: string;
   repoName?: string;
   onChange: (next: WorkingFolderChoice) => void;
+  /** Only for an explicit user choice (select, Use, or a finished clone), never the automatic match. */
+  onPick?: (next: WorkingFolderChoice) => void;
 }) {
   const [repos, setRepos] = useState<Pick<RepoInfo, "name" | "path">[]>([]);
   const [scanDirDisplay, setScanDirDisplay] = useState("~/Developer");
@@ -107,6 +110,7 @@ export function WorkingFolderField({
   const pick = (next: WorkingFolderChoice) => {
     picked.current = true;
     onChange(next);
+    onPick?.(next);
   };
 
   const clone = async (fullName: string) => {

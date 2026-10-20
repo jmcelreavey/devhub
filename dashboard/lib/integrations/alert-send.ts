@@ -3,13 +3,17 @@ import { z } from "zod";
 import { credential } from "./accounts";
 import { validTelegramToken } from "./telegram";
 import { alertText, type AlertEntry, type Destination } from "./alert-types";
+import { isPrAlert, prAnnouncementText } from "./pr-announcement";
+import { readSlackSettings } from "./slack/settings";
 export interface Delivery { state: "sent" | "unknown" | "failed" | "pending"; receipt?: string; detail: string; retryAfter?: number }
-export function alertRequest(destination: Destination, entry: Pick<AlertEntry, "kind" | "taskId">, secret: string): { url: string; body: string } {
+export function alertRequest(destination: Destination, entry: Pick<AlertEntry, "kind" | "taskId" | "announcement">, secret: string): { url: string; body: string } {
   const text = alertText(entry.kind, entry.taskId, destination.publicBaseUrl);
   if (destination.provider === "slack") {
     const u = new URL(secret);
     if (u.protocol !== "https:" || u.hostname !== "hooks.slack.com" || u.port || u.username || u.password || u.search || u.hash || !/^\/services\/[a-zA-Z0-9]+\/[a-zA-Z0-9]+\/[a-zA-Z0-9]+$/.test(u.pathname)) throw new Error("Use a Slack incoming webhook for the chosen channel.");
-    return { url: u.href, body: JSON.stringify({ text, mrkdwn: false, unfurl_links: false, unfurl_media: false }) };
+    const richText = destination.includePrDetails && isPrAlert(entry.kind) && entry.announcement
+      ? prAnnouncementText(entry.kind, entry.announcement, readSlackSettings().allowedUserId) : undefined;
+    return { url: u.href, body: JSON.stringify({ text: richText ?? text, mrkdwn: Boolean(richText), ...(richText ? { parse: "none", link_names: false } : {}), unfurl_links: false, unfurl_media: false }) };
   }
   if (!validTelegramToken(secret) || !destination.chatId) throw new Error("Configure a Telegram bot token and explicit chat ID.");
   return { url: "https://api.telegram.org/bot" + secret + "/sendMessage", body: JSON.stringify({ chat_id: destination.chatId, text, link_preview_options: { is_disabled: true } }) };

@@ -3,6 +3,10 @@ import { SECRET_FIELD_MASK } from "./shared";
 import { jiraSetupSavePayload, shouldSaveBeforeNext } from "./save-payload";
 
 describe("shouldSaveBeforeNext", () => {
+  it("leaves Slack's Save and Send test controls on the same step", () => {
+    expect(shouldSaveBeforeNext("slack", false)).toBe(false);
+    expect(shouldSaveBeforeNext("slack", true)).toBe(false);
+  });
   it("still saves Jira when credentials are already marked configured", () => {
     expect(shouldSaveBeforeNext("jira", true)).toBe(true);
   });

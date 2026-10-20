@@ -59,7 +59,28 @@ describe("task profile resolution", () => {
     expect(m.resolveActiveTasksDir(tasksRoot)).toBe(path.join(tasksRoot, "work"));
   });
 
-  it("falls back to the first profile when the machine never chose", async () => {
+  it("falls back to the repo default, not the alphabetically first profile, when the machine never chose", async () => {
+    writeDay("work", "2026-09-29", []);
+    writeDay("personal", "2026-09-29", []);
+    fs.writeFileSync(path.join(tasksRoot, "profiles.json"), JSON.stringify({ default: "work" }));
+    const m = await fresh<typeof import("@shared/vault/task-profiles")>("../../../shared/vault/task-profiles.ts");
+    expect(m.resolveActiveProfileId(tasksRoot)).toBe("work");
+    // The machine's own choice still wins.
+    process.env.DEVHUB_PROFILE = "personal";
+    expect(m.resolveActiveProfileId(tasksRoot)).toBe("personal");
+  });
+
+  it("records the first profile created as the default, so a later one never takes over", async () => {
+    writeDay(null, "2026-09-29", [task("a", "legacy")]);
+    const m = await fresh<typeof import("@shared/vault/task-profiles")>("../../../shared/vault/task-profiles.ts");
+    m.createTaskProfile(tasksRoot, "work");
+    m.createTaskProfile(tasksRoot, "personal");
+    expect(m.readDefaultProfileId(tasksRoot)).toBe("work");
+    expect(m.resolveActiveProfileId(tasksRoot)).toBe("work");
+    expect(m.listTaskProfiles(tasksRoot)).toEqual(["personal", "work"]);
+  });
+
+  it("falls back to the first profile when there is no repo default", async () => {
     writeDay("work", "2026-09-29", []);
     writeDay("home", "2026-09-29", []);
     const m = await fresh<typeof import("@shared/vault/task-profiles")>("../../../shared/vault/task-profiles.ts");
@@ -185,5 +206,32 @@ describe("profile overview", () => {
     expect(m.switchProfile("home")).toBe(true);
     expect(m.getTaskProfileOverview().active).toBe("home");
     expect(m.switchProfile("nope")).toBe(false);
+  });
+
+  it("deletes a profile only when it is neither active nor default, moving its tasks first", async () => {
+    const m = await fresh<typeof import("./profiles")>("./profiles.ts");
+    const items = (profile: string) => path.join(tasksRoot, profile, "items");
+    for (const profile of ["work", "personal", "side"]) fs.mkdirSync(items(profile), { recursive: true });
+    fs.writeFileSync(path.join(tasksRoot, "profiles.json"), JSON.stringify({ default: "work" }));
+    fs.writeFileSync(path.join(items("personal"), "a.json"), JSON.stringify(task("a", "vow")));
+    fs.writeFileSync(path.join(items("personal"), "b.json"), JSON.stringify(task("b", "golem")));
+    process.env.DEVHUB_PROFILE = "personal";
+    expect(() => m.deleteProfile("personal", "work")).toThrow(/this machine uses/);
+    expect(() => m.deleteProfile("work", "personal")).toThrow(/default profile/);
+    process.env.DEVHUB_PROFILE = "side";
+    expect(() => m.deleteProfile("personal")).toThrow(/still has tasks/);
+    expect(m.getTaskProfileOverview().counts?.personal).toEqual({ open: 2, total: 2 });
+    // A name clash stops it before anything moves.
+    fs.writeFileSync(path.join(items("work"), "b.json"), "{}");
+    expect(() => m.deleteProfile("personal", "work")).toThrow(/already has/);
+    expect(fs.readdirSync(items("personal")).sort()).toEqual(["a.json", "b.json"]);
+    fs.rmSync(path.join(items("work"), "b.json"));
+    expect(m.deleteProfile("personal", "work")).toEqual({ moved: 2 });
+    expect(fs.existsSync(path.join(tasksRoot, "personal"))).toBe(false);
+    expect(fs.readdirSync(items("work")).sort()).toEqual(["a.json", "b.json"]);
+    // Empty profile: deleted outright.
+    process.env.DEVHUB_PROFILE = "work";
+    expect(m.deleteProfile("side")).toEqual({ moved: 0 });
+    expect(m.getTaskProfileOverview().profiles).toEqual(["work"]);
   });
 });

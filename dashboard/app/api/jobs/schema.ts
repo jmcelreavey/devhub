@@ -5,6 +5,7 @@ export const AgentJobSchema = z.object({
   prompt: z.string().trim().min(1, "prompt is required").max(32_000, "prompt too long"),
   cwd: z.string().trim().min(1, "cwd is required").max(1_000),
   model: z.string().trim().max(120).optional(),
+  effort: z.string().trim().max(32).regex(/^([A-Za-z0-9][A-Za-z0-9_-]{0,31})?$/).optional(),
   worktree: z.boolean().optional(),
   maxTurns: z.number().int().min(1).max(500).optional(),
 });

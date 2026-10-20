@@ -36,9 +36,6 @@
 :root[data-theme-preset="graphite"][data-graphite-glow="on"] :is(.card, .hub-card):focus-within {
   border-color: var(--graphite-edge);
 }
-:root[data-theme-preset="graphite"][data-graphite-glow="on"] .brand-dot {
-  box-shadow: 0 4px 24px -6px var(--graphite-glow);
-}
 /* A travelling edge, not a scan over text. Fixed size keeps compositing cheap. */
 :root[data-theme-preset="graphite"][data-graphite-scanlines="on"] #main-content::after {
   content: "";
@@ -89,7 +86,6 @@
 }
 :root[data-theme-preset="graphite"][data-graphite-glow="on"] .boot-mark::before {
   border-color: var(--graphite-edge);
-  box-shadow: 0 12px 48px -16px var(--graphite-glow);
 }
 :root[data-theme-preset="graphite"] .boot-screen { background-image: var(--graphite-aura), var(--graphite-grid); background-size: 100% 100%, 40px 40px, 40px 40px; }
 :root[data-theme-preset="graphite"] .boot-line-default { display: none; }

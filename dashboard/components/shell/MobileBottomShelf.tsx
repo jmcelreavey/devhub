@@ -1,6 +1,7 @@
 "use client";
 
 import { useMobileShelf } from "@/lib/hooks/use-mobile-shelf";
+import { activeNavHref } from "@/lib/nav";
 import { CalendarDays,ChevronDown,ChevronUp,FileText,ListTodo,Menu,Search } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -10,9 +11,9 @@ const SHELF_EXPANDED_H = 56;
 const SHELF_COLLAPSED_H = 24; // WCAG 2.5.8 AA minimum touch target
 
 const TABS = [
-  { href: "/",      label: "Today",  Icon: CalendarDays },
+  { href: "/",      label: "Home",   Icon: CalendarDays },
   { href: "/notes", label: "Notes",  Icon: FileText },
-  { href: "/work",  label: "Work",   Icon: ListTodo },
+  { href: "/work",  label: "Tasks",  Icon: ListTodo },
 ];
 
 function openPalette() {
@@ -28,6 +29,8 @@ export function MobileBottomShelf() {
   const { collapsed, toggle } = useMobileShelf(pathname);
 
   const shelfH = isAgents ? 0 : collapsed ? SHELF_COLLAPSED_H : SHELF_EXPANDED_H;
+  // Same "you are here" rule as the sidebar, so /review lights Tasks and /docs lights Notes.
+  const activeHref = activeNavHref(pathname, TABS.map((tab) => tab.href));
 
   // Expose --shelf-h so workspace padding can account for it.
   useEffect(() => {
@@ -60,11 +63,12 @@ export function MobileBottomShelf() {
       {!collapsed && (
         <div className="flex items-stretch h-full pt-[8px]">
           {TABS.map(({ href, label, Icon }) => {
-            const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
+            const active = href === activeHref;
             return (
               <Link
                 key={href}
                 href={href}
+                aria-current={active ? "page" : undefined}
                 className="flex-1 flex flex-col items-center justify-center gap-0.5 no-underline transition-colors"
                 style={{ color: active ? "var(--accent-text, var(--accent))" : "var(--text-subtle)" }}
               >

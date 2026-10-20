@@ -1,4 +1,4 @@
-import { ALL_NAV_DESTINATIONS } from "@/lib/nav";
+import { navDestinationFor } from "@/lib/nav";
 import {
   appendSessionHistory,
   uniqueSessionHistory,
@@ -91,10 +91,8 @@ export function describeHref(href: string): { title: string; kind: WorkspaceTabK
       return { title: last, kind: "note" };
     }
   }
-  const matches = ALL_NAV_DESTINATIONS.filter((item) =>
-    item.href === "/" ? path === "/" : path === item.href || path.startsWith(`${item.href}/`),
-  ).sort((a, b) => b.href.length - a.href.length);
-  if (matches[0]) return { title: matches[0].label, kind: "nav" };
+  const destination = navDestinationFor(path);
+  if (destination) return { title: destination.label, kind: "nav" };
   const last = path.split("/").filter(Boolean).pop();
   if (!last) return { title: "Tab", kind: "other" };
   try {
@@ -315,13 +313,27 @@ function isStoredTab(value: unknown): value is StoredTab {
   );
 }
 
+/**
+ * Nav pages are titled from the registry, never by a published label, so a tab
+ * saved before a rename (Work → Tasks) takes the new name when it is restored.
+ */
+function currentNavTitle(href: string, saved: string): string {
+  const { title, kind } = describeHref(href);
+  return kind === "nav" ? title : saved;
+}
+
 function hydrateTab(tab: StoredTab): WorkspaceTab {
+  const title = currentNavTitle(tab.href, tab.title);
+  const saved = parseHistory(tab.history) ?? seedHistory(tab.href, title, 0);
   return {
     id: tab.id,
     href: tab.href,
-    title: tab.title,
+    title,
     kind: tab.kind,
-    history: uniqueSessionHistory(parseHistory(tab.history) ?? seedHistory(tab.href, tab.title, 0), 10),
+    history: uniqueSessionHistory(
+      saved.map((entry) => ({ ...entry, label: currentNavTitle(entry.href, entry.label) })),
+      10,
+    ),
   };
 }
 

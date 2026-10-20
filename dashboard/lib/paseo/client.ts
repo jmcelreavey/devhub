@@ -2,6 +2,7 @@
  * DevHub's agent runtime. DevHub owns runs (dispatch rules, worktrees, records);
  * the Paseo daemon owns the harness processes, sessions and chat UI.
  */
+import { connect } from "node:net";
 import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
@@ -42,16 +43,33 @@ export interface PaseoSession {
   daemon: DaemonClient;
 }
 
+export interface OpenPaseoSession extends PaseoSession {
+  close: () => Promise<void>;
+}
+
+async function daemonPortOpen(url: string): Promise<boolean> {
+  try {
+    const { hostname, port } = new URL(url);
+    return await new Promise<boolean>((resolve) => {
+      const socket = connect({ host: hostname, port: Number(port) || 80, timeout: 1_500 });
+      socket.once("connect", () => { socket.destroy(); resolve(true); });
+      socket.once("timeout", () => { socket.destroy(); resolve(false); });
+      socket.once("error", () => resolve(false));
+    });
+  } catch {
+    return false;
+  }
+}
+
 /**
- * One short-lived connection per operation. Route handlers and the reconcile
- * tick are independent callers; a shared socket would need its own lifecycle
- * and reconnect story for little gain at this call rate.
+ * One connection the caller closes. Dispatch opens this while git builds a
+ * worktree so the handshake is not stacked on top of checkout time.
+ * Still one clientId per connection: Paseo resumes sessions by that id.
  */
-export async function withPaseo<T>(fn: (session: PaseoSession) => Promise<T>, env: NodeJS.ProcessEnv = process.env): Promise<T> {
+export async function openPaseoSession(env: NodeJS.ProcessEnv = process.env): Promise<OpenPaseoSession> {
   const password = paseoPassword(env);
   const daemon = new DaemonClient({
     url: paseoUrl(env),
-    // Paseo resumes sessions by clientId; sharing one would replace concurrent sockets.
     clientId: `devhub-dashboard-${randomUUID()}`,
     ...(password ? { password } : {}),
     reconnect: { enabled: false },
@@ -63,16 +81,24 @@ export async function withPaseo<T>(fn: (session: PaseoSession) => Promise<T>, en
     await daemon.close().catch(() => undefined);
     const running = await fetch(`${paseoWebOrigin(env)}/api/health`, { signal: AbortSignal.timeout(2_000) }).then((response) => response.ok).catch(() => false);
     if (running) throw new PaseoUserError("Paseo is running, but DevHub could not connect. Enter its existing Agents password in Setup, then retry. You do not need to reinstall it.");
+    // The HTTP health route can miss while the daemon is busy with a chat. If its port still accepts a connection, it is running.
+    if (await daemonPortOpen(paseoUrl(env))) throw new PaseoUserError("Paseo is running but didn't answer in time. Try again in a moment.");
     const help = describeAgentSetup(false);
     const unavailable = new PaseoUserError(help.message);
     unavailable.detail = help.detail;
     unavailable.setupHref = help.setupHref;
     throw unavailable;
   }
+  return { api: createPaseoApi(daemon), daemon, close: () => daemon.close().then(() => undefined) };
+}
+
+/** One short-lived connection per call. Route handlers and the reconcile tick stay independent. */
+export async function withPaseo<T>(fn: (session: PaseoSession) => Promise<T>, env: NodeJS.ProcessEnv = process.env): Promise<T> {
+  const session = await openPaseoSession(env);
   try {
-    return await fn({ api: createPaseoApi(daemon), daemon });
+    return await fn(session);
   } finally {
-    await daemon.close().catch(() => undefined);
+    await session.close().catch(() => undefined);
   }
 }
 

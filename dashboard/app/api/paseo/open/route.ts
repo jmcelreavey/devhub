@@ -23,7 +23,18 @@ export async function GET(req: NextRequest) {
   const run = runId ? readAgentRun(runId) : null;
   if (runId && (!run || run.spec.runtime !== "paseo")) return unavailable("This chat was created before the move to Paseo. Its saved run has been kept, but the old chat cannot be opened here.", 404);
   const agentId = runId ? run?.status.conversationId : search.get("agent");
-  if (!agentId || agentId.length > 200) return unavailable("This run does not have a chat yet.", 404);
+  if (!agentId || agentId.length > 200) {
+    if (run?.status.state === "starting") {
+      const phase = run.status.startupPhase ?? "preparing";
+      const message = phase === "worktree" ? "Creating an isolated worktree…" : phase === "agent" ? "Starting the agent…" : "Saving the run…";
+      if (json) return NextResponse.json({ error: message, starting: true, phase }, { status: 404 });
+      return unavailable(message, 404);
+    }
+    if (run && (run.status.state === "failed" || run.status.state === "needs-attention") && run.status.error) {
+      return unavailable(run.status.error, 409);
+    }
+    return unavailable("This run does not have a chat yet.", 404);
+  }
   try {
     if (run && run.status.connectionId !== paseoUrl()) return unavailable("This chat belongs to a different Paseo connection.", 409);
     const target = await paseoAgentWebUrl(agentId);

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { SkeletonRows } from "@/components/ui/SkeletonRows";
+import { FetchError } from "@/components/ui/FetchError";
 import { isGitNoisePath } from "@/lib/repos/git-parsers";
 import { fetchGitJson, repoApi, type StatusFile, type StatusPayload } from "./shared";
 
@@ -22,6 +23,7 @@ export function HubWorkingTree({
   const [files, setFiles] = useState<StatusFile[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
+  const [retry, setRetry] = useState(0);
 
   useEffect(() => {
     let live = true;
@@ -38,7 +40,7 @@ export function HubWorkingTree({
     return () => {
       live = false;
     };
-  }, [repoName, tick]);
+  }, [repoName, tick, retry]);
 
   const count = files?.length;
 
@@ -56,7 +58,7 @@ export function HubWorkingTree({
       </button>
       {open ? (
         error ? (
-          <p className="text-xs text-danger mt-2">{error}</p>
+          <FetchError bare message={error} onRetry={() => { setError(null); setFiles(null); setRetry((value) => value + 1); }} />
         ) : !files ? (
           <div className="mt-2">
             <SkeletonRows count={4} height={22} />

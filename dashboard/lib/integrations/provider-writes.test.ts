@@ -5,16 +5,28 @@ vi.mock("@/lib/jira/env", () => ({ getResolvedJiraEnv: () => ({ domain: "example
 vi.mock("@/lib/jira/tickets-cache", () => ({ invalidateJiraTicketsCache: vi.fn() }));
 vi.mock("@/lib/sidebar-counts-cache", () => ({ invalidateSidebarCountsCache: vi.fn() }));
 vi.mock("./accounts", () => ({ accountsFor: () => [], accountConfig: () => ({ tokenRef: "TOKEN", domain: "example.atlassian.net", emailRef: "EMAIL" }), credential: (ref: string) => ref }));
-import { jiraProvider } from "./jira";
+import { jiraProvider, clearJiraTransitionCache } from "./jira";
+import { clearJiraActorCache } from "./jira-write";
 import { githubProvider } from "./github";
+import { clearGithubUserCache } from "./github-write";
 import { execGh } from "@/lib/gh-exec";
 import { WriteInputSchema } from "./write-types";
 const signal = new AbortController().signal;
 const context = { signal, approvalId: "approved-id" };
 const mockedFetch = vi.fn();
-beforeEach(() => { vi.clearAllMocks(); vi.stubGlobal("fetch", mockedFetch); });
+beforeEach(() => { vi.clearAllMocks(); mockedFetch.mockReset(); clearJiraActorCache(); clearJiraTransitionCache(); clearGithubUserCache(); vi.stubGlobal("fetch", mockedFetch); });
 afterEach(() => vi.unstubAllGlobals());
 describe("native provider write payloads", () => {
+  it("assigns a picked-up ticket to the receiver's authenticated Jira account", async () => {
+    mockedFetch.mockResolvedValueOnce(Response.json({ accountId: "receiver-account", displayName: "Receiver" }));
+    const input = WriteInputSchema.parse({ action: "issue.assign-self", provider: "jira", account: "default", ref: { provider: "jira", account: "default", kind: "issue", id: "APP-1" } });
+    const prepared = await jiraProvider.prepareWrite!(input, context);
+    expect(prepared.native.payload).toEqual({ accountId: "receiver-account" });
+    mockedFetch.mockResolvedValueOnce(new Response(null, { status: 204 }));
+    await jiraProvider.executeWrite!(input, prepared, context);
+    expect(String(mockedFetch.mock.calls.at(-1)![0])).toContain("/issue/APP-1/assignee");
+    expect(mockedFetch.mock.calls.at(-1)![1]).toMatchObject({ method: "PUT", body: JSON.stringify({ accountId: "receiver-account" }) });
+  });
   it("preserves default Jira parent, assignee, team and sprint and sends the reviewed fields", async () => {
     mockedFetch.mockResolvedValueOnce(Response.json({ accountId: "a1", displayName: "Alice" }))
       .mockResolvedValueOnce(Response.json({ fields: { issuetype: { name: "Epic" }, updated: "parent-v1" } }));
@@ -28,13 +40,33 @@ describe("native provider write payloads", () => {
   });
   it("keeps native transition labels and accepts Jira's empty 204 response", async () => {
     mockedFetch.mockResolvedValueOnce(Response.json({ accountId: "a1", displayName: "Alice" }))
-      .mockResolvedValueOnce(Response.json({ fields: { summary: "Ticket", updated: "v1", status: { id: "1", name: "Open" } } }))
-      .mockResolvedValueOnce(Response.json({ transitions: [{ id: "31", name: "Resolve", to: { name: "Done" } }] }));
+      .mockResolvedValueOnce(Response.json({ fields: { summary: "Ticket", updated: "v1", status: { id: "1", name: "Open" } }, transitions: [{ id: "31", name: "Resolve", to: { id: "10", name: "Done" } }] }));
     const input = WriteInputSchema.parse({ action: "issue.transition", provider: "jira", account: "default", ref: { provider: "jira", account: "default", kind: "issue", id: "APP-1" }, transitionId: "31" });
     const prepared = await jiraProvider.prepareWrite!(input, context);
-    expect(prepared.details).toMatchObject({ from: "Open", transition: "Resolve", to: "Done" });
+    expect(prepared.details).toMatchObject({ from: "Open", transition: "Resolve", to: "Done", key: "APP-1", fromStatusId: "1", toStatusId: "10" });
+    // Actor plus one issue read that carries the transitions: two requests, not three.
+    expect(mockedFetch).toHaveBeenCalledTimes(2);
+    expect(String(mockedFetch.mock.calls[1][0])).toContain("expand=transitions");
     mockedFetch.mockResolvedValueOnce(new Response(null, { status: 204 }));
     expect((await jiraProvider.executeWrite!(input, prepared, context)).detail).toBe("Move APP-1 to Done");
+  });
+  it("asks who the Jira account is once, and lists transitions once until a write changes them", async () => {
+    const ref = { provider: "jira", account: "default", kind: "issue", id: "APP-1" } as const;
+    const issue = (status: string) => Response.json({ fields: { summary: "Ticket", updated: "v1", status: { id: "1", name: status } }, transitions: [{ id: "31", name: "Resolve", to: { id: "10", name: "Done" } }] });
+    const input = WriteInputSchema.parse({ action: "issue.transition", provider: "jira", account: "default", ref, transitionId: "31" });
+    mockedFetch.mockResolvedValueOnce(Response.json({ accountId: "a1", displayName: "Alice" })).mockResolvedValueOnce(issue("Open")).mockResolvedValueOnce(issue("Open"));
+    await jiraProvider.prepareWrite!(input, context);
+    await jiraProvider.prepareWrite!(input, context);
+    expect(mockedFetch.mock.calls.filter(([url]) => String(url).endsWith("/myself"))).toHaveLength(1);
+    mockedFetch.mockReset();
+    mockedFetch.mockResolvedValueOnce(Response.json({ transitions: [{ id: "31", name: "Resolve", to: { id: "10", name: "Done" } }] }));
+    await jiraProvider.transitions!(ref, context);
+    await jiraProvider.transitions!(ref, context);
+    expect(mockedFetch).toHaveBeenCalledTimes(1);
+    const prepared = { destination: "x", actor: "Alice (a1)", summary: "Move APP-1 to Done", details: {}, native: { payload: { transition: { id: "31" } } } };
+    mockedFetch.mockResolvedValueOnce(new Response(null, { status: 204 })).mockResolvedValueOnce(Response.json({ transitions: [] }));
+    await jiraProvider.executeWrite!(input, prepared, context);
+    expect(await jiraProvider.transitions!(ref, context)).toEqual([]);
   });
   it("creates PRs through gh stdin with reviewed branch SHAs and a draft default", async () => {
     vi.mocked(execGh).mockResolvedValueOnce({ stdout: '{"login":"alice","id":7}', stderr: "" })
@@ -58,7 +90,8 @@ describe("native provider write payloads", () => {
     mockedFetch.mockResolvedValueOnce(Response.json({ data: { markPullRequestReadyForReview: { pullRequest: { url: pr.html_url } } } }));
     expect((await githubProvider.executeWrite!(input, prepared, context)).item?.url).toBe(pr.html_url);
     expect(JSON.parse(mockedFetch.mock.calls.at(-1)![1].body).variables).toEqual({ id: "PR_1" });
-    mockedFetch.mockResolvedValueOnce(Response.json({ login: "alice", id: 7 })).mockResolvedValueOnce(Response.json({ ...pr, draft: false }));
+    // The signed-in user is cached, so the second preparation only re-reads the PR.
+    mockedFetch.mockResolvedValueOnce(Response.json({ ...pr, draft: false }));
     await expect(githubProvider.prepareWrite!(input, context)).rejects.toMatchObject({ kind: "conflict" });
   });
   it("previews both versions before a named-account PR update", async () => {

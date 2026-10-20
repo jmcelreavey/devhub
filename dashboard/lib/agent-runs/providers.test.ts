@@ -51,6 +51,18 @@ describe("built-in providers", () => {
       "--trust",
     ]);
   });
+
+  it("passes effort to Claude and Codex, and does not invent Cursor model ids", () => {
+    const claude = BUILT_IN_AGENT_PROVIDERS.find((p) => p.id === "claude");
+    expect(claude?.buildArgs({ prompt: "do it", model: "claude-opus-4", effort: "high" })).toContain("--effort");
+    expect(claude?.buildArgs({ prompt: "do it", model: "claude-opus-4", effort: "high" })).toContain("high");
+    const codex = BUILT_IN_AGENT_PROVIDERS.find((p) => p.id === "codex");
+    expect(codex?.buildArgs({ prompt: "do it", model: "gpt-6-astra", effort: "xhigh" })).toContain("model_reasoning_effort=xhigh");
+    const cursor = BUILT_IN_AGENT_PROVIDERS.find((p) => p.id === "cursor");
+    expect(cursor?.buildArgs({ prompt: "go", model: "grok-4.6", effort: "low" })).toContain("grok-4.6");
+    expect(cursor?.buildArgs({ prompt: "go", model: "grok-4.6", effort: "low" })).not.toContain("[effort=");
+    expect(cursor?.buildArgs({ prompt: "go", model: "grok-4.6", effort: "" })).not.toContain("[effort=");
+  });
 });
 
 describe("loadCustomProviders", () => {

@@ -7,6 +7,9 @@ export interface SetupStatus {
   calendar: boolean;
   jira: boolean;
   infra: boolean;
+  /** Jev (TypeSafe) key for QA runs. */
+  typesafe?: boolean;
+  typesafeVars?: { source: "setup" | "env" | "repo-env" | null };
   /** When false, dashboard binds to localhost only. */
   allowLanNetwork: boolean;
   /** Whether the Agents (Paseo) daemon password is configured (value never echoed). */

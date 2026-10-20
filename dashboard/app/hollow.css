@@ -2,13 +2,16 @@
  * Hollow: cold light on damaged film. All scenery shares a content mask,
  * keeping atmosphere, peak rare-event dim and stronger fog off readable text.
  * The atmosphere also retains its contrast-tested 18% ceiling. Creatures occupy empty space. Editors and
- * floating surfaces are cut out by the runtime mask. No full-screen filters.
+ * floating surfaces are cut out by the runtime mask. No full-screen CSS filters.
  */
 :root[data-theme-preset="hollow"] {
-  scrollbar-color: #70423d transparent;
+  /* Dried blood. Tokens only, so the shared thin scrollbar and its hover still apply. */
+  --scrollbar-thumb: color-mix(in srgb, #70423d 85%, transparent);
+  --scrollbar-thumb-hover: #8f554e;
 }
-:root[data-theme-preset="hollow"] ::-webkit-scrollbar { width: 8px; height: 8px; }
-:root[data-theme-preset="hollow"] ::-webkit-scrollbar-thumb { background: #70423d; border-radius: 4px; }
+:root[data-theme="light"][data-theme-preset="hollow"] {
+  --scrollbar-thumb-hover: #55302c;
+}
 :root[data-theme-preset="hollow"] ::selection { background: var(--accent); color: var(--accent-fg); }
 :root[data-theme-preset="hollow"] .text-accent { color: var(--accent-text); }
 :root[data-theme-preset="hollow"] :is(h1, h2, h3, .page-title, .hub-hero-date) {
@@ -48,35 +51,33 @@
 /* Empty pseudo-elements are decorative; the original status/label stays intact.
  * Absolute boot art avoids the implicit second grid row the old candle created. */
 :root[data-theme-preset="hollow"] :is(.boot-logo, .boot-ring) { display: none !important; animation: none; }
-:root[data-theme-preset="hollow"] .boot-mark::after {
-  content: ""; position: absolute; inset: 0;
-  background: url("/hollow/bottle.webp") center / contain no-repeat;
+:root[data-theme-preset="hollow"] {
+  --hollow-brand-image: url("/hollow/brand-mark-dark.svg");
 }
+:root[data-theme="light"][data-theme-preset="hollow"] {
+  --hollow-brand-image: url("/hollow/brand-mark-light.svg");
+}
+:root[data-theme-preset="hollow"] .hollow-mark-light { display: none; }
+:root[data-theme="light"][data-theme-preset="hollow"] .hollow-mark-dark { display: none; }
+:root[data-theme="light"][data-theme-preset="hollow"] .hollow-mark-light { display: inline; }
 :root[data-theme-preset="hollow"] .theme-brand-image {
-  content: url("/hollow/bottle.webp");
+  content: var(--hollow-brand-image);
   object-fit: contain;
 }
-:root[data-theme-preset="hollow"] .brand-dot { position: relative; }
 :root[data-theme-preset="hollow"] .boot-mark { width: 112px; height: 112px; }
-:root[data-theme-preset="hollow"] .boot-screen {
-  background-image: radial-gradient(ellipse 190px 120px at 50% 51%, #9a552818, transparent);
-}
-:root[data-theme-preset="hollow"][data-hollow-atmosphere="on"] :is(.boot-mark, .brand-dot)::before {
-  content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 1;
-  background: url("/hollow/candlelight.webp") center / contain no-repeat;
-  opacity: .7;
-}
+/* Logos carry no theme glow, candle or backdrop: the Halloween mark is its own
+ * flat artwork, and the sidebar button shows whatever icon is picked untouched. */
 :root[data-theme-preset="hollow"] .page-loading .page-header {
   min-height: 80px; justify-content: center;
 }
 :root[data-theme-preset="hollow"] .page-loading .page-header > .skeleton { display: none; }
 :root[data-theme-preset="hollow"] .page-loading .page-header::before {
   content: ""; display: block; width: 80px; height: 80px; flex: none;
-  background: url("/hollow/bottle.webp") center / contain no-repeat;
+  background: var(--hollow-brand-image) center / contain no-repeat;
 }
 :root[data-theme-preset="hollow"] .inline-loading::before {
   content: ""; display: block; width: 40px; height: 40px;
-  background: url("/hollow/bottle.webp") center / contain no-repeat;
+  background: var(--hollow-brand-image) center / contain no-repeat;
 }
 /* Shapes stay still beneath the mark: several independently fading bars read
  * as flicker through the grain, and communicate no useful progress. */
@@ -89,6 +90,7 @@
 
 :root[data-theme-preset="hollow"][data-hollow-fx="on"] .hollow-fx {
   position: fixed; inset: 0; z-index: 35; pointer-events: none; overflow: hidden;
+  contain: strict; isolation: isolate;
 }
 :root[data-theme-preset="hollow"] .hollow-fx * { pointer-events: none; }
 :root[data-theme-preset="hollow"] .hollow-scenery {
@@ -344,20 +346,13 @@
 :root[data-theme-preset="hollow"] .hollow-toggle-hint { display: block; font-size: 10px; line-height: 1.5; color: var(--text-subtle); }
 :root[data-theme-preset="hollow"] .hollow-toggle[data-dim="true"] { color: var(--text-muted); }
 
+/* Keep the film, fog and lighting static. Even transform-only loops over the
+ * nested viewport masks produced long frames at idle; bounded events below
+ * retain movement without continually compositing every atmosphere plate. */
 @media (prefers-reduced-motion: no-preference) {
-  :root[data-theme-preset="hollow"][data-hollow-atmosphere="on"] .hollow-keylight { animation: hollow-breathe 31s ease-in-out infinite; }
-  :root[data-theme-preset="hollow"][data-hollow-atmosphere="on"] .hollow-vignette { animation: hollow-vignette-breathe 12s ease-in-out infinite alternate; }
-  :root[data-theme-preset="hollow"][data-hollow-atmosphere="on"] .hollow-vignette::after { animation: hollow-tint 58s ease-in-out infinite alternate; }
-  :root[data-theme-preset="hollow"][data-hollow-atmosphere="on"] .hollow-fog-far { animation: hollow-room-far 24s ease-in-out infinite alternate; }
-  :root[data-theme-preset="hollow"][data-hollow-atmosphere="on"] .hollow-fog-near { animation: hollow-room-near 17s ease-in-out infinite alternate; }
-  :root[data-theme-preset="hollow"][data-hollow-atmosphere="on"] .hollow-fog-edge::before { animation: hollow-fog-far 38s ease-in-out infinite alternate; }
-  :root[data-theme-preset="hollow"][data-hollow-atmosphere="on"] .hollow-fog-mid { animation: hollow-fog-near 23s ease-in-out infinite alternate; }
   :root[data-theme-preset="hollow"] .is-rare:not(.is-rare-preview) .hollow-passing-shadow { animation: hollow-passage 14s ease-in-out both; }
   :root[data-theme-preset="hollow"] .is-rare:not(.is-rare-preview) .hollow-rare-dim { animation: hollow-room-dim 14s ease-in-out both; }
-  :root[data-theme-preset="hollow"] .hollow-cobweb i { transition: transform 800ms ease-out; }
-  :root[data-theme-preset="hollow"][data-hollow-atmosphere="on"] :is(.boot-mark, .brand-dot)::before { animation: hollow-candle 5.8s ease-in-out infinite; }
-  :root[data-theme-preset="hollow"][data-hollow-atmosphere="on"] .hollow-grain { animation: hollow-grain 750ms steps(6, end) infinite; }
-  :root[data-theme-preset="hollow"][data-hollow-atmosphere="on"] .hollow-roll { animation: hollow-roll 24s linear infinite; }
+  :root[data-theme-preset="hollow"] .hollow-cobweb i { transition: transform 250ms cubic-bezier(.22,1,.36,1); }
   :root[data-theme-preset="hollow"] .hollow-pair { transition: opacity 1600ms ease, transform 1600ms ease; }
   :root[data-theme-preset="hollow"] .hollow-spider.is-dropping { animation: hollow-descend 14s ease-in-out both; }
   :root[data-theme-preset="hollow"] .hollow-face.is-showing { animation: hollow-face 4.8s ease-in-out both; }
@@ -369,26 +364,15 @@
 }
 :root[data-theme-preset="hollow"][data-hollow-paused] :is(.hollow-fx *, .hollow-glitch, .skeleton, .boot-mark)::after,
 :root[data-theme-preset="hollow"][data-hollow-paused] :is(.hollow-fx *, .hollow-glitch, .skeleton, .boot-mark)::before,
-:root[data-theme-preset="hollow"][data-hollow-paused] :is(.hollow-fx *, .hollow-glitch, .skeleton, .boot-mark) { animation-play-state: paused !important; }
-:root[data-theme-preset="hollow"] body[data-motion="off"] :is(.boot-mark, .brand-dot, .page-header, .inline-loading)::before,
+:root[data-theme-preset="hollow"][data-hollow-paused] :is(.hollow-fx *, .hollow-glitch, .skeleton, .boot-mark) { animation-play-state: paused !important; transition: none !important; }
+:root[data-theme-preset="hollow"] body[data-motion="off"] :is(.page-header, .inline-loading)::before,
 :root[data-theme-preset="hollow"] body[data-motion="off"] .boot-mark::after,
 :root[data-theme-preset="hollow"] body[data-motion="off"] .hollow-fx *,
 :root[data-theme-preset="hollow"] body[data-motion="off"] .hollow-fx *::before,
 :root[data-theme-preset="hollow"] body[data-motion="off"] .hollow-fx *::after { animation: none !important; transition: none !important; }
-:root[data-theme-preset="hollow"][data-hollow-paused] :is(.boot-mark, .brand-dot, .page-header, .inline-loading)::before,
+:root[data-theme-preset="hollow"][data-hollow-paused] :is(.page-header, .inline-loading)::before,
 :root[data-theme-preset="hollow"][data-hollow-paused] .boot-mark::after { animation-play-state: paused !important; }
-/* Two dips, separated by 930ms, once every 31 seconds. */
-@keyframes hollow-breathe { 0%, 69%, 73%, 77%, 100% { opacity: .9; } 71% { opacity: .55; } 75% { opacity: .68; } }
-@keyframes hollow-vignette-breathe { from { opacity: .72; transform: scale(1.035); } to { opacity: 1; transform: scale(1); } }
-@keyframes hollow-tint { from { opacity: .05; } to { opacity: .85; } }
-@keyframes hollow-room-far { from { transform: translate3d(-7%, 2%, 0) scale(1); } to { transform: translate3d(7%, -5%, 0) scale(1.07); } }
-@keyframes hollow-room-near { from { transform: translate3d(8%, 3%, 0); } to { transform: translate3d(-9%, -4%, 0); } }
 @keyframes hollow-room-dim { 0%, 100% { opacity: 0; transform: scale(1.08); } 30%, 60% { opacity: .85; transform: scale(.93); } }
-@keyframes hollow-candle { 0%, 100% { opacity: .72; transform: scale(1); } 40% { opacity: .95; } 57% { opacity: .42; transform: scale(.98); } 69% { opacity: .8; } 80% { opacity: .6; } }
-@keyframes hollow-fog-far { from { transform: translate3d(-3%, 0, 0); } to { transform: translate3d(4%, -3%, 0); } }
-@keyframes hollow-fog-near { from { transform: translate3d(4%, 1%, 0); } to { transform: translate3d(-5%, -2%, 0); } }
-@keyframes hollow-grain { from { transform: translate(0, 0); } to { transform: translate(-96px, -64px); } }
-@keyframes hollow-roll { from { transform: translateY(0); } to { transform: translateY(120vh); } }
 @keyframes hollow-passage { 0% { opacity: 0; transform: translateX(35%); } 28% { opacity: .92; } 65% { opacity: .85; transform: translateX(-25%); } 100% { opacity: 0; transform: translateX(-70%); } }
 @keyframes hollow-descend {
   0%, 100% { opacity: 0; transform: translateY(-42px) rotate(-6deg); }

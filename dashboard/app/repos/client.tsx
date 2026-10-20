@@ -13,8 +13,9 @@ import type { ResolvedOwnedRepo } from "@/lib/ownership/types";
 import type { ConventionsSummary } from "@/lib/conventions/types";
 import { escapeRegExp } from "@/lib/entity-note";
 import type { RepoProject } from "@/lib/projects";
-import { taskBelongsToRepo } from "@/lib/repos/work-hub";
-import { isTaskOpen, type Task } from "@/lib/tasks/types";
+import { repoTaskWork } from "@/lib/repos/repo-task-work";
+import { useProfileWork } from "@/lib/storyboard/use-profile-work";
+import type { Task } from "@/lib/tasks/types";
 import { AlertCircle,Folder,Plus,RefreshCw } from "lucide-react";
 import { usePathname,useRouter,useSearchParams } from "next/navigation";
 import { useEffect,useMemo,useRef,useState } from "react";
@@ -97,19 +98,22 @@ export default function ReposPage() {
   } = useLive<ReposApiPayload>("/api/repos");
   const boot = useBootGate(data !== undefined || !!localError);
   const repos = data?.repos ?? EMPTY_REPOS;
-  // Same key Today polls, so this is usually a warm cache hit, not a new fetch.
-  const { data: tasksData } = useLive<{ tasks?: Task[] }>("/api/tasks");
+  const { profile, board, inbox } = useProfileWork();
   const tasksByRepo = useMemo(() => {
     const byRepo = new Map<string, RepoTaskPreview[]>();
-    const open = (tasksData?.tasks ?? []).filter(isTaskOpen);
-    if (open.length === 0) return byRepo;
+    if (profile.error || !board.data || !inbox.data) return byRepo;
     for (const repo of repos) {
       const fullName = githubFullName(repo.remote);
-      const linked = open.filter((task) => taskBelongsToRepo(task, repo.name, fullName));
-      if (linked.length > 0) byRepo.set(repo.name, linked.map(asTaskPreview));
+      const work = repoTaskWork(board.data.cards, inbox.data.items, repo.name, fullName, Date.parse(board.data.generatedAt));
+      const linked = [...work.active, ...work.backlog];
+      if (linked.length > 0) byRepo.set(repo.name, linked.map(({ card, presentation }) => ({
+        ...(card.task ? asTaskPreview(card.task) : { id: card.taskId, text: card.title }),
+        status: board.error || inbox.error ? "Status unavailable" : presentation.status,
+        needsYou: !board.error && !inbox.error && presentation.needsYou,
+      })));
     }
     return byRepo;
-  }, [repos, tasksData?.tasks]);
+  }, [repos, profile.error, board.data, board.error, inbox.data, inbox.error]);
   const { data: ownershipData, mutate: mutateOwnership } = useLive<{ repos: ResolvedOwnedRepo[] }>("/api/own", {
     refreshInterval: 0,
   });
@@ -320,7 +324,7 @@ export default function ReposPage() {
       <div className="page-header">
         <div>
           <h1 className="page-title">Repos</h1>
-          <div className="page-subtitle">Clone, open, run, and get up to speed without spelunking through every folder by hand.</div>
+          <div className="page-subtitle">Your repos, active work and local checkouts.</div>
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <span className="badge badge-accent">{repos.length} local</span>
@@ -342,6 +346,10 @@ export default function ReposPage() {
       </div>
 
       <EvolutionStrip />
+
+      {source === "local" && (profile.error || board.error || inbox.error) ? (
+        <FetchError bare message="Task status unavailable. Repo files and Git are still available." onRetry={() => { void profile.mutate(); void board.mutate(); void inbox.mutate(); }} />
+      ) : null}
 
       {source === "local" && localError && (
         <div className="card card-body mb-3">

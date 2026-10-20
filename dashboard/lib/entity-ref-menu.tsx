@@ -4,7 +4,7 @@ import { Copy, ExternalLink, FileText, RefreshCw } from "lucide-react";
 import type { EntityRef } from "@/lib/entity-note";
 import { defaultHrefForRef } from "@/lib/entity-note";
 import type { ContextMenuGroup } from "@/components/shell/ContextMenu";
-import { jiraBrowseUrl } from "@/lib/utils";
+import { isPlaceholderJiraUrl, jiraBrowseUrl } from "@/lib/utils";
 
 export interface EntityRefMenuActions {
   onOpen: (ref: EntityRef) => void;
@@ -29,10 +29,11 @@ export function buildEntityRefMenuGroups(
 
   if (ref.kind === "jira") {
     const key = ref.id.toUpperCase();
-    const url = dest && /^https?:\/\//i.test(dest) ? dest : jiraBrowseUrl(key);
+    const url = dest && /^https?:\/\//i.test(dest) && !isPlaceholderJiraUrl(dest) ? dest : jiraBrowseUrl(key);
     return [
       {
         id: "jira",
+        label: "Ticket",
         items: [
           {
             id: "open-jira",
@@ -50,12 +51,6 @@ export function buildEntityRefMenuGroups(
                 },
               ]
             : []),
-          {
-            id: "copy-key",
-            label: "Copy key",
-            icon: <Copy size={12} aria-hidden />,
-            onSelect: () => actions.onCopy(key, key),
-          },
           ...(actions.onOpenNote
             ? [
                 {
@@ -67,6 +62,16 @@ export function buildEntityRefMenuGroups(
               ]
             : []),
         ],
+      },
+      {
+        id: "copy",
+        label: "Copy",
+        items: [{
+          id: "copy-key",
+          label: "Copy key",
+          icon: <Copy size={12} aria-hidden />,
+          onSelect: () => actions.onCopy(key, key),
+        }],
       },
     ];
   }

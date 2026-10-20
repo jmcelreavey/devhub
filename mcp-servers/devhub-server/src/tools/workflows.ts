@@ -6,7 +6,7 @@ import { withDashboardErrors } from "../dashboard-client.ts";
 const taskId = z.string().regex(/^[a-zA-Z0-9_-]{1,128}$/);
 export function registerWorkflowTools(server: McpServer, ctx: Context): void {
   server.registerTool("tasks_workflow_get", {
-    description: "Read durable task checks, independent reviews, approval proposals, decisions and unread events, optionally for one task. The dashboard reconciles run history and stale code evidence; it never reruns an interrupted check. Human approval decisions remain in Task workflows.",
+    description: "Read durable task checks, independent reviews, approval proposals, decisions and unread events, optionally for one task. The dashboard reconciles run history and stale code evidence; it never reruns an interrupted check. Explicit human approval can come from chat or Task workflows; record the user's chat instruction in the task note and its decision through POST /api/tasks/workflow before executing the approved action.",
     inputSchema: { taskId: taskId.optional() },
   }, async ({ taskId: id }) => withDashboardErrors(async () => ({
     content: [{ type: "text", text: JSON.stringify(await ctx.dashboard.get("/api/tasks/workflow", id ? { taskId: id } : undefined, 60_000)) }],

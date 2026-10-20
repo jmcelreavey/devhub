@@ -1,8 +1,8 @@
 /** @vitest-environment jsdom */
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { HOLLOW_EFFECTS_KEY, HOLLOW_EFFECT_DEFAULTS } from "@/lib/hollow-theme";
-import { HollowGate } from "@/components/hollow/HollowGate";
+import { HOLLOW_EFFECTS_EVENT, HOLLOW_EFFECTS_KEY, HOLLOW_EFFECT_DEFAULTS } from "@/lib/hollow-theme";
+import { HOLLOW_FAVICON_ID, HollowGate } from "@/components/hollow/HollowGate";
 
 vi.mock("next/dynamic", () => ({
   default: () =>
@@ -57,6 +57,17 @@ describe("HollowGate", () => {
     expect(document.documentElement.getAttribute("data-hollow-sound")).toBe("off");
   });
 
+  it("preserves an editing pause when effect preferences change", () => {
+    setPreset("hollow");
+    render(<><input autoFocus /><HollowGate /></>);
+    expect(document.documentElement.hasAttribute("data-hollow-paused")).toBe(true);
+    act(() => {
+      localStorage.setItem(HOLLOW_EFFECTS_KEY, JSON.stringify({ ...HOLLOW_EFFECT_DEFAULTS, creatures: false }));
+      window.dispatchEvent(new Event(HOLLOW_EFFECTS_EVENT));
+    });
+    expect(document.documentElement.hasAttribute("data-hollow-paused")).toBe(true);
+  });
+
   it("stays unmounted when the master switch is off", () => {
     localStorage.setItem(
       HOLLOW_EFFECTS_KEY,
@@ -66,5 +77,18 @@ describe("HollowGate", () => {
     render(<HollowGate />);
     expect(screen.queryByTestId("hollow-runtime")).toBeNull();
     expect([...document.documentElement.attributes].some((attr) => attr.name.startsWith("data-hollow-"))).toBe(false);
+  });
+  it("uses the Halloween mark as the tab icon only while Hollow is selected", () => {
+    setPreset("hollow");
+    const view = render(<HollowGate />);
+    const link = document.getElementById(HOLLOW_FAVICON_ID) as HTMLLinkElement | null;
+    expect(link?.rel).toBe("icon");
+    expect(link?.getAttribute("href")).toBe("/hollow/brand-mark-dark.svg");
+    view.unmount();
+    expect(document.getElementById(HOLLOW_FAVICON_ID)).toBeNull();
+
+    setPreset("graphite");
+    render(<HollowGate />);
+    expect(document.getElementById(HOLLOW_FAVICON_ID)).toBeNull();
   });
 });

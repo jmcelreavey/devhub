@@ -20,7 +20,7 @@ Open it with **⌘P** (Ctrl+P on Linux/Windows), or click the **Search…** box 
 
 ## What It Searches
 
-- Pages.
+- Pages, including the ones with no sidebar row (Briefing, Weekly review, QA lab, Agent skills). Pages that were renamed still answer to their old name: **Work** finds Tasks, **System** finds Settings, **Review** finds Weekly review, **QA** finds QA lab, **Skills** finds Agent skills.
 - Notes (by title/path).
 - Diagrams (tldraw files in the notes tree).
 - Tasks.
@@ -72,19 +72,19 @@ Common shortcuts include:
 | `⌘\`          | Toggle sidebar                                  |
 | `⌘1`–`⌘9`     | Jump to workspace tab                           |
 | `g h`         | Go to Today                                     |
-| `g w`         | Go to Work                                      |
-| `g t` / `g j` | Go to Work → Tasks / Jira                       |
+| `g w`         | Go to Tasks                                     |
+| `g t` / `g j` | Go to Tasks → Tasks / Jira                      |
 | `g p`         | Go to PRs                                       |
 | `g n`         | Go to Notes                                     |
 | `g /`         | Go to Search                                    |
 | `g f`         | Go to Diagrams                                  |
 | `g r`         | Go to Repos                                     |
-| `g k`         | Go to Skills                                    |
+| `g k`         | Go to Agent skills                              |
 | `g c`         | Go to Agents                                    |
 | `g l`         | Go to Calendar                                  |
 | `g d`         | Go to Datadog                                   |
 | `g o`         | Go to Ops (plugin)                              |
-| `g s`         | Go to Status                                    |
+| `g s`         | Go to Settings                                  |
 | `g a`         | Go to Actions                                   |
 
 The `g` chords are defined in `components/shell/KeyboardShortcuts.tsx`; `⌘` chords in `lib/app-shortcuts.ts`.

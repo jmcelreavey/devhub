@@ -4,9 +4,24 @@ User-visible changes, newest first. Versioned sections describe the public relea
 
 ## Unreleased
 
+### Added
+
+- Connect a Slack bot from Setup without a public URL. Ask for task status, Needs you, today's tasks or auto progress in one allowlisted channel, scoped to your active profile or `in personal`. Replies use Home's next actions and one Open in DevHub button. Tokens stay masked; setup, test delivery and read-only MCP status are covered by mocked Slack tests.
+
+- Paste or drop an image into a note. Cmd+V of a screenshot or copied image, or dragging PNG, JPEG, GIF or WebP files in from Finder, inserts an image block at the cursor in the notes editor and the Notes overlay. Images are capped at 8 MB; anything else gets a toast and no empty block is left behind. They're stored by content hash in `~/.local/state/devhub/note-media`, not inside `notes/`, so the content sync doesn't commit them. Images already under `notes/**/assets` render as before.
+
+### Fixed
+
+- Starting a plan no longer says six agents are running when two are. Runs that ended without DevHub hearing about it (an agent closed or deleted in Paseo, an idle agent with no result, a start Paseo never acknowledged) used to sit in "needs attention" for good and use up the limit. DevHub now marks them finished when it reads them, on every check, at startup and again just before it refuses a start. If a start is still refused, the launch sheet lists which agents are holding the limit and lets you clear one DevHub can no longer follow. Clearing doesn't stop anything in Paseo.
+- "Open in Jira" from a parent ticket chip (the ↥ key on My Tickets and task rows) does something again in the desktop app. It was calling `window.open`, which the webview drops silently, and it built the link from a build-time domain rather than your Jira's. Parent chips now carry the real browse URL and open through the system browser. "Open on GitHub" on repo cards, "Open gist" on Shared, and external links in the Links modal and entity chips had the same problem and are fixed too.
+
 ### Changed
 
 - Relicence the public core from MIT to **AGPL-3.0-only**. `LICENSE` is the GNU AGPL v3 text, `package.json` and the selection extension declare `AGPL-3.0-only`, and the README licence section names the copyright and a commercial-contact path via Discussions.
+- Home's My tasks list now puts Running / in-progress work right under Needs action (newest first), then Next / To do, so the collapsed preview shows what is actually moving.
+- Storyboard uses the full content width. Columns grow to fill the window (272px minimum), and the board only scrolls horizontally when they no longer fit.
+- A collapsed Morning briefing is one tight row. Today's weather (icon, now, condition, high and low) sits in the header next to the title instead of leaving a blank band underneath, and the card drops from 80px to 50px. The condition and then the range drop out as the card narrows, and nothing shows if there's no forecast.
+- Moving a Jira ticket is one click again. The status chip changes straight away (spinner on the chip only), then a toast says "PTF-5106 moved to Done" with **Undo** and **Details**, and the "Action completed" dialog is gone. Your own click is the approval and still lands in Recent actions. Anything an agent, MCP tool or chat asks for keeps the review step, which now has one heading, the ticket, a From → To change and the account by name, with ids behind **Details**. It's quicker too: one Jira read instead of three, about 0.9 s down to 0.25 s against a fixture Jira with 120 ms per call. `jira_ticket_transition` and `jira_ticket_create` now say "Proposed, not applied" instead of claiming the change was made.
 
 ## 2.1.1 - 2026-10-11
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import Link from "next/link";
 import { CheckCircle2, AlertCircle, Info, X } from "lucide-react";
 
 export type ToastVariant = "success" | "error" | "info";
@@ -8,6 +9,8 @@ export type ToastVariant = "success" | "error" | "info";
 export interface ToastOptions {
   duration?: number;
   action?: { label: string; onClick: () => void | Promise<void> };
+  /** Navigates somewhere with more detail, e.g. the recorded action behind an Undo. */
+  link?: { label: string; href: string };
 }
 
 export interface Toast {
@@ -16,6 +19,7 @@ export interface Toast {
   variant: ToastVariant;
   duration: number;
   action?: { label: string; onClick: () => void | Promise<void> };
+  link?: { label: string; href: string };
 }
 
 interface ToastContextValue {
@@ -68,7 +72,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     (variant: ToastVariant, message: string, opts: ToastOptions = {}): number => {
       const id = ++idRef.current;
       const duration = opts.duration ?? DEFAULT_DURATION[variant];
-      const toast: Toast = { id, message, variant, duration, action: opts.action };
+      const toast: Toast = { id, message, variant, duration, action: opts.action, link: opts.link };
       setToasts((prev) => [...prev, toast]);
       if (duration > 0) {
         const timer = setTimeout(() => dismiss(id), duration);
@@ -179,6 +183,11 @@ function ToastItem({
         >
           {toast.action.label}
         </button>
+      )}
+      {toast.link && (
+        <Link href={toast.link.href} className="toast-action" onClick={onDismiss}>
+          {toast.link.label}
+        </Link>
       )}
       <button
         type="button"

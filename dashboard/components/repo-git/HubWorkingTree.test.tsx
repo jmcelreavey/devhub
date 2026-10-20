@@ -26,6 +26,17 @@ beforeEach(() => {
 });
 
 describe("HubWorkingTree", () => {
+  it("retries a failed file read without leaving the repo", async () => {
+    const fetchMock = vi.mocked(fetch);
+    fetchMock.mockRejectedValueOnce(new Error("Repository unavailable"));
+    render(<HubWorkingTree repoName="app" />);
+    fireEvent.click(screen.getByRole("button", { name: /local files/i }));
+    expect(await screen.findByText("Repository unavailable")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /retry/i }));
+    expect(await screen.findByRole("button", { name: /open src\/hub\.ts in git/i })).toBeInTheDocument();
+    expect(screen.queryByText("Repository unavailable")).toBeNull();
+  });
+
   it("stays collapsed by default and opens a file in git when expanded", async () => {
     const onOpenFile = vi.fn();
     render(<HubWorkingTree repoName="atlas" onOpenFile={onOpenFile} />);

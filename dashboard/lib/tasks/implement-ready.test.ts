@@ -159,6 +159,57 @@ describe("noteOpenQuestions", () => {
     expect(noteOpenQuestions(null)).toEqual([]);
   });
 
+  it("ignores indented answers beneath checked questions", () => {
+    const noteMarkdown = [
+      "## Plan",
+      "Compare the legacy implementation.",
+      "## Open questions",
+      "- [x] Which surfaces?",
+      "  Check the legacy app before deciding.",
+      "",
+      "  Keep the existing behaviour where appropriate.",
+      "- [X] Which history rules?",
+      "\tUse the legacy rules as the starting point.",
+      "## Notes",
+      "Unrelated content.",
+    ].join("\r\n");
+
+    expect(noteOpenQuestions(noteMarkdown)).toEqual([]);
+    expect(evaluateImplementReady({
+      noteMarkdown,
+      jiraDescriptionText: null,
+      hasJiraKey: false,
+      repoIds: ["acme/app"],
+      openPrerequisiteBlockers: [],
+      hardBlock: true,
+      requirePlanSection: true,
+    }).ok).toBe(true);
+  });
+
+  it("still reports new questions after an answered question", () => {
+    const md = [
+      "## Open questions",
+      "- [x] Which surfaces?",
+      "  Use the legacy app.",
+      "- [ ] Which env?",
+      "  Confirm the target before deploying.",
+      "- Is there a flag?",
+      "A separate unresolved question?",
+    ].join("\n");
+
+    expect(noteOpenQuestions(md)).toEqual([
+      "Which env?",
+      "Confirm the target before deploying.",
+      "Is there a flag?",
+      "A separate unresolved question?",
+    ]);
+  });
+
+  it("does not hide unchecked nested questions", () => {
+    expect(noteOpenQuestions("## Open questions\n- [x] Scope?\n  - [ ] Which env?"))
+      .toEqual(["Which env?"]);
+  });
+
   it("keeps a task with open questions out of ready", () => {
     const result = evaluateImplementReady({
       noteMarkdown: "## Plan\nTighten the timeout.\n\n## Open questions\n- [ ] Which env?",

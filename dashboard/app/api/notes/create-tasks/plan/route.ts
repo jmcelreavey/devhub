@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { AI_PROVIDER_IDS } from "@/lib/ai/preference";
+import { formatGenerateError } from "@/lib/ai/generate";
 import { parseBody, requireDashboardAuth, withErrorHandler } from "@/lib/api-utils";
 import { suggestWorkItemTitles, WORK_ITEM_TITLES_TIMEOUT_MS } from "@/lib/notes/work-item-titles";
 import { blocksToText } from "@/lib/markdown-convert";
@@ -87,6 +89,10 @@ export async function GET(req: NextRequest) {
 
 const previewSchema = z.object({
   notePath: z.string().trim().min(1).max(1_000),
+  refineTitles: z.boolean().default(false),
+  provider: z.enum(AI_PROVIDER_IDS).optional(),
+  model: z.string().trim().max(256).refine((value) => !/[\r\n\0]/.test(value)).optional(),
+  effort: z.string().trim().regex(/^[A-Za-z0-9_-]{0,32}$/).optional(),
 });
 
 export const POST = withErrorHandler(async (req: NextRequest) => {
@@ -103,16 +109,24 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
 
   const title = planTitleFromMarkdown(markdown, notePath);
   const sourceItems = parsePlanWorkItems(markdown);
+  if (!parsed.data.refineTitles) {
+    return NextResponse.json({ title, workItems: sourceItems });
+  }
+
   let workItems = sourceItems;
   let warning: string | undefined;
   const generationSignal = AbortSignal.any([req.signal, AbortSignal.timeout(WORK_ITEM_TITLES_TIMEOUT_MS)]);
   try {
-    workItems = await suggestWorkItemTitles(title, sourceItems, generationSignal);
+    workItems = await suggestWorkItemTitles(title, sourceItems, generationSignal, {
+      provider: parsed.data.provider,
+      model: parsed.data.model,
+      effort: parsed.data.effort,
+    });
   } catch (error) {
     if (req.signal.aborted) throw error;
     const timedOut = generationSignal.reason instanceof DOMException && generationSignal.reason.name === "TimeoutError";
     console.warn("[create-tasks-preview] Title suggestions failed:", timedOut ? "TimeoutError" : error instanceof Error ? error.name : "Unknown error");
-    warning = `Work items detected, but AI title refinement ${timedOut ? "timed out" : "failed"}. Showing titles taken from the note; you can edit them below.`;
+    warning = `AI title suggestions ${timedOut ? "timed out" : "failed"}. Your current titles are unchanged.${timedOut ? " Try another model or keep editing." : ` ${formatGenerateError(error)}`}`;
   }
 
   // The preview needs no Jira lookup; integration metadata is fetched at launch.

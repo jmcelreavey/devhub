@@ -36,6 +36,9 @@ import {
   AgentCliStep,
   DoneStep,
 } from "./steps";
+import { JevStep } from "./JevStep";
+import { SlackStep } from "./SlackStep";
+import { typesafeKeyFormatError } from "@/lib/qa/typesafe-key";
 import {
   Activity,
   CalendarDays,
@@ -44,10 +47,12 @@ import {
   ChevronRight,
   ChevronLeft,
   Cloud,
+  FlaskConical,
   FolderOpen,
   GitBranch,
   SkipForward,
   Hand,
+  MessageSquare,
   TerminalSquare,
   TicketCheck,
   Wrench,
@@ -128,7 +133,23 @@ const STEPS: Step[] = [
     configured: false,
     optional: true,
   },
+  {
+    id: "jev",
+    title: "QA (Jev)",
+    icon: <FlaskConical size={18} />,
+    description: "TypeSafe API key for QA runs",
+    configured: false,
+    optional: true,
+  },
 
+  {
+    id: "slack",
+    title: "Slack",
+    icon: <MessageSquare size={18} />,
+    description: "Read-only task answers in one Slack channel",
+    configured: false,
+    optional: true,
+  },
   {
     id: "done",
     title: "All Set",
@@ -146,12 +167,17 @@ export default function SetupPage() {
 
   useEffect(() => {
     if (!progressState.ready) return;
-    const requested = requestedSetupStep(window.location.search);
-    if (!requested) return;
-    setCurrentStepId(requested);
-    const url = new URL(window.location.href);
-    url.searchParams.delete("step");
-    window.history.replaceState({}, "", `${url.pathname}${url.search}`);
+    const openRequested = () => {
+      const requested = requestedSetupStep(window.location.search, window.location.hash);
+      if (!requested) return;
+      setCurrentStepId(requested);
+      const url = new URL(window.location.href);
+      url.searchParams.delete("step");
+      window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+    };
+    openRequested();
+    window.addEventListener("hashchange", openRequested);
+    return () => window.removeEventListener("hashchange", openRequested);
   }, [progressState.ready, setCurrentStepId]);
   const [status, setStatus] = useState<SetupStatus | null>(null);
   const [pathsForm, setPathsForm] = useState<PathsForm>({ repoRoot: "", notesDir: "", reposDir: "" });
@@ -167,10 +193,12 @@ export default function SetupPage() {
   const [datadogForm, setDatadogForm] = useState({ apiKey: "", applicationKey: "", email: "", scheduleId: "" });
   const [calendarForm, setCalendarForm] = useState({ clientId: "", clientSecret: "" });
   const [jiraForm, setJiraForm] = useState({ domain: "", email: "", apiToken: "" });
+  const [jevKey, setJevKey] = useState("");
+  const [slackConfigured, setSlackConfigured] = useState(false);
   const [showSecrets, setShowSecrets] = useState<Record<string, boolean>>({});
   const [saving, setSaving] = useState(false);
   const [checkConnectionBusy, setCheckConnectionBusy] = useState<
-    null | "github" | "datadog" | "jira" | "calendar"
+    null | "github" | "datadog" | "jira" | "calendar" | "jev"
   >(null);
   const [saveResult, setSaveResult] = useState<{ ok: boolean; message: string } | null>(null);
   const [error, setError] = useState("");
@@ -251,6 +279,8 @@ export default function SetupPage() {
         email: data.datadogVars.email,
         scheduleId: data.datadogVars.scheduleId,
       }));
+      // Only a key Setup saved shows as masked; one from the environment stays blank to replace.
+      setJevKey(data.typesafeVars?.source === "setup" ? SECRET_FIELD_MASK : "");
       if (data.infraVars.scriptsRepoPath) {
         setInfraForm({ scriptsRepoPath: data.infraVars.scriptsRepoPath });
       }
@@ -388,7 +418,12 @@ export default function SetupPage() {
     return () => clearTimeout(id);
   }, [pathsForm]);
 
-  const steps: Step[] = filterStepsByGoals(STEPS, goals).map((s) => {
+  // A link straight to a step (?step=jev from the QA page) shows it even when the goals hid it.
+  const offered = filterStepsByGoals(STEPS, goals);
+  const visibleSteps = offered.some((s) => s.id === currentStepId)
+    ? offered
+    : STEPS.filter((s) => offered.includes(s) || s.id === currentStepId);
+  const steps: Step[] = visibleSteps.map((s) => {
     if (s.id === "paths" && status) return { ...s, configured: status.core };
     if (s.id === "github" && status) return { ...s, configured: status.github };
     if (s.id === "datadog" && status) return { ...s, configured: status.datadog };
@@ -396,6 +431,8 @@ export default function SetupPage() {
     if (s.id === "jira" && status) return { ...s, configured: status.jira };
     if (s.id === "infra" && status) return { ...s, configured: status.infra };
     if (s.id === "agent" && status) return { ...s, configured: Boolean(status.agentVars?.provider) };
+    if (s.id === "jev" && status) return { ...s, configured: status.typesafe === true };
+    if (s.id === "slack") return { ...s, configured: slackConfigured };
     return s;
   });
   const currentStep = Math.max(0, steps.findIndex((step) => step.id === currentStepId));
@@ -415,7 +452,7 @@ export default function SetupPage() {
   };
 
   const checkConnection = useCallback(
-    async (kind: "github" | "datadog" | "jira" | "calendar") => {
+    async (kind: "github" | "datadog" | "jira" | "calendar" | "jev") => {
       setCheckConnectionBusy(kind);
       setError("");
       setCheckOk("");
@@ -443,6 +480,23 @@ export default function SetupPage() {
           // silence is indistinguishable from nothing having happened.
           setCheckOk(result.message ?? "Connected to Datadog successfully.");
           await loadSetupStatus();
+          return;
+        }
+
+        if (kind === "jev") {
+          const apiKey = jevKey.trim();
+          const r = await fetch("/api/setup/check/typesafe", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(apiKey && apiKey !== SECRET_FIELD_MASK ? { apiKey } : {}),
+          });
+          const result = (await r.json()) as { ok?: boolean; message?: string; error?: string };
+          if (!r.ok || !result.ok) {
+            setError(result.message ?? result.error ?? "Couldn't test the TypeSafe key.");
+            return;
+          }
+          const unsaved = !!apiKey && apiKey !== SECRET_FIELD_MASK;
+          setCheckOk(unsaved ? "Key works. Save & Continue to use it for QA runs." : (result.message ?? "Key works."));
           return;
         }
 
@@ -489,7 +543,7 @@ export default function SetupPage() {
         setCheckConnectionBusy(null);
       }
     },
-    [loadSetupStatus, datadogForm, jiraForm],
+    [loadSetupStatus, datadogForm, jiraForm, jevKey],
   );
 
   /**
@@ -751,6 +805,16 @@ export default function SetupPage() {
       if (step.id === "agent" && agentForm.provider) {
         body.agent = agentForm;
       }
+      if (step.id === "jev") {
+        const apiKey = jevKey.trim();
+        if (apiKey && apiKey !== SECRET_FIELD_MASK) {
+          const formatError = typesafeKeyFormatError(apiKey);
+          if (formatError) throw new Error(formatError);
+          body.typesafe = { apiKey };
+        } else if (!status?.typesafe) {
+          throw new Error("Paste a TypeSafe API key, or skip this step.");
+        }
+      }
 
       if (Object.keys(body).length > 0) {
         const r = await fetch("/api/setup/save", {
@@ -769,7 +833,7 @@ export default function SetupPage() {
     } finally {
       setSaving(false);
     }
-  }, [currentStep, pathsForm, datadogForm, calendarForm, jiraForm, infraForm.scriptsRepoPath, agentForm, status, steps, goNext, loadSetupStatus]);
+  }, [currentStep, pathsForm, datadogForm, calendarForm, jiraForm, jevKey, infraForm.scriptsRepoPath, agentForm, status, steps, goNext, loadSetupStatus]);
 
   const goToStep = (i: number) => {
     if (i < 0 || i >= steps.length || i === currentStep) return;
@@ -1078,6 +1142,20 @@ export default function SetupPage() {
             />
             </div>
           )}
+          {step.id === "jev" && (
+            <JevStep
+              apiKey={jevKey}
+              onApiKeyChange={setJevKey}
+              showSecret={!!showSecrets["typesafe-key"]}
+              onToggleSecret={() => toggleSecret("typesafe-key")}
+              source={status.typesafeVars?.source ?? null}
+              checking={checkConnectionBusy === "jev"}
+              onTest={() => void checkConnection("jev")}
+              error={error}
+              checkOk={checkOk}
+            />
+          )}
+          {step.id === "slack" && <SlackStep onConfigured={setSlackConfigured} />}
           {step.id === "done" && <DoneStep saveResult={saveResult} />}
 
           {/* Navigation */}
@@ -1178,7 +1256,7 @@ export default function SetupPage() {
                 <button
                   onClick={() => (saveBeforeNext ? void save() : goNext())}
                   disabled={saving || !pathsValid}
-                  className="btn btn-primary"
+                  className={step.id === "slack" ? "btn btn-ghost" : "btn btn-primary"}
                 >
                   {saving ? "Saving..." : saveBeforeNext ? "Save & Continue" : "Next"}
                   {!saving && <ChevronRight size={14} />}

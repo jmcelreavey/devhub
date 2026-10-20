@@ -5,7 +5,10 @@ import Link from "next/link";
 import { mutate as globalMutate } from "swr";
 import { AlertTriangle, ChevronDown, ChevronRight, NotebookPen, RefreshCw } from "lucide-react";
 import { FetchError, SkeletonRows } from "@/components";
-import { SharedEntityChips } from "@/components/EntityLinkChips";
+import { HomeTaskRow } from "@/components/home/HomeTasks";
+import type { TaskWork } from "@/lib/storyboard/home-summary";
+import { useProfileWork } from "@/lib/storyboard/use-profile-work";
+import { repoTaskWork } from "@/lib/repos/repo-task-work";
 import { CalendarEventRow } from "@/components/briefing/CalendarEventRow";
 import { NoteListRow } from "@/components/notes/NoteListRow";
 import { PrRow } from "@/components/PrRow";
@@ -13,18 +16,13 @@ import { JiraTicketQueueRow } from "@/components/jira/JiraTicketRow";
 import { RepoGitWorkspace } from "@/components/repo-git/RepoGitWorkspace";
 import { HistoryPanel } from "@/components/repo-git/HistoryPanel";
 import { HubWorkingTree } from "@/components/repo-git/HubWorkingTree";
-import { HubWorkCluster } from "@/components/repo-hub/HubWorkCluster";
 import {
   asHubJiraTicket,
-  asHubTask,
-  HubArchiveRow,
   HubRepoNoteButton,
-  HubTaskRow,
 } from "@/components/repo-hub/HubWorkRows";
 import { HubSection } from "@/components/repo-hub/HubSection";
 import { TaskComposer } from "@/components/tasks/TaskComposer";
 import type { EntityRef } from "@/lib/entity-note";
-import { commonTaskRefs } from "@/lib/repos/hub-chips";
 import { matchesTaskSearch } from "@/lib/tasks/task-text";
 import type { GithubPrRow } from "@/lib/github/prs";
 import { useLive } from "@/lib/hooks/use-fetch";
@@ -52,6 +50,10 @@ interface RepoWorkPayload {
   doneTasks?: WorkHubTask[];
   /** Optional integrations that failed; their rows are missing, not absent. */
   degraded?: { source: string; message: string }[];
+}
+
+function matchesWorkSearch(work: TaskWork, query: string): boolean {
+  return work.card.task ? matchesTaskSearch(work.card.task, query) : work.card.title.toLowerCase().includes(query.trim().toLowerCase());
 }
 
 /** Past this many queued items the backlog starts collapsed. */
@@ -139,16 +141,26 @@ export function RepoWorkHub({
     [repo.name],
   );
   const model = work.data?.model;
+  const { profile, profileId, board, inbox } = useProfileWork({ allDone: true });
+  const tasksLoading = !profile.error && (!profile.data || (!board.data && !board.error) || (!inbox.data && !inbox.error));
+  const tasksError = profile.error || board.error || inbox.error;
+  const workflowReady = !!board.data && !!inbox.data && !tasksError;
+  const taskWork = useMemo(() => repoTaskWork(
+    profile.error ? [] : board.data?.cards ?? [], inbox.data?.items ?? [], repo.name,
+    work.data?.fullName ?? repo.remote?.match(/github\.com[:/](.+?)(?:\.git)?$/)?.[1] ?? null,
+    board.data ? Date.parse(board.data.generatedAt) : 0,
+  ), [profile.error, board.data, inbox.data, repo.name, repo.remote, work.data?.fullName]);
   const calendar = useMemo(
     () => (model ? hubCalendarEvents(model) : []),
     [model],
   );
   // `?? []` inline would hand the memos below a fresh array every render.
   const degraded = useMemo(() => work.data?.degraded ?? [], [work.data?.degraded]);
-  const otherTickets = useMemo(() => model?.openTickets ?? [], [model?.openTickets]);
-  const backlogTasks = useMemo(() => model?.leftoverTasks ?? [], [model?.leftoverTasks]);
+  const otherTickets = useMemo(() => [...(model?.openTickets ?? []), ...(model?.clusters.flatMap((cluster) => cluster.jira && !cluster.tasks.length ? [cluster.jira] : []) ?? [])], [model]);
+  const backlogTasks = taskWork.backlog;
+  const notes = useMemo(() => [...new Map([...(model?.clusters.flatMap((cluster) => cluster.notes) ?? []), ...(model?.leftoverNotes ?? [])].map((note) => [note.slug, note])).values()].sort((a, b) => (b.ts ?? 0) - (a.ts ?? 0)), [model]);
   const backlogCount = backlogTasks.length + otherTickets.length;
-  const doneTasks = useMemo(() => work.data?.doneTasks ?? [], [work.data?.doneTasks]);
+  const doneTasks = taskWork.done;
 
   const [backlogOpen, setBacklogOpen] = useStoredState(
     "devhub:repo-hub:backlog-open",
@@ -165,7 +177,7 @@ export function RepoWorkHub({
   const backlogExpanded = backlogOpen || backlogCount <= BACKLOG_AUTO_COLLAPSE;
 
   const shownBacklogTasks = useMemo(
-    () => backlogTasks.filter((task) => matchesTaskSearch(asHubTask(task), backlogQuery)),
+    () => backlogTasks.filter((work) => matchesWorkSearch(work, backlogQuery)),
     [backlogTasks, backlogQuery],
   );
   const shownBacklogTickets = useMemo(() => {
@@ -176,15 +188,19 @@ export function RepoWorkHub({
     );
   }, [otherTickets, backlogQuery]);
   const shownDone = useMemo(
-    () => doneTasks.filter((task) => matchesTaskSearch(asHubTask(task), doneQuery)),
+    () => doneTasks.filter((work) => matchesWorkSearch(work, doneQuery)),
     [doneTasks, doneQuery],
   );
 
-  // Links on every backlog row say nothing about any one row — hoist them.
-  const sharedBacklogRefs = useMemo(
-    () => commonTaskRefs(backlogTasks, { repoName: repo.name }),
-    [backlogTasks, repo.name],
-  );
+  function refreshTasks() {
+    void board.mutate();
+    void inbox.mutate();
+    void work.mutate();
+  }
+
+  function renderTask(task: TaskWork) {
+    return <HomeTaskRow key={task.card.taskId} work={task} profile={profileId} workflowReady={workflowReady} onRefresh={refreshTasks} />;
+  }
 
   function openFileInGit(path: string) {
     setGitFocusPath(path);
@@ -192,19 +208,21 @@ export function RepoWorkHub({
   }
 
   async function onTaskAdded() {
-    // Today and the /repos cards read the same task list.
+    // Refresh both task projections after the repo-pinned composer saves.
     void globalMutate("/api/tasks");
-    await work.mutate();
+    refreshTasks();
   }
 
   function renderNote(note: WorkHubNote) {
+    const linkedTask = model?.clusters.flatMap((cluster) => cluster.tasks).find((task) => task.notePath === note.slug || note.slug.endsWith(`-${task.id}`));
+    const title = /^\d{4}-\d{2}-\d{2}-[a-f0-9-]{36}$/i.test(note.title) && linkedTask ? `${linkedTask.text} — notes` : note.title;
     const age =
       note.ts && note.ts > 0 ? new Date(note.ts).toISOString().slice(0, 10) : undefined;
     return (
-      <NoteListRow key={note.slug} note={note} className="repo-hub-row">
+      <NoteListRow key={note.slug} note={{ ...note, title }} className="repo-hub-row">
         <NotebookPen size={14} className="lib-card-icon" />
         <span className="repo-hub-row-main">
-          <span className="repo-hub-row-title">{note.title}</span>
+          <span className="repo-hub-row-title">{title}</span>
           {age ? <span className="repo-hub-row-meta">{age}</span> : null}
         </span>
       </NoteListRow>
@@ -218,7 +236,10 @@ export function RepoWorkHub({
   return (
     <>
       <section className="mt-4">
-        <h2 className="text-sm font-semibold text-text mb-2">Active work</h2>
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-sm font-semibold text-text">Active work</h2>
+          <Link className="text-xs text-text-muted hover:text-accent" href={`/storyboard?repo=${encodeURIComponent(repo.name)}`}>Open Storyboard</Link>
+        </div>
         {degraded.length > 0 ? (
           <div className="mb-3 rounded-lg border border-border p-3">
             <div className="flex flex-wrap items-center gap-2">
@@ -246,24 +267,13 @@ export function RepoWorkHub({
             </details>
           </div>
         ) : null}
-        {work.isLoading ? (
-          <SkeletonRows count={3} />
-        ) : work.error ? (
-          <FetchError message={work.error.message} onRetry={() => void work.mutate()} />
-        ) : model?.clusters.length ? (
-          model.clusters.map((cluster) => (
-            <HubWorkCluster
-              key={cluster.id}
-              cluster={cluster}
-              date={work.data?.date ?? ""}
-              repoName={repo.name}
-              repoPath={repo.path}
-              onWorkMutate={() => void work.mutate()}
-            />
-          ))
-        ) : (
-          <p className="text-xs text-text-subtle">No in-progress work linked to this repo.</p>
-        )}
+        {tasksError ? <FetchError bare message={profile.error ? "Couldn’t confirm the task profile." : "Task status unavailable. Refresh before starting work."} onRetry={() => { void profile.mutate(); refreshTasks(); }} /> : null}
+        {work.error ? <FetchError bare message={work.error.message} onRetry={() => void work.mutate()} /> : null}
+        {tasksLoading ? <SkeletonRows count={3} /> : taskWork.active.length ? (
+          <div className="space-y-2">{taskWork.active.map(renderTask)}</div>
+        ) : !tasksError ? (
+          <p className="text-sm text-text-muted">{backlogTasks.length ? "Nothing running. Start a backlog task on auto when you’re ready." : "No active work. Add a task to start on auto."}</p>
+        ) : null}
         <div className="mt-3 space-y-3">
           <TaskComposer
             inputId="repo-hub-task-add"
@@ -283,25 +293,12 @@ export function RepoWorkHub({
           query={backlogQuery}
           onQueryChange={setBacklogQuery}
           searchPlaceholder="Filter backlog…"
-          sharedChips={
-            <SharedEntityChips refs={sharedBacklogRefs} label="Shared by every backlog item" />
-          }
         >
           {shownBacklogTasks.length + shownBacklogTickets.length === 0 ? (
             <p className="text-xs text-text-subtle">Nothing matches “{backlogQuery}”.</p>
           ) : (
-            <div className="divide-y divide-border">
-              {shownBacklogTasks.map((task) => (
-                <HubTaskRow
-                  key={task.id}
-                  task={task}
-                  date={work.data?.date ?? ""}
-                  cwd={repo.path}
-                  repoName={repo.name}
-                  suppressLinks={sharedBacklogRefs}
-                  onWorkMutate={() => void work.mutate()}
-                />
-              ))}
+            <div className="space-y-2">
+              {shownBacklogTasks.map(renderTask)}
               {shownBacklogTickets.map((ticket) => (
                 <JiraTicketQueueRow
                   key={ticket.key}
@@ -332,7 +329,7 @@ export function RepoWorkHub({
               <HubCappedList
                 items={shownDone}
                 limit={HUB_LONG_LIST_PREVIEW}
-                render={(task) => <HubArchiveRow key={task.id} task={task} />}
+                render={renderTask}
               />
             </div>
           )}
@@ -425,16 +422,16 @@ export function RepoWorkHub({
           </div>
           {work.isLoading ? (
             <SkeletonRows count={3} />
-          ) : model?.leftoverNotes.length ? (
+          ) : notes.length ? (
             <div className="divide-y divide-border">
               <HubCappedList
-                items={model.leftoverNotes}
+                items={notes}
                 limit={HUB_NOTES_PREVIEW}
                 render={renderNote}
               />
             </div>
           ) : (
-            <p className="text-xs text-text-subtle">No notes linked to this repo.</p>
+            <p className="text-xs text-text-subtle">{work.error ? "Notes could not be loaded." : "No notes linked to this repo."}</p>
           )}
           {calendar.length > 0 ? (
             <div className="mt-4">

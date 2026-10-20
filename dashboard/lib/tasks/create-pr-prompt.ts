@@ -1,3 +1,4 @@
+import { TASK_STATUS_UPDATE_INSTRUCTION } from "@shared/task-note/status-update.ts";
 export interface CreatePrPromptInput {
   repoName: string;
   jiraKey?: string;
@@ -13,6 +14,8 @@ export function buildCreatePrPrompt(input: CreatePrPromptInput): string {
   if (input.taskId && input.date) {
     lines.push(
       `DevHub task id ${input.taskId} on ${input.date} — pass that exact id/date through the skill's DevHub sync step.`,
+      TASK_STATUS_UPDATE_INSTRUCTION,
+      "Task note: once the PR exists, update it with the task_note_update MCP tool: set_status draft-pr (or ready-for-review when it is not a draft), set_meta addLinks with the PR, and set_status_update with what the PR does. Tidy stale items while you are there.",
     );
   }
   lines.push(

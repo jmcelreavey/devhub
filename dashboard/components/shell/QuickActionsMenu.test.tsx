@@ -2,6 +2,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { QuickActionsMenu, type QuickMenuAction } from "./QuickActionsMenu";
+import { MobileQuickActionsMenu } from "./MobileQuickActionsMenu";
 
 const ACTIONS: QuickMenuAction[] = [
   { id: "notes", label: "Notes", icon: null, event: "devhub:notes-toggle", shortcut: "⌘⇧O" },
@@ -14,6 +15,18 @@ function open() {
 }
 
 describe("QuickActionsMenu", () => {
+  it("separates mobile panels from the terminal without adding focus stops", () => {
+    render(<MobileQuickActionsMenu />);
+    fireEvent.click(screen.getByRole("button", { name: "Quick actions" }));
+    expect([...document.querySelectorAll(".context-menu-group-label")].map((node) => node.textContent)).toEqual(["Panels", "Workspace"]);
+    const items = screen.getAllByRole("menuitem");
+    expect(items.map((item) => item.textContent)).toEqual(["Notes", "Tasks", "Diagrams", "Terminal"]);
+    for (const item of items) expect(item.querySelector(".launch-menu-icon svg")).not.toBeNull();
+    items[2].focus();
+    fireEvent.keyDown(items[2], { key: "ArrowDown" });
+    expect(document.activeElement).toBe(items[3]);
+  });
+
   it("labels its trigger and keeps the menu closed until asked", () => {
     render(<QuickActionsMenu actions={ACTIONS} label="More tools" />);
     const trigger = screen.getByRole("button", { name: "More tools" });

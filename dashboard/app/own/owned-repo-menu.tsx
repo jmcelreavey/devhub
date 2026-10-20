@@ -132,18 +132,6 @@ export function buildOwnedRepoMenuGroups(
           onSelect: actions.onOpenPrs,
         },
         {
-          id: "copy-clone",
-          label: "Copy clone URL",
-          icon: <Copy size={12} />,
-          onSelect: actions.onCopyCloneUrl,
-        },
-        {
-          id: "copy-name",
-          label: "Copy owner/name",
-          icon: <Copy size={12} />,
-          onSelect: actions.onCopyFullName,
-        },
-        {
           id: "reveal",
           label: input.revealLabel,
           icon: <FolderOpen size={12} />,
@@ -171,8 +159,16 @@ export function buildOwnedRepoMenuGroups(
       ],
     },
     {
+      id: "copy",
+      label: "Copy",
+      items: [
+        { id: "copy-clone", label: "Copy clone URL", icon: <Copy size={12} />, onSelect: actions.onCopyCloneUrl },
+        { id: "copy-name", label: "Copy owner/name", icon: <Copy size={12} />, onSelect: actions.onCopyFullName },
+      ],
+    },
+    {
       id: "own",
-      label: "Ownership",
+      label: "Knowledge",
       items: [
         {
           id: "learn",

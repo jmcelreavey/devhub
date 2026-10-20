@@ -28,6 +28,7 @@ export interface Task {
   legacyDigest?: string;
   legacyRowDigests?: Record<string, string>;
   jiraKey?: string;
+  parentKey?: string;
   due?: string;
   createdAt: string;
   completedAt?: string;
@@ -42,6 +43,8 @@ export interface Task {
   integrationRefs?: IntegrationRef[];
   /** Absent = ready; draft = captured idea that still needs a plan. */
   stage?: TaskStage;
+  handoff?: { handoffId: string; toUserId: string; toName: string; status: "pending" | "accepted"; expiresAt: number };
+  teamPickup?: { handoffId: string; cwd: string; branch: string; status?: "pending" };
   /** Every legacy day-file id that collapsed into this item, sorted. */
   legacyIds?: string[];
   /** @deprecated Day-file rollover. Not written on items. */
@@ -61,5 +64,13 @@ export function isTaskOpen(task: Task): boolean {
 }
 
 export function isTaskReadyForAgent(task: Task): boolean {
-  return isTaskOpen(task) && task.stage !== "draft";
+  return isTaskOpen(task) && task.stage !== "draft" && !isTaskOwnershipBlocked(task);
+}
+
+export function isTaskHandedOff(task: Pick<Task, "handoff">): boolean {
+  return task.handoff?.status === "pending" || task.handoff?.status === "accepted";
+}
+
+export function isTaskOwnershipBlocked(task: Pick<Task, "handoff" | "teamPickup"> | null | undefined): boolean {
+  return !!task && (isTaskHandedOff(task) || task.teamPickup?.status === "pending");
 }

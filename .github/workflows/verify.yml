@@ -60,6 +60,9 @@ jobs:
       - name: Run verify
         run: npm run verify --prefix dashboard
 
+      - name: Verify Slack gateway
+        run: npm run verify:gateway
+
       # `verify` (lint + tsc + vitest + build) can go green on a dashboard that
       # throws on mount: the vitest environment is `node` and there are 2
       # component tests for 185 components. Nothing above this line renders a

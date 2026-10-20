@@ -1,4 +1,5 @@
 import { execGh } from "@/lib/gh-exec";
+import type { PrFeedbackSnapshot } from "./finished-task-feedback";
 import { getRepoRoot } from "@/lib/notes/dir";
 import { getGithubFullNameForLocalRepo, listRepos } from "@/lib/repos";
 import { dedupeBy } from "@/lib/dedupe";
@@ -37,6 +38,7 @@ export interface GithubPrRow {
    * Filled for open authored / review-requested rows via a parallel search.
    */
   approved?: boolean;
+  reviewDecision?: "APPROVED" | "CHANGES_REQUESTED" | "REVIEW_REQUIRED";
   /**
    * Head-commit CI rollup for open authored / review-requested rows.
    * Filled from the same GraphQL search as approvals (count buckets — cheap).
@@ -59,6 +61,8 @@ export interface RecentlyReviewedPr extends GithubPrRow {
 
 /** JSON body for `GET /api/github/prs` on success (client + server). */
 export interface GithubPrsApiPayload {
+  feedbackPrs?: PrFeedbackSnapshot[];
+  generatedAt?: string;
   configured: boolean;
   authored: GithubPrRow[];
   reviews: GithubPrRow[];
@@ -182,6 +186,12 @@ async function searchOpenPrs(query: string): Promise<SearchIssueItem[]> {
 
 interface PrListMetaNode {
   url?: string;
+  headRefName?: string;
+  headRepository?: { nameWithOwner?: string } | null;
+  state?: string;
+  reviews?: { nodes?: Array<{ author?: { login?: string; __typename?: string }; submittedAt?: string; body?: string; state?: string }> };
+  comments?: { nodes?: Array<{ author?: { login?: string; __typename?: string }; createdAt?: string; body?: string }> };
+  reviewThreads?: { nodes?: Array<{ comments?: PrListMetaNode["comments"] }> };
   isDraft?: boolean | null;
   headRefOid?: string | null;
   reviewDecision?: string | null;
@@ -192,6 +202,7 @@ interface PrListMetaNode {
         statusCheckRollup?: {
           state?: string | null;
           contexts?: {
+            nodes?: Array<{ name?: string; context?: string; conclusion?: string; state?: string; completedAt?: string; createdAt?: string }>;
             checkRunCountsByState?: Array<{ state?: string; count?: number } | null> | null;
             statusContextCountsByState?: Array<{ state?: string; count?: number } | null> | null;
           } | null;
@@ -203,26 +214,41 @@ interface PrListMetaNode {
 
 interface PrListMetaResponse {
   data?: {
+    viewer?: { login?: string };
+    feedback?: { nodes?: Array<PrListMetaNode | null> };
     authored?: { nodes?: Array<PrListMetaNode | null> | null } | null;
     reviewing?: { nodes?: Array<PrListMetaNode | null> | null } | null;
   } | null;
 }
 
 export interface PrListMeta {
+  feedback?: PrFeedbackSnapshot;
   draft: boolean;
   headSha?: string;
   approved: boolean;
+  reviewDecision?: GithubPrRow["reviewDecision"];
   checks: PrChecksState;
   checkCounts: { passed: number; failed: number; pending: number };
 }
 
+// The existing bulk cache holds only the latest 100 PRs, 20 reviews/comments/threads
+// and 50 check contexts. Missing timestamps never imply post-completion activity;
+// older or uncached feedback appears only after GitHub includes it in this window.
 const PR_LIST_META_QUERY = `
 query($authored: String!, $reviewing: String!) {
+  viewer { login }
+  feedback: search(query: "author:@me is:pr sort:updated-desc", type: ISSUE, first: 100) { nodes { ...prListMeta } }
   authored: search(query: $authored, type: ISSUE, first: 100) { nodes { ...prListMeta } }
   reviewing: search(query: $reviewing, type: ISSUE, first: 100) { nodes { ...prListMeta } }
 }
 fragment prListMeta on PullRequest {
   url
+  headRefName
+  headRepository { nameWithOwner }
+  state
+  reviews(last: 20) { nodes { author { login __typename } submittedAt body state } }
+  comments(last: 20) { nodes { author { login __typename } createdAt body } }
+  reviewThreads(last: 20) { nodes { comments(last: 5) { nodes { author { login __typename } createdAt body } } } }
   isDraft
   headRefOid
   reviewDecision
@@ -232,7 +258,11 @@ fragment prListMeta on PullRequest {
       commit {
         statusCheckRollup {
           state
-          contexts {
+          contexts(first: 50) {
+            nodes {
+              ... on CheckRun { name conclusion completedAt }
+              ... on StatusContext { context state createdAt }
+            }
             checkRunCountsByState { state count }
             statusContextCountsByState { state count }
           }
@@ -298,6 +328,7 @@ export async function fetchPrListMetaByUrl(): Promise<Map<string, PrListMeta>> {
     ]);
     const parsed = JSON.parse(stdout) as PrListMetaResponse;
     const nodes = [
+      ...(parsed.data?.feedback?.nodes ?? []),
       ...(parsed.data?.authored?.nodes ?? []),
       ...(parsed.data?.reviewing?.nodes ?? []),
     ];
@@ -305,10 +336,21 @@ export async function fetchPrListMetaByUrl(): Promise<Map<string, PrListMeta>> {
       if (!node?.url?.trim()) continue;
       const url = node.url.trim();
       const { checks, checkCounts } = checksFromMetaNode(node);
+      const reviewDecision: PrListMeta["reviewDecision"] = node.reviewDecision === "APPROVED" || node.reviewDecision === "CHANGES_REQUESTED" || node.reviewDecision === "REVIEW_REQUIRED"
+        ? node.reviewDecision : (node.latestOpinionatedReviews?.nodes ?? []).some((review) => review?.state === "CHANGES_REQUESTED") ? "CHANGES_REQUESTED" : undefined;
       out.set(url, {
+        feedback: {
+          url, state: node.state ?? "OPEN", self: parsed.data?.viewer?.login ?? "", headBranch: node.headRefName, repo: node.headRepository?.nameWithOwner,
+          activity: [
+            ...(node.reviews?.nodes ?? []).map((review) => ({ author: review.author?.login ?? "", bot: review.author?.__typename === "Bot", at: review.submittedAt ?? "", body: review.body ?? "", state: review.state })),
+            ...[...(node.comments?.nodes ?? []), ...(node.reviewThreads?.nodes ?? []).flatMap((thread) => thread.comments?.nodes ?? [])].map((comment) => ({ author: comment.author?.login ?? "", bot: comment.author?.__typename === "Bot", at: comment.createdAt ?? "", body: comment.body ?? "" })),
+          ],
+          failedChecks: (node.commits?.nodes?.[0]?.commit?.statusCheckRollup?.contexts?.nodes ?? []).filter((check) => ["FAILURE", "ERROR", "TIMED_OUT", "CANCELLED", "ACTION_REQUIRED", "STARTUP_FAILURE"].includes(check.conclusion ?? check.state ?? "")).map((check) => ({ name: check.name ?? check.context ?? "check", at: check.completedAt ?? check.createdAt ?? "" })),
+        },
         draft: node.isDraft === true,
         ...(node.headRefOid ? { headSha: node.headRefOid } : {}),
         approved: isApprovedMetaNode(node),
+        ...(reviewDecision ? { reviewDecision } : {}),
         checks,
         checkCounts,
       });
@@ -323,7 +365,7 @@ export async function fetchPrListMetaByUrl(): Promise<Map<string, PrListMeta>> {
  * All open PRs you authored and PRs awaiting your review, using the GitHub Search API
  * across all repositories (not limited to locally cloned repos).
  */
-export async function fetchMyGithubPrs(): Promise<{ authored: GithubPrRow[]; reviews: GithubPrRow[] }> {
+export async function fetchMyGithubPrs(): Promise<{ authored: GithubPrRow[]; reviews: GithubPrRow[]; feedbackPrs?: PrFeedbackSnapshot[] }> {
   // One parallel GraphQL lookup for approval + CI counts is cheaper than N× `gh pr view`.
   const [authoredItems, reviewItems, metaByUrl] = await Promise.all([
     searchOpenPrs("author:@me is:pr state:open sort:updated-desc"),
@@ -338,6 +380,7 @@ export async function fetchMyGithubPrs(): Promise<{ authored: GithubPrRow[]; rev
     return {
       ...row,
       ...(meta.approved ? { approved: true } : {}),
+      ...(meta.reviewDecision ? { reviewDecision: meta.reviewDecision } : {}),
       draft: meta.draft,
       ...(meta.headSha ? { headSha: meta.headSha } : {}),
       checks: meta.checks,
@@ -353,7 +396,7 @@ export async function fetchMyGithubPrs(): Promise<{ authored: GithubPrRow[]; rev
     dedupeBy(reviewItems.map(withMeta), "url").slice(0, MAX_LIST),
   );
 
-  return { authored: authoredRaw, reviews: reviewsRaw };
+  return { authored: authoredRaw, reviews: reviewsRaw, feedbackPrs: [...metaByUrl.values()].flatMap((meta) => meta.feedback ? [meta.feedback] : []) };
 }
 
 const MAX_RECENTLY_REVIEWED = 10;

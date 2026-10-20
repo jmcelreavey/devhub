@@ -19,7 +19,7 @@ vi.mock("@/lib/clipboard", () => ({ copyTextToClipboard: mocks.copy }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: mocks.push }) }));
 vi.mock("swr", () => ({ mutate: mocks.mutate }));
 vi.mock("@/lib/hooks/use-fetch", () => ({
-  useLive: () => ({ data: { configured: true, tickets: [ticket] }, isLoading: false }),
+  useLive: (key: string | null) => ({ data: key === "/api/tasks/profiles" ? { active: "work" } : key === "/api/tasks/jira-intake" ? { profile: "work", linked: {} } : { configured: true, tickets: [ticket] }, isLoading: false }),
 }));
 vi.mock("@/lib/hooks/use-toast", () => ({
   useToast: () => ({ success: mocks.success, error: mocks.error }),
@@ -130,6 +130,17 @@ it.each([JiraTicketQueueRow, JiraTicketRow])("creates a Jira-linked task from ei
   const refresh = mocks.mutate.mock.calls[0]![0] as (key: unknown) => boolean;
   expect(refresh("/api/tasks/plan-status")).toBe(true);
   expect(refresh("/api/jira/tickets")).toBe(false);
+});
+
+it("uses the guarded intake from the board menu and reports an existing task honestly", async () => {
+  mocks.fetch.mockResolvedValue({ ok: true, json: async () => ({ task, date: "2026-10-01", created: false }) });
+  render(<JiraTicketRow ticket={ticket} boardIntake />);
+  openMenu();
+  fireEvent.click(menuItem("Add to board"));
+  await waitFor(() => expect(mocks.success).toHaveBeenCalledWith("TEST-123 is already on the board", expect.any(Object)));
+  expect(mocks.fetch).toHaveBeenCalledTimes(1);
+  expect(mocks.fetch).toHaveBeenCalledWith("/api/tasks/jira-intake", expect.objectContaining({ body: JSON.stringify({ key: ticket.key, summary: ticket.summary, url: ticket.url, profile: "work" }) }));
+  expect(screen.queryByRole("dialog")).toBeNull();
 });
 
 it("captures a draft before opening the standard planning dialog and keeps it on cancel", async () => {

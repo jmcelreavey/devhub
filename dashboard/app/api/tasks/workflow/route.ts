@@ -26,7 +26,8 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
     const items = listWorkflows().flatMap((workflow) => {
       const node = currentTaskNode(index, workflow.taskId);
       if (!node || node.task.id !== workflow.taskId) return [];
-      return [{ task: { id: node.task.id, text: node.task.text }, workflow }];
+      // The whole task, so the inbox can offer the same task menu as a task row.
+      return [{ task: { ...node.task, date: node.task.startDate }, workflow }];
     });
     return NextResponse.json({ items });
   }

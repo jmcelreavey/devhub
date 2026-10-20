@@ -84,6 +84,16 @@ describe("getNotesAiCallOptions", () => {
     expect(getNotesAiCallOptions()).toEqual({});
   });
 
+  it("enables GLM thinking only when the effort picker asks for it", () => {
+    process.env.AI_API_KEY = "test-key";
+    expect(getNotesAiCallOptions("glm-5-turbo", null, "enabled")).toEqual({
+      providerOptions: { notesai: { thinking: { type: "enabled" } } },
+    });
+    expect(getNotesAiCallOptions("glm-5-turbo", null, "disabled")).toEqual({
+      providerOptions: { notesai: { thinking: { type: "disabled" } } },
+    });
+  });
+
   it("keeps GLM's thinking switch and never adds an effort for it", () => {
     process.env.AI_API_KEY = "test-key";
     delete process.env.AI_BASE_URL;

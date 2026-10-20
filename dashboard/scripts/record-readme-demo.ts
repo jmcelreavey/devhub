@@ -63,7 +63,9 @@ async function walk(page: Page): Promise<void> {
 
   // 3. Persona sync
   await setCaption(page, "One set of engineering standards, synced into every AI tool");
-  await clickOn(page, sidebarLink(page, "Skills"));
+  // Agent skills hangs off Settings now, not the sidebar.
+  await clickOn(page, sidebarLink(page, "Settings"));
+  await clickOn(page, page.getByRole("link", { name: /^Agent skills/ }).first());
   // The tab bar renders before the page hydrates; a click that lands early is dropped.
   await expect(page.getByText("Sync preview")).toBeVisible({ timeout: 60_000 });
   await page.waitForTimeout(800);

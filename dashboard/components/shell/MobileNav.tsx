@@ -116,7 +116,7 @@ export function MobileNav() {
             >
               <div
                 role="group"
-                aria-label="Settings"
+                aria-label="Preferences"
                 className="flex items-center gap-0.5"
               >
                 <FocusTimer />

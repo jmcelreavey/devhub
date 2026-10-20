@@ -165,7 +165,7 @@ ${description}
 
 ## Install
 
-In DevHub, open System → Plugins → Add from GitHub.
+In DevHub, open Settings → Plugins → Add from GitHub.
 Paste this repository’s URL and review the contributions before enabling it.
 
 Private repositories need GitHub access on the machine running DevHub.

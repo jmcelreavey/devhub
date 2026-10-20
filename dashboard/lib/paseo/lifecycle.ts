@@ -2,12 +2,13 @@ import { withMutex } from "@/lib/atomic-write";
 import { withAgentAdmission } from "@/lib/agent-runs/claims";
 import { clip } from "@/lib/agent-runs/events";
 import { appendRunEvent, isActiveAgentRunState, type AgentRunStatus } from "@/lib/agent-runs/run-files";
-import { listAgentRuns, readAgentRun, updateAgentRunStatus, type AgentRun } from "@/lib/agent-runs/store";
+import { listAgentRuns, listCapacityRuns, readAgentRun, updateAgentRunStatus, type AgentRun } from "@/lib/agent-runs/store";
 import { currentTaskNode, loadTaskIndex, type TaskIndex } from "@/lib/tasks/task-index";
 import type { PaseoAgent } from "@getpaseo/client";
 import type { FetchAgentTimelinePayload } from "@getpaseo/client/internal/daemon-client";
 import { paseoUrl, withPaseo, type PaseoSession } from "./client";
 import { AUTOCONFIRM_PROVIDERS } from "./launch";
+import { releaseIdlePaseoRuntimesIfDue } from "./idle-runtimes";
 import { sweepPaseoWorkspacesIfDue } from "./workspaces";
 
 type TimelineEntry = FetchAgentTimelinePayload["entries"][number];
@@ -15,12 +16,14 @@ type TimelineEntry = FetchAgentTimelinePayload["entries"][number];
 /**
  * Outcome of the turn DevHub submitted, found by the user message carrying
  * our clientMessageId. Idle alone is not success: a provider API failure
- * lands as an idle agent whose last message is the error text.
+ * lands as an idle agent whose last message is the error text. An idle or
+ * closed agent with no result is finished, not "needs attention": nothing is
+ * left running to wait for, and an active state would hold capacity forever.
  */
 export function paseoTurnOutcome(run: AgentRun, agent: PaseoAgent, entries: TimelineEntry[]): Partial<AgentRunStatus> {
   const start = entries.findIndex((entry) => entry.item.type === "user_message" && entry.item.clientMessageId === run.status.messageId);
   const following = start < 0 ? [] : entries.slice(start + 1);
-  const nextUser = following.findIndex((entry) => entry.item.type === "user_message");
+  const nextUser = following.findIndex((entry) => entry.item.type === "user_message" && !run.status.steeringMessageIds?.includes(entry.item.clientMessageId ?? ""));
   const isLatestTurn = nextUser < 0;
   // A newer turn's status, permissions and usage do not belong to this run.
   if (isLatestTurn) {
@@ -31,11 +34,15 @@ export function paseoTurnOutcome(run: AgentRun, agent: PaseoAgent, entries: Time
       return { state: agent.pendingPermissions.length ? "needs-attention" : agent.status === "running" ? "running" : "starting", error: undefined };
     }
     if (agent.status === "error") return { state: "failed", finishedAt: Date.now(), error: clip(agent.lastError || "The agent reported an error.", 2000) };
-    if (agent.status === "closed") return { state: "needs-attention", error: "The Paseo agent was closed before DevHub saw a result." };
     if (run.status.cancelRequestedAt) return { state: "cancelled", finishedAt: Date.now(), error: undefined };
   }
 
-  if (start < 0) return { state: "needs-attention", error: "The submitted message could not be found in the Paseo timeline. Open the agent to inspect it." };
+  // A closed agent can still have finished its turn first, so only an empty turn is lost.
+  const lost = (error: string): Partial<AgentRunStatus> => ({
+    state: "failed", finishedAt: Date.now(),
+    error: agent.status === "closed" ? "The Paseo agent was closed before DevHub saw a result." : error,
+  });
+  if (start < 0) return lost("The submitted message could not be found in the Paseo timeline and the agent is idle. Open it in Paseo to see what it did.");
   const turn = isLatestTurn ? following : following.slice(0, nextUser);
   const failure = turn.find((entry) => entry.item.type === "error" || (entry.item.type === "notification" && entry.item.level === "error"));
   if (failure && (failure.item.type === "error" || failure.item.type === "notification")) {
@@ -53,7 +60,7 @@ export function paseoTurnOutcome(run: AgentRun, agent: PaseoAgent, entries: Time
     previousWasText = item.type === "assistant_message";
   }
   const finalText = segments.map((segment) => segment.trim()).filter(Boolean).join("\n\n");
-  if (!finalText) return { state: "needs-attention", error: "The turn stopped without a result. Open the agent to inspect it." };
+  if (!finalText) return lost("The turn stopped without a result. Open the agent in Paseo to inspect it.");
   const usage = isLatestTurn ? agent.lastUsage : undefined;
   return {
     state: "completed", finishedAt: Date.now(), resultText: clip(finalText, 8000), error: undefined,
@@ -95,7 +102,7 @@ export async function turnEntries(daemon: PaseoSession["daemon"], agentId: strin
 }
 
 function ownsLatestTurn(run: AgentRun, entries: TimelineEntry[]): boolean {
-  const latest = entries.findLast(({ item }) => item.type === "user_message");
+  const latest = entries.findLast(({ item }) => item.type === "user_message" && !run.status.steeringMessageIds?.includes(item.clientMessageId ?? ""));
   return latest?.item.type === "user_message" && latest.item.clientMessageId === run.status.messageId;
 }
 
@@ -106,18 +113,23 @@ export async function reconcilePaseoRun(input: AgentRun): Promise<AgentRun> {
     if (!isActiveAgentRunState(run.status.state)) return run;
     const agentId = run.status.conversationId;
     if (!agentId || !run.status.messageId) {
-      if (Date.now() - run.spec.createdAt < 120_000) return run;
+      // A launch still in its first two minutes cannot be freed by another probe.
+      if (Date.now() - run.spec.createdAt < 120_000) {
+        noteCapacityProbe(run.spec.id);
+        return run;
+      }
       return updateAgentRunStatus(run, { state: "needs-attention", error: "Startup was interrupted before Paseo acknowledged the agent. Check Paseo before retrying." });
     }
     try {
       if (run.status.connectionId !== paseoUrl()) return updateAgentRunStatus(run, { state: "needs-attention", error: "This run belongs to another Paseo connection. Restore its connection before continuing." });
       const patch = await withPaseo(async (session) => {
         let fetched = await session.daemon.fetchAgent(agentId);
-        if (!fetched) return { state: "needs-attention", error: "The agent is no longer available in Paseo." } satisfies Partial<AgentRunStatus>;
+        if (!fetched) return { state: "failed", finishedAt: Date.now(), error: "The agent is no longer available in Paseo." } satisfies Partial<AgentRunStatus>;
         const entries = await turnEntries(session.daemon, agentId, run.status.messageId!);
         if (!run.spec.activity?.taskId && ownsLatestTurn(run, entries) && await autoConfirm(session, fetched.agent) > 0) fetched = (await session.daemon.fetchAgent(agentId)) ?? fetched;
         return paseoTurnOutcome(run, fetched.agent, entries);
       });
+      noteCapacityProbe(run.spec.id);
       const updated = withAgentAdmission(() => {
         const latest = readAgentRun(run.spec.id) ?? run;
         if (!isActiveAgentRunState(latest.status.state)) return latest;
@@ -132,6 +144,7 @@ export async function reconcilePaseoRun(input: AgentRun): Promise<AgentRun> {
       });
       return archiveFinishedPaseoReview(updated);
     } catch (error) {
+      noteCapacityProbe(run.spec.id);
       const latest = readAgentRun(run.spec.id) ?? run;
       if (!isActiveAgentRunState(latest.status.state)) return latest;
       return updateAgentRunStatus(latest, { connectivity: "reconnecting", error: error instanceof Error ? error.message : "Paseo is unavailable." });
@@ -165,16 +178,17 @@ export async function archiveFinishedPaseoReview(run: AgentRun): Promise<AgentRu
 }
 
 /**
- * A task chat stays pinned while it's the live part of the task: a plan until
- * implementation starts, every chat until the task is done, abandoned or deleted.
+ * One pinned chat per task: the newest one. Auto mode (and retries) start a fresh chat for each step, which is
+ * cheaper than dragging an earlier step's whole history along, so an older chat unpins as soon as a newer chat
+ * for the same task has started. Every chat unpins once the task is done, abandoned or deleted.
  */
 export function taskPinReleased(run: AgentRun, runs: readonly AgentRun[], tasks: TaskIndex): boolean {
   const taskId = run.spec.activity?.taskId;
   if (!taskId) return true;
   const task = currentTaskNode(tasks, taskId)?.task;
   if (!task || task.done || task.abandonedAt) return true;
-  return run.spec.activity?.action === "plan" && runs.some((other) =>
-    other.spec.activity?.taskId === taskId && other.spec.activity.action === "implement"
+  return runs.some((other) =>
+    other.spec.activity?.taskId === taskId
     && other.spec.createdAt > run.spec.createdAt && Boolean(other.status.conversationId));
 }
 
@@ -211,9 +225,49 @@ const AIONUI_REMOVED = "AionUi was removed from DevHub, so this run can't be fol
 /** Every managed run, including records AionUi left behind. */
 export async function reconcileManagedRun(run: AgentRun): Promise<AgentRun> {
   if (run.spec.runtime === "aionui") {
-    return isActiveAgentRunState(run.status.state) ? updateAgentRunStatus(run, { state: "needs-attention", error: AIONUI_REMOVED }) : run;
+    return isActiveAgentRunState(run.status.state) ? updateAgentRunStatus(run, { state: "failed", finishedAt: Date.now(), error: AIONUI_REMOVED }) : run;
   }
   return reconcilePaseoRun(run);
+}
+
+/** A dispatch that follows the reconcile tick should not open another socket per run. */
+const CAPACITY_PROBE_FRESH_MS = 4_000;
+const capacityProbeAt = new Map<string, number>();
+
+export function clearCapacityProbeCache(): void {
+  capacityProbeAt.clear();
+}
+
+function noteCapacityProbe(runId: string): void {
+  capacityProbeAt.set(runId, Date.now());
+}
+
+/** Re-checks runs holding a slot, skipping ones this process probed in the last few seconds. */
+export async function reconcileCapacityRuns(): Promise<void> {
+  const now = Date.now();
+  const active = listCapacityRuns();
+  const activeIds = new Set(active.map((run) => run.spec.id));
+  for (const id of capacityProbeAt.keys()) if (!activeIds.has(id)) capacityProbeAt.delete(id);
+  // Healthy running chats were just polled. Needs-attention and other non-running
+  // slots are the ones a stale Paseo session can pin, so those are always re-checked.
+  const due = active.filter((run) => run.status.state !== "running" || now - (capacityProbeAt.get(run.spec.id) ?? 0) >= CAPACITY_PROBE_FRESH_MS);
+  await Promise.all(due.map((run) => reconcileManagedRun(run).catch(() => run)));
+}
+
+/**
+ * Stops DevHub counting a run it can no longer follow. Nothing in Paseo is
+ * stopped: a run that is still live has to be cancelled instead.
+ */
+export async function clearManagedRun(input: AgentRun) {
+  const run = await reconcileManagedRun(input);
+  if (!isActiveAgentRunState(run.status.state)) return { run, outcome: "already-finished" as const };
+  const unfollowable = run.status.state === "needs-attention" || run.status.connectivity === "reconnecting";
+  if (!unfollowable) return { run, outcome: "still-running" as const };
+  const was = run.status.error ? ` Last status: ${run.status.error}` : "";
+  return {
+    run: updateAgentRunStatus(run, { state: "cancelled", finishedAt: Date.now(), error: clip(`Cleared from DevHub's active list. The Paseo agent was not stopped.${was}`, 2000) }),
+    outcome: "cleared" as const,
+  };
 }
 
 export async function cancelManagedRun(run: AgentRun) {
@@ -246,8 +300,13 @@ export function startAgentReconciliation(): void {
         }
       }
       await sweepPaseoWorkspacesIfDue();
+      // Idle chats keep a provider process and its MCP servers alive until archived.
+      await releaseIdlePaseoRuntimesIfDue();
     } finally { polling = false; }
   };
-  timer = setInterval(() => { void tick().catch((error: unknown) => console.error("[agents] reconciliation failed", error)); }, 5_000);
+  const fire = () => { void tick().catch((error: unknown) => console.error("[agents] reconciliation failed", error)); };
+  timer = setInterval(fire, 5_000);
   timer.unref();
+  // Runs that ended while DevHub was down shouldn't hold capacity for another interval.
+  fire();
 }

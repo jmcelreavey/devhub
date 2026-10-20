@@ -1,9 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { generateAiText } from "@/lib/ai/generate";
 import { suggestWorkItemTitles } from "./work-item-titles";
+import { detectAiProviderAvailability } from "@/lib/ai/preference";
 import type { PlanWorkItem } from "./create-tasks-from";
 
 vi.mock("@/lib/ai/generate", () => ({ generateAiText: vi.fn() }));
+vi.mock("@/lib/ai/preference", () => ({
+  detectAiProviderAvailability: vi.fn(() => ({ "cursor-cli": true, "chatgpt-cli": true, "antigravity-cli": true, opencode: true, api: true })),
+  aiProviderLabel: (provider: string) => provider,
+}));
 vi.mock("@/lib/ai/writing-voice", () => ({
   getWritingVoicePrompt: () => "my-voice full-voice guidance",
 }));
@@ -41,6 +46,27 @@ describe("suggestWorkItemTitles", () => {
       timeoutMs: 180_000,
       idleTimeoutMs: 90_000,
     }));
+  });
+
+  it("passes the selected provider, model and effort to generation", async () => {
+    respond(source);
+    const controller = new AbortController();
+    await suggestWorkItemTitles("Android testing", source, controller.signal, {
+      provider: "chatgpt-cli", model: "gpt-6-sol", effort: "low",
+    });
+    expect(generateAiText).toHaveBeenCalledWith(expect.objectContaining({
+      prefer: "chatgpt-cli", model: "gpt-6-sol", effort: "low", abortSignal: controller.signal,
+    }));
+  });
+
+  it("does not send a selected model to a fallback provider", async () => {
+    vi.mocked(detectAiProviderAvailability).mockReturnValueOnce({
+      "cursor-cli": true, "chatgpt-cli": false, "antigravity-cli": false, opencode: false, api: false,
+    });
+    await expect(suggestWorkItemTitles("Android testing", source, undefined, {
+      provider: "chatgpt-cli", model: "gpt-6-sol",
+    })).rejects.toThrow("not available");
+    expect(generateAiText).not.toHaveBeenCalled();
   });
 
   it.each([

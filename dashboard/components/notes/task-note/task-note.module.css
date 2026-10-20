@@ -1,0 +1,502 @@
+/* Visual task note. Tokens only (globals.css), so every theme preset and light/dark works. */
+
+.root {
+  max-width: 880px;
+  margin: 0 auto 28px;
+}
+
+.card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-muted);
+  border-radius: var(--radius-lg);
+  padding: 22px 26px 24px;
+  box-shadow: var(--shadow-raised);
+}
+
+.top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.title {
+  margin: 0;
+  min-width: 0;
+  font-family: var(--font-serif);
+  font-size: 30px;
+  line-height: 1.18;
+  font-weight: 600;
+  letter-spacing: -0.012em;
+  color: var(--text);
+  overflow-wrap: anywhere;
+  text-wrap: balance;
+}
+
+.sourceToggle {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-subtle);
+  font-size: 12px;
+  cursor: pointer;
+}
+.sourceToggle:hover {
+  background: var(--bg-elevated);
+  border-color: var(--border-muted);
+  color: var(--text);
+}
+
+.sub {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--text-subtle);
+}
+
+/* ── Pills ── */
+.pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 14px;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  padding: 3px 10px;
+  border: 1px solid transparent;
+  border-radius: 99px;
+  background: var(--bg-elevated);
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.pill > span:last-child {
+  max-width: 34ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pillButton {
+  cursor: pointer;
+  border-color: var(--border-muted);
+  background: transparent;
+  font: inherit;
+  font-size: 12px;
+}
+.pillButton:hover {
+  background: var(--bg-elevated);
+  color: var(--text);
+}
+a.pill {
+  transition: background var(--dur-base) cubic-bezier(0.22, 1, 0.36, 1),
+    border-color var(--dur-base) cubic-bezier(0.22, 1, 0.36, 1);
+}
+a.pill:hover {
+  background: var(--bg-overlay);
+  border-color: var(--border);
+  color: var(--text);
+}
+.tagLine {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.tagLabel {
+  color: var(--text-subtle);
+  font-size: 12px;
+}
+.mono {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+}
+.ok {
+  background: var(--success-dim);
+  color: var(--success);
+}
+.warn {
+  background: var(--warning-dim);
+  color: var(--warning);
+}
+.bad {
+  background: var(--danger-dim);
+  color: var(--danger);
+}
+.info {
+  background: var(--info-dim);
+  color: var(--info);
+}
+.accent {
+  background: var(--accent-dim);
+  color: var(--accent-text, var(--accent));
+}
+.muted {
+  background: var(--bg-elevated);
+  color: var(--text-muted);
+}
+
+/* ── Sections ── */
+.label {
+  margin: 24px 0 8px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-subtle);
+}
+.label small {
+  margin-left: 6px;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  text-transform: none;
+}
+
+.prose {
+  margin: 0 0 8px;
+  max-width: 68ch;
+  font-size: 14.5px;
+  line-height: 1.6;
+  color: var(--text);
+}
+.prose code,
+.item code {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--accent-text, var(--accent));
+}
+.prose a,
+.item a {
+  color: var(--accent-text, var(--accent));
+  text-underline-offset: 2px;
+}
+
+.statusLine {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0 0 6px;
+  font-size: 14px;
+  line-height: 1.55;
+}
+.statusLine .pill {
+  flex: none;
+  padding-block: 1px;
+  font-size: 11.5px;
+}
+
+.stack {
+  display: grid;
+  gap: 8px;
+}
+
+/* Left-bordered cards: decisions, questions, bugs */
+.item {
+  padding: 9px 13px;
+  border-left: 3px solid var(--border);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  background: var(--bg-elevated);
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text);
+}
+.itemRow {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.decision {
+  border-left-color: var(--violet);
+}
+.question {
+  border-left-color: var(--warning);
+  background: var(--warning-dim);
+}
+.questionDone {
+  border-left-color: var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  padding-block: 5px;
+}
+.bug {
+  border-left-color: var(--danger);
+  background: var(--danger-dim);
+}
+.bugFixed {
+  border-left-color: var(--success);
+  background: var(--success-dim);
+}
+.bugClosed {
+  border-left-color: var(--border);
+  background: var(--bg-elevated);
+  color: var(--text-muted);
+}
+.detail {
+  color: var(--text-muted);
+}
+.answerRow {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+.answerRow input {
+  flex: 1;
+  min-width: 0;
+}
+
+.button {
+  flex: none;
+  padding: 4px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+  color: var(--text);
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.button:hover:not(:disabled) {
+  background: var(--bg-overlay);
+}
+.button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.linkButton {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-subtle);
+  font-size: 12px;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.linkButton:hover {
+  color: var(--text);
+}
+
+.chipSelect {
+  appearance: none;
+  field-sizing: content;
+  padding: 1px 8px;
+  border: 0;
+  border-radius: 99px;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* ── Media ── */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 12px;
+}
+.shot {
+  position: relative;
+  margin: 0;
+  min-width: 0;
+}
+.thumb {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 1px solid var(--border-muted);
+  border-radius: 10px;
+  background: var(--bg-elevated);
+  overflow: hidden;
+  cursor: zoom-in;
+}
+.media {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  object-fit: cover;
+  background: var(--bg-overlay);
+}
+video.media {
+  border: 1px solid var(--border-muted);
+  border-radius: 10px;
+  object-fit: contain;
+  background: var(--bg-overlay);
+}
+.tag {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 1;
+  pointer-events: none;
+  backdrop-filter: blur(6px);
+  /* Solid so it reads on light and dark screenshots alike. */
+  background: var(--bg-surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  box-shadow: var(--graphite-card-shadow, 0 2px 6px rgba(0, 0, 0, 0.25));
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 10.5px;
+}
+.tag.accent {
+  background: var(--accent);
+  color: var(--accent-fg);
+  border-color: var(--accent);
+}
+.caption {
+  margin: 6px 2px 0;
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: var(--text-muted);
+}
+.mediaMissing {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 16 / 10;
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  color: var(--text-subtle);
+  font-size: 12.5px;
+}
+
+/* ── Lists ── */
+.poi {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 4px;
+  font-size: 13.5px;
+  color: var(--text-muted);
+}
+.poi li {
+  line-height: 1.5;
+}
+
+.waypoints {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.log summary {
+  cursor: pointer;
+  color: var(--text-subtle);
+  font-size: 13px;
+}
+.log summary:hover {
+  color: var(--text);
+}
+.log ol {
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.log li {
+  display: flex;
+  gap: 12px;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--border-muted);
+}
+.log time {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--text-subtle);
+}
+
+.stray {
+  margin: 6px 0 0;
+  font-size: 12.5px;
+  color: var(--text-subtle);
+  white-space: pre-wrap;
+}
+
+.repair {
+  margin: 14px 0 0;
+  padding: 8px 12px;
+  border-left: 3px solid var(--warning);
+  background: var(--warning-dim);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  font-size: 13px;
+}
+
+/* ── Free-form content below the card ── */
+.freeform {
+  max-width: 880px;
+  margin: 8px auto 0;
+}
+
+@media (max-width: 640px) {
+  .card {
+    padding: 16px 16px 18px;
+  }
+  .title {
+    font-size: 24px;
+  }
+  .top {
+    flex-direction: column;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  a.pill {
+    transition: none;
+  }
+}
+
+/* Source mode: the whole note in the editor, same measure as the card. */
+.freeformFull {
+  max-width: 880px;
+  margin: 0 auto;
+}
+
+/* The free-form editor sits under the card: quieter headings so it reads as notes, not as another page. */
+.freeform :global([data-content-type="heading"] h1.bn-inline-content) {
+  font-size: 24px;
+}
+.freeform :global([data-content-type="heading"] h2.bn-inline-content) {
+  font-size: 19px;
+  letter-spacing: -0.005em;
+}
+.freeform :global([data-content-type="heading"] h3.bn-inline-content) {
+  font-size: 16px;
+}
+.freeform :global(.bn-editor) {
+  padding-inline: 8px;
+}
+
+/* Every pill is clickable: pointer and hover (the global focus ring covers keyboard). */
+a.pill, .pillSelect { cursor: pointer; }
+.pillSelect {
+  appearance: none;
+  font: inherit;
+  font-size: 12px;
+  padding-right: 22px;
+  background-image: linear-gradient(45deg, transparent 50%, currentColor 50%), linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position: calc(100% - 11px) 55%, calc(100% - 7px) 55%;
+  background-size: 4px 4px;
+  background-repeat: no-repeat;
+}
+.pillSelect:hover { border-color: var(--border); color: var(--text); }
+
+.options { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 2px; }
+.option { min-height: 28px; padding: 3px 12px; border: 1px solid var(--border); border-radius: 999px; background: transparent; color: var(--text); font-size: 12px; cursor: pointer; text-align: left; }
+.option:hover:not(:disabled) { border-color: var(--accent); color: var(--accent-text, var(--accent)); }
+.option:disabled { opacity: 0.6; cursor: default; }
+
+.option[aria-pressed="true"] { border-color: var(--accent); color: var(--accent-text, var(--accent)); }

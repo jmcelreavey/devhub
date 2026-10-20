@@ -161,6 +161,8 @@ export interface RepoTaskPreview {
   id: string;
   text: string;
   jiraKey?: string;
+  status?: string;
+  needsYou?: boolean;
 }
 
 /** Which local repos the /repos grid is narrowed to; null shows all of them. */

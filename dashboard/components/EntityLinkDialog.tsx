@@ -443,6 +443,9 @@ export interface EntityLinkDialogProps {
   title?: string;
   description?: string;
   defaultKind?: EntityKind;
+  allowedKinds?: readonly PickerKind[];
+  multiple?: boolean;
+  requireExplicitDismissal?: boolean;
   /** When linking from a task row, omit that task so it cannot link to itself. */
   excludeTaskId?: string;
   /** Skip these on add — already linked to the source entity. */
@@ -456,6 +459,9 @@ export function EntityLinkDialog({
   title = "Link to…",
   description = "Link a calendar event, PR, note, diagram, repo, Jira issue, or task.",
   defaultKind = "calendar",
+  allowedKinds = KIND_ORDER,
+  multiple = true,
+  requireExplicitDismissal = false,
   excludeTaskId,
   existing,
 }: EntityLinkDialogProps) {
@@ -465,6 +471,7 @@ export function EntityLinkDialog({
   }, [open]);
 
   if (!open) return null;
+  const kinds = allowedKinds.length > 0 ? allowedKinds : KIND_ORDER;
 
   return (
     <EntityLinkDialogSession
@@ -472,7 +479,10 @@ export function EntityLinkDialog({
       onSave={onSave}
       title={title}
       description={description}
-      defaultKind={isPickerKind(defaultKind) ? defaultKind : "calendar"}
+      defaultKind={isPickerKind(defaultKind) && kinds.includes(defaultKind) ? defaultKind : kinds[0]}
+      allowedKinds={kinds}
+      multiple={multiple}
+      requireExplicitDismissal={requireExplicitDismissal}
       excludeTaskId={excludeTaskId}
       existing={existing}
     />
@@ -485,6 +495,9 @@ function EntityLinkDialogSession({
   title,
   description,
   defaultKind,
+  allowedKinds,
+  multiple,
+  requireExplicitDismissal,
   excludeTaskId,
   existing,
 }: {
@@ -493,6 +506,9 @@ function EntityLinkDialogSession({
   title: string;
   description: string;
   defaultKind: PickerKind;
+  allowedKinds: readonly PickerKind[];
+  multiple: boolean;
+  requireExplicitDismissal: boolean;
   excludeTaskId?: string;
   existing?: EntityRef[];
 }) {
@@ -523,9 +539,8 @@ function EntityLinkDialogSession({
   const settled = data !== undefined || !!loadError;
   const loading = !settled || (isLoading && data === undefined);
 
-  // The paste field is the escape hatch: show it whenever the picker can't
-  // offer what the user is after.
-  const showPasteField = !!loadError || unconfigured || filtered.length === 0;
+  // Jira's cached list isn't exhaustive, so allow a key even when rows are shown.
+  const showPasteField = kind === "jira" || !!loadError || unconfigured || filtered.length === 0;
   const showPicker = !loading && !loadError && !unconfigured && rows.length > 0;
 
   const notice = loadError
@@ -591,7 +606,11 @@ function EntityLinkDialogSession({
   };
 
   const toggleRow = (id: string, shiftKey: boolean) => {
-    if (shiftKey && lastAnchorRef.current) {
+    setPasteValue("");
+    if (!multiple) {
+      setSelectedIds((prev) => prev.includes(id) ? [] : [id]);
+      lastAnchorRef.current = id;
+    } else if (shiftKey && lastAnchorRef.current) {
       const range = idsInRange(
         filtered.map((r) => r.id),
         lastAnchorRef.current,
@@ -622,6 +641,8 @@ function EntityLinkDialogSession({
       onClose={close}
       title={title}
       description={description}
+      dismissOnBackdrop={!requireExplicitDismissal}
+      dismissOnEscape={!requireExplicitDismissal}
       maxWidth="max-w-lg"
       footer={
         <div className="entity-link-dialog-actions">
@@ -640,8 +661,8 @@ function EntityLinkDialogSession({
       }
     >
       <div className="entity-link-dialog-body">
-        <div className="entity-link-kinds" role="tablist" aria-label="Link type">
-          {KIND_ORDER.map((k) => (
+        {allowedKinds.length > 1 ? <div className="entity-link-kinds" role="tablist" aria-label="Link type">
+          {allowedKinds.map((k) => (
             <button
               key={k}
               type="button"
@@ -654,7 +675,7 @@ function EntityLinkDialogSession({
               {KIND_CONFIG[k].label}
             </button>
           ))}
-        </div>
+        </div> : null}
 
         {loading ? <PickerSkeleton label={config.loadingText} /> : null}
 
@@ -676,6 +697,7 @@ function EntityLinkDialogSession({
             onSubmit={() => void save()}
             selectedLabel={selectedLabel}
             busy={busy}
+            multiple={multiple}
           />
         ) : null}
 
@@ -691,6 +713,8 @@ function EntityLinkDialogSession({
               value={pasteValue}
               onChange={(e) => {
                 setPasteValue(e.target.value);
+                setSelectedIds([]);
+                setActiveId("");
                 setError(null);
               }}
               onKeyDown={(e) => {
@@ -750,6 +774,7 @@ function PickerBlock({
   onSubmit,
   selectedLabel,
   busy,
+  multiple,
 }: {
   searchId: string;
   config: KindConfig<unknown>;
@@ -764,6 +789,7 @@ function PickerBlock({
   onSubmit: () => void;
   selectedLabel: string | null;
   busy: boolean;
+  multiple: boolean;
 }) {
   const listId = useId();
   const activeIndex = rows.findIndex((r) => r.id === activeId);
@@ -822,13 +848,13 @@ function PickerBlock({
         </p>
       ) : (
         <>
-          <p className="entity-link-hint">{config.hint}</p>
+          <p className="entity-link-hint">{multiple ? config.hint : "Select one item, then Add link."}</p>
           <ul
             id={listId}
             className="entity-link-cal-list"
             role="listbox"
             aria-label={config.searchLabel}
-            aria-multiselectable="true"
+            aria-multiselectable={multiple}
           >
             {rows.map((row, i) => {
               const isSelected = selected.has(row.id);

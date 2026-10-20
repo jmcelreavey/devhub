@@ -37,3 +37,11 @@ it("preserves the legacy successful transition response after confirmation", asy
   expect(response?.ok).toBe(true);
   expect(await response?.json()).toEqual({ key: "APP-1", ok: true });
 });
+
+it("tells the server a person clicked, and keeps the caller's other headers", async () => {
+  vi.mocked(fetch).mockResolvedValueOnce(Response.json({ ok: true }));
+  await integrationFetch("/api/jira/ticket/APP-1/transition", { method: "POST", headers: { "Content-Type": "application/json" } });
+  const headers = new Headers(vi.mocked(fetch).mock.calls[0][1]!.headers);
+  expect(headers.get("x-devhub-intent")).toBe("direct");
+  expect(headers.get("content-type")).toBe("application/json");
+});

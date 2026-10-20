@@ -65,6 +65,13 @@ describe("conventions prefs", () => {
     expect(readConventionsPrefs().model).toBe("grok-4.6");
   });
 
+  it("keeps a known effort and drops anything else", async () => {
+    await saveConventionsPrefs({ effort: "high" });
+    expect(readConventionsPrefs().effort).toBe("high");
+    await saveConventionsPrefs({ effort: "not a level" });
+    expect(readConventionsPrefs().effort).toBe("");
+  });
+
   it("ignores a corrupt or wrong-version file", () => {
     const file = conventionsPrefsFilePath();
     fs.mkdirSync(path.dirname(file), { recursive: true });

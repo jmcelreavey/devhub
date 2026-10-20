@@ -8,10 +8,10 @@ import { QuickActionsMenu, type QuickMenuAction } from "@/components/shell/Quick
  * separate icons without crowding, so they collapse into one overflow menu.
  */
 const ACTIONS: QuickMenuAction[] = [
-  { id: "notes", label: "Notes", icon: <FolderOpen size={14} />, event: "devhub:notes-toggle" },
-  { id: "tasks", label: "Tasks", icon: <ListTodo size={14} />, event: "devhub:tasks-toggle" },
-  { id: "diagrams", label: "Diagrams", icon: <PenTool size={14} />, event: "devhub:diagrams-toggle" },
-  { id: "terminal", label: "Terminal", icon: <TerminalSquare size={14} />, event: "devhub:terminal-toggle" },
+  { id: "notes", label: "Notes", section: "Panels", icon: <FolderOpen size={14} />, event: "devhub:notes-toggle" },
+  { id: "tasks", label: "Tasks", section: "Panels", icon: <ListTodo size={14} />, event: "devhub:tasks-toggle" },
+  { id: "diagrams", label: "Diagrams", section: "Panels", icon: <PenTool size={14} />, event: "devhub:diagrams-toggle" },
+  { id: "terminal", label: "Terminal", section: "Workspace", icon: <TerminalSquare size={14} />, event: "devhub:terminal-toggle" },
 ];
 
 export function MobileQuickActionsMenu() {

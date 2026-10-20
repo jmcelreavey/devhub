@@ -12,10 +12,12 @@ import { mergeEntityRefs } from "@/lib/entity-note";
 import { useToast } from "@/lib/hooks/use-toast";
 import { HoverTip } from "@/components/ui/HoverTip";
 import { EntityLinkDialog } from "@/components/EntityLinkDialog";
+import { profileHeaders } from "@/lib/tasks/profile-scope";
 
 export function TaskLinkButton({
   taskId,
   date,
+  profile,
   existing,
   onChanged,
   open: openProp,
@@ -25,6 +27,7 @@ export function TaskLinkButton({
 }: {
   taskId: string;
   date: string;
+  profile?: string;
   existing?: EntityRef[];
   onChanged?: (links: EntityRef[]) => void;
   open?: boolean;
@@ -70,7 +73,7 @@ export function TaskLinkButton({
           const next = mergeEntityRefs(existing ?? [], refs);
           const res = await fetch("/api/tasks", {
             method: "PATCH",
-            headers: { "Content-Type": "application/json" },
+            headers: { "Content-Type": "application/json", ...profileHeaders(profile) },
             body: JSON.stringify({ id: taskId, date, links: next }),
           });
           if (!res.ok) throw new Error(await res.text());

@@ -10,7 +10,7 @@ export const WorkflowSchema = z.object({
   stage: z.enum(WORKFLOW_STAGES),
   status: z.enum(["active", "waiting-user", "blocked", "paused", "complete", "abandoned"]),
   checks: z.array(z.object({
-    id: text, runId: text, fingerprint: text, command: text, startedAt: timestamp,
+    id: text, runId: text, cwd: text.optional(), fingerprint: text, command: text, startedAt: timestamp,
     finishedAt: timestamp.optional(), exitCode: z.number().int().nullable(),
     executionStarted: z.boolean().optional(), stale: z.boolean().optional(),
     outcome: z.enum(["running", "passed", "failed", "interrupted"]), detail: text.optional(),

@@ -2,6 +2,8 @@
 export {
   NOTES_ASSETS_API_PREFIX,
   imageMarkdownLine,
+  isExternalMediaUrl,
+  isVideoMediaPath,
   normalizeNoteAssetRelPath,
   parseImageMarkdownLine,
   toNoteAssetApiUrl,
@@ -10,9 +12,11 @@ export {
 
 export {
   ALLOWED_NOTE_ASSET_EXTENSIONS,
+  IMPORT_LOCAL_ASSET_MAX_BYTES,
   assertNoteAssetRelPath,
   contentTypeForAssetExtension,
   contentTypeForAssetPath,
+  importLocalAsset,
   isAllowedNoteAssetExtension,
   readNoteAssetBytes,
   resolveNoteAssetUnderRoot,

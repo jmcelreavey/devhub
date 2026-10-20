@@ -89,6 +89,7 @@ export function CalendarEventRow({
     [
       {
         id: "event",
+        label: "Open",
         items: [
           {
             id: "note",
@@ -116,13 +117,17 @@ export function CalendarEventRow({
                 },
               ]
             : []),
-          {
+        ],
+      },
+      {
+        id: "copy",
+        label: "Copy",
+        items: [{
             id: "copy",
             label: "Copy event",
             icon: <Copy size={12} />,
             onSelect: () => void copyTextAndToast(copyEventText(event), "event", toast),
-          },
-        ],
+        }],
       },
     ],
     tagsGroup,

@@ -1,4 +1,6 @@
 import { getLogoBootstrapInlineScript } from "@/lib/brand-mark";
+import { configuredJiraDomain } from "@/lib/jira/env";
+import { jiraDomainBootstrapScript } from "@/lib/utils";
 import { RuntimeBrandProvider } from "@/components/shell/RuntimeBrandProvider";
 import {
 DEFAULT_THEME_MODE_SETTING,
@@ -132,6 +134,7 @@ export const viewport: Viewport = {
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  const jiraDomainScript = jiraDomainBootstrapScript(configuredJiraDomain());
   return (
     <html
       lang="en"
@@ -152,6 +155,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         */}
         <script dangerouslySetInnerHTML={{ __html: getThemeBootstrapInlineScript() }} />
         <script dangerouslySetInnerHTML={{ __html: getLogoBootstrapInlineScript() }} />
+        <script dangerouslySetInnerHTML={{ __html: jiraDomainScript }} />
         <link rel="manifest" href="/manifest.webmanifest" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
       </head>

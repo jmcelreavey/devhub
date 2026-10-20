@@ -1,5 +1,5 @@
 import { AgentDispatchError,dispatchAgentRun } from "@/lib/agent-runs/dispatch";
-import { listAgentRuns,toAgentRunSummary } from "@/lib/agent-runs/store";
+import { isCapacityRun,listAgentRuns,toAgentRunSummary } from "@/lib/agent-runs/store";
 import { reconcileManagedRun } from "@/lib/paseo/lifecycle";
 import { ensureConventionsFresh } from "@/lib/conventions/fresh";
 import { parseGithubPrUrl } from "@/lib/entity-links/parse-pr";
@@ -8,6 +8,7 @@ import { getTasks, ensureTasksMigrated } from "@/lib/tasks/storage";
 import { listPaseoProviders } from "@/lib/paseo/providers";
 import { NextRequest,NextResponse } from "next/server";
 import { z } from "zod";
+import { MODEL_TIERS } from "@/lib/storyboard/model-tiers-shared";
 
 export const dynamic = "force-dynamic";
 
@@ -17,7 +18,7 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   if (!auth.ok) return auth.response;
   const search = new URL(req.url).searchParams;
   const all = listAgentRuns(Number.MAX_SAFE_INTEGER);
-  if (search.get("summary") === "1") return NextResponse.json({ needsAttention: all.filter(run => run.status.state === "needs-attention").length, activeCount: all.filter(run => ["queued", "starting", "running", "needs-attention"].includes(run.status.state)).length });
+  if (search.get("summary") === "1") return NextResponse.json({ needsAttention: all.filter(run => run.status.state === "needs-attention").length, activeCount: all.filter(isCapacityRun).length });
   const raw = Number(search.get("limit") ?? 20);
   const limit = Number.isFinite(raw) ? Math.min(Math.max(Math.trunc(raw), 1), 2000) : 20;
   const scope = search.get("scope");
@@ -49,6 +50,9 @@ const DispatchSchema = z.object({
   cwd: z.string().trim().min(1, "cwd is required").max(1_000),
   title: z.string().trim().max(80).optional(),
   model: z.string().trim().max(120).optional(),
+  /** Model tier picked in the launch sheet; logged on the task run. */
+  tier: z.enum(MODEL_TIERS).optional(),
+  effort: z.string().trim().max(32).regex(/^([A-Za-z0-9][A-Za-z0-9_-]{0,31})?$/).optional(),
   worktree: z.boolean().optional(),
   taskId: z.string().min(1).max(100).optional(),
   taskDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
@@ -61,6 +65,8 @@ const DispatchSchema = z.object({
   resumeSessionId: z.string().max(200).optional(),
   maxTurns: z.number().int().min(1).max(500).optional(),
   depth: z.number().int().min(0).max(20).default(0),
+  /** Launch sheet only. MCP callers omit this and wait for the agent to exist. */
+  defer: z.boolean().optional(),
 });
 
 /** Dispatch directly into Paseo. Navigation belongs to the initiating window. */
@@ -70,7 +76,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   const parsed = await parseBody(req, DispatchSchema);
   if (!parsed.ok) return parsed.response;
   try {
-    const { taskId, taskDate, action, repoName, notePath, prUrl, headSha, ...input } = parsed.data;
+    const { taskId, taskDate, action, repoName, notePath, prUrl, headSha, defer, ...input } = parsed.data;
     await ensureTasksMigrated();
     if (taskId && (!taskDate || !getTasks(taskDate).some((task) => task.id === taskId))) {
       return NextResponse.json({ error: "The linked task could not be found." }, { status: 404 });
@@ -82,11 +88,11 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
       const repoRef = (prUrl && parseGithubPrUrl(prUrl)?.repo) || repoName;
       if (repoRef) void ensureConventionsFresh(repoRef, { trigger: action }).catch(() => undefined);
     }
-    const run = await dispatchAgentRun({ ...input, activity: { source: "interactive", action: action ?? "agent", taskId, taskDate, repoName, notePath, prUrl, headSha } });
+    const run = await dispatchAgentRun({ ...input, activity: { source: "interactive", action: action ?? "agent", taskId, taskDate, repoName, notePath, prUrl, headSha } }, { defer: defer === true });
     return NextResponse.json({ run: toAgentRunSummary(run) }, { status: 201 });
   } catch (err) {
     if (err instanceof AgentDispatchError) {
-      return NextResponse.json({ error: err.message }, { status: err.status });
+      return NextResponse.json({ error: err.message, code: err.code }, { status: err.status });
     }
     throw err;
   }

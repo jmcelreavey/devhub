@@ -12,6 +12,7 @@ const ResumeSchema = z.object({
   origin: z.string().url().max(500).optional(),
   provider: z.string().trim().min(1).max(64).optional(),
   model: z.string().trim().max(120).optional(),
+  effort: z.string().trim().max(32).regex(/^([A-Za-z0-9][A-Za-z0-9_-]{0,31})?$/).optional(),
   cwd: z.string().trim().min(1).max(1_000).optional(),
   repoName: z.string().trim().min(1).max(300).optional(),
 });

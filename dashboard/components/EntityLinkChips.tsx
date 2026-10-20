@@ -1,5 +1,5 @@
 "use client";
-import { integrationFetch } from "@/lib/integrations/client-fetch";
+import { useJiraTransition } from "@/lib/hooks/use-jira-transition";
 
 /**
  * Compact hop-around chips for cards (tasks, calendar, PRs).
@@ -37,6 +37,7 @@ import {
 import { ContextMenu, useContextMenu, type ContextMenuGroup } from "@/components/shell/ContextMenu";
 import { useTagMenuGroup } from "@/lib/hooks/use-tag-menu";
 import { buildEntityRefMenuGroups } from "@/lib/entity-ref-menu";
+import { openInBrowser } from "@/lib/desktop/bridge";
 import { repoLinkMatches } from "@/lib/repos/repo-link-match";
 import { JiraTransitionModal } from "@/components/jira/JiraTransitionModal";
 import { copyTextAndToast } from "@/lib/pr-slack";
@@ -296,6 +297,7 @@ export function EntityLinkChips({
   const [removing, setRemoving] = useState<string | null>(null);
   const router = useRouter();
   const toast = useToast();
+  const move = useJiraTransition();
   const [jiraStateKey, setJiraStateKey] = useState<string | null>(null);
   const chipMenu = useContextMenu<EntityRef>();
   const chipTarget = chipMenu.target;
@@ -393,7 +395,7 @@ export function EntityLinkChips({
     const dest = ref.href ?? defaultHrefForRef(ref);
     if (!dest) return;
     if (/^https?:\/\//i.test(dest)) {
-      window.open(dest, "_blank", "noopener,noreferrer");
+      void openInBrowser(dest);
     } else {
       router.push(dest);
     }
@@ -505,22 +507,10 @@ export function EntityLinkChips({
       title="Update Jira status"
       skipLabel="Cancel"
       onCancel={() => setJiraStateKey(null)}
-      onConfirm={async (transitionId) => {
+      onConfirm={(transitionId, to) => {
         const key = jiraStateKey;
         setJiraStateKey(null);
-        if (!transitionId || !key) return;
-        try {
-          const res = await integrationFetch(`/api/jira/ticket/${key}/transition`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ transitionId }),
-          });
-          if (!res) return;
-          if (!res.ok) throw new Error("Transition failed");
-          toast.success(`Updated ${key}`);
-        } catch {
-          toast.error(`Couldn't transition ${key}`);
-        }
+        if (transitionId && key) void move(key, { transitionId }, { to });
       }}
     />
     </>

@@ -309,7 +309,7 @@ export function ContentSyncIndicator() {
         toast.error(body?.error ?? "Couldn't start the rebuild.");
         return;
       }
-      toast.success("Pull and rebuild started. Progress is on System → Maintenance.");
+      toast.success("Pull and rebuild started. Progress is on Settings → Maintenance.");
       window.location.assign("/status?tab=maintenance");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Couldn't start the rebuild.");

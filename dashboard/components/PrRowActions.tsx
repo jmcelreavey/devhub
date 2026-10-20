@@ -58,6 +58,20 @@ function copyUrlItems(
   return items;
 }
 
+function groupPrActions(items: ContextMenuItem[]): ContextMenuGroup[] {
+  const sections = [
+    { id: "review", label: "Review", ids: ["daily-rep-first", "agent-review", "investigate-pipeline"] },
+    { id: "open", label: "Open", ids: ["github", "cursor", "note"] },
+    { id: "share", label: "Copy and share", ids: ["copy-approved", "copy-reviewed", "copy-pr-url", "copy-jira-url", "slack-request"] },
+    { id: "visibility", label: "Visibility", ids: ["skip-pr"] },
+  ];
+  return sections.map(({ id, label, ids }) => ({
+    id,
+    label,
+    items: items.filter((item) => ids.includes(item.id)),
+  })).filter((group) => group.items.length > 0);
+}
+
 export function buildPrRowMenuGroups({
   row,
   kind,
@@ -178,15 +192,11 @@ export function buildPrRowMenuGroups({
   };
 
 
-  const failing = row.checks === "failing";
   const investigatePipeline = {
     id: "investigate-pipeline",
     label: "Investigate pipeline",
-    description: failing
-      ? "CI failing — dig into checks, classify flake vs real, fix on confirm"
-      : "Pull checks/logs, classify flake vs real, fix on confirm",
+    description: "Inspect CI checks; confirm before fixing",
     icon: <Wrench size={12} />,
-    danger: failing,
     onSelect: async () => {
       const note = watchPath || notePath;
       await launchAgentJob({
@@ -207,74 +217,59 @@ export function buildPrRowMenuGroups({
 
   if (kind === "authored") {
     return withTagsGroup(
-      [
+      groupPrActions([
+        openGithub,
+        ...copyUrlItems(row, toast),
+        openCursor,
+        agentReview,
+        investigatePipeline,
         {
-          id: "authored",
-          items: [
-            openGithub,
-            ...copyUrlItems(row, toast),
-            openCursor,
-            agentReview,
-            investigatePipeline,
-            {
-              id: "slack-request",
-              label: "Copy Slack request",
-              icon: <MessageSquare size={12} />,
-              onSelect: () => void copyTextAndToast(buildSlackMessage(row, "awaiting"), "Slack message", toast),
-            },
-            noteItem,
-            skipPr,
-          ],
+          id: "slack-request",
+          label: "Copy Slack request",
+          icon: <MessageSquare size={12} />,
+          onSelect: () => void copyTextAndToast(buildSlackMessage(row, "awaiting"), "Slack message", toast),
         },
-      ],
+        noteItem,
+        skipPr,
+      ]),
       tagsGroup,
     );
   }
 
   if (kind === "reviews") {
     return withTagsGroup(
-      [
-        {
-          id: "reviews",
-          items: [
-            repLocked ? repFirst : agentReview,
-            investigatePipeline,
-            openCursor,
-            openGithub,
-            ...copyUrlItems(row, toast),
-            noteItem,
-            skipPr,
-          ],
-        },
-      ],
+      groupPrActions([
+        repLocked ? repFirst : agentReview,
+        investigatePipeline,
+        openCursor,
+        openGithub,
+        ...copyUrlItems(row, toast),
+        noteItem,
+        skipPr,
+      ]),
       tagsGroup,
     );
   }
 
   return withTagsGroup(
-    [
+    groupPrActions([
       {
-        id: "reviewed",
-        items: [
-          {
-            id: "copy-approved",
-            label: "Copy approved",
-            icon: <CircleCheck size={12} />,
-            onSelect: () =>
-              void copyTextAndToast(buildSlackMessage(row, "reviewed-approved"), "Slack message", toast),
-          },
-          {
-            id: "copy-reviewed",
-            label: "Copy reviewed",
-            icon: <MessageSquare size={12} />,
-            onSelect: () => void copyTextAndToast(buildSlackMessage(row, "reviewed"), "Slack message", toast),
-          },
-          openCursor,
-          openGithub,
-          ...copyUrlItems(row, toast),
-        ],
+        id: "copy-approved",
+        label: "Copy approved",
+        icon: <CircleCheck size={12} />,
+        onSelect: () =>
+          void copyTextAndToast(buildSlackMessage(row, "reviewed-approved"), "Slack message", toast),
       },
-    ],
+      {
+        id: "copy-reviewed",
+        label: "Copy reviewed",
+        icon: <MessageSquare size={12} />,
+        onSelect: () => void copyTextAndToast(buildSlackMessage(row, "reviewed"), "Slack message", toast),
+      },
+      openCursor,
+      openGithub,
+      ...copyUrlItems(row, toast),
+    ]),
     tagsGroup,
   );
 }

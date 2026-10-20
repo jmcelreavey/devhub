@@ -36,7 +36,7 @@ export interface PluginNavItem {
   gate?: string;
   desktopOnly?: boolean;
   shortcut?: string;
-  /** When set, also appears in that section's top-bar tabs (Library / System / Infrastructure). */
+  /** When set, also appears in that section's top-bar tabs (Library / Settings / Tools). */
   section?: "library" | "system" | "infra";
 }
 

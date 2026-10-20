@@ -47,7 +47,7 @@ const hollowEffects = [
   effect("creatures", "Creatures", "Watching eyes, spiders and a shadow in the fog.", "Atmosphere"),
   effect("rareEvents", "Rare events", "A passing presence every few minutes.", "Extras", "off", true, ["atmosphere", "creatures"]),
   effect("interaction", "Interaction", "Cobweb sway, cracks and a heading glitch.", "Feedback", "static"),
-  effect("loader", "Haunted mark", "A candlelit arch while content arrives.", "Feedback", "static"),
+  effect("loader", "Haunted mark", "The Halloween Shift Dock while content arrives.", "Feedback", "static"),
   effect("celebrations", "Sealed & settled", "A spectral seal for a completed task or merged PR.", "Feedback"),
   effect("cursor", "Spectral follower", "A spectral trail; steps aside while you type.", "Pointer"),
   effect("jumpScares", "Jump scares", "Opt in, then type boo outside a text field.", "Extras", "off", false),

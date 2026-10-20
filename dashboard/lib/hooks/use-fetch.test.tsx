@@ -65,6 +65,19 @@ describe("useLive panel pausing", () => {
     );
     await waitFor(() => expect(fetchSpy).toHaveBeenCalled());
   });
+
+  it("honours a caller's validating fetcher", async () => {
+    const fetcher = vi.fn(async () => ({ ok: true }));
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    function CustomProbe() {
+      const { data } = useLive<{ ok: boolean }>("/api/validated", { fetcher });
+      return <span>{data?.ok ? "validated" : "waiting"}</span>;
+    }
+    render(<SWRConfig value={{ provider: () => new Map() }}><CustomProbe /></SWRConfig>);
+    await waitFor(() => expect(screen.getByText("validated")).toBeTruthy());
+    expect(fetcher).toHaveBeenCalledWith("/api/validated");
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
 });
 
 describe("defaultFetcher", () => {
