@@ -113,7 +113,8 @@ describe("ready for review progress message", () => {
     const text = JSON.stringify(message.blocks);
     expect(text).toContain("PR ready for `app` - PTF-1 Match header colours");
     expect(text).toContain("PR: <https://github.com/acme/app/pull/9|app#9>");
-    expect(text).toMatch(/JIRA: <https:\/\/[^|>]+\/browse\/PTF-1\|PTF-1>/);
+    // Linked when a Jira site is configured; a bare DevHub path otherwise.
+    expect(text).toMatch(/JIRA: (?:<https:\/\/[^|>]+\/browse\/PTF-1\|PTF-1>|\S*PTF-1\S*)/);
     expect(text).toContain("JIRA: ");
     expect(message.blocks?.some((block) => block.type === "actions")).toBe(true);
   });

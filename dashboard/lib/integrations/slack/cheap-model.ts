@@ -6,7 +6,7 @@ export type CheapModelResult =
   | { ok: true; text: string; label: string }
   | { ok: false; reason: "no-cheap-tier" | "failed" };
 
-export interface CheapModelRequest { system: string; prompt: string; maxOutputTokens?: number; signal?: AbortSignal }
+export interface CheapModelRequest { system: string; prompt: string; maxOutputTokens?: number; signal?: AbortSignal; timeoutMs?: number }
 export type CheapModel = (request: CheapModelRequest) => Promise<CheapModelResult>;
 export type TierModel = (tier: ModelTier, request: CheapModelRequest) => Promise<CheapModelResult>;
 
@@ -20,21 +20,22 @@ export function configuredAnswerTiers(): ModelTier[] {
 }
 
 /** One-shot text only, pinned to the selected tier. No provider or model fallback. */
-export const runTierModel: TierModel = async (tier, { system, prompt, maxOutputTokens = 700, signal }) => {
+export const runTierModel: TierModel = async (tier, { system, prompt, maxOutputTokens = 700, signal, timeoutMs }) => {
   const { provider, model, effort } = readModelTiers().tiers[tier];
   const prefer = provider && model ? normalizeAiProvider(provider) : null;
   if (!prefer) return { ok: false, reason: "no-cheap-tier" };
-  const timeout = tier === "cheap" ? 45_000 : 180_000;
+  const timeout = timeoutMs ?? (tier === "cheap" ? 45_000 : 180_000);
+  const deadline = AbortSignal.timeout(timeout);
   try {
     const result = await generateAiText({
       system, prompt, maxOutputTokens, timeoutMs: timeout, idleTimeoutMs: timeout,
-      abortSignal: AbortSignal.any([AbortSignal.timeout(timeout), ...(signal ? [signal] : [])]),
+      abortSignal: AbortSignal.any([deadline, ...(signal ? [signal] : [])]),
       prefer, fallback: false, model, ...(effort ? { effort } : {}),
     });
     return { ok: true, text: result.text.slice(0, 6000), label: `${provider} · ${model}` };
   } catch (error) {
     // Callers fall back to a canned reply, so this is the only trace of why the answer model failed.
-    console.warn(`[slack] ${tier} answer model (${provider} · ${model}) failed: ${error instanceof Error ? error.message : String(error)}`);
+    console.warn(`[slack] ${tier} answer model (${provider} · ${model}) failed: ${deadline.aborted ? `timed out after ${timeout / 1000}s (queue wait counts)` : error instanceof Error ? error.message : String(error)}`);
     return { ok: false, reason: "failed" };
   }
 };

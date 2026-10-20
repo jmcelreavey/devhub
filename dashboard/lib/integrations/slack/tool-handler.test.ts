@@ -996,6 +996,7 @@ describe("meetings", () => {
   const loadCalendar = async () => ({ state: "ok" as const, events });
 
   it("meetings tomorrow lists that day in London time, free", async () => {
+    vi.stubEnv("DEVHUB_TIMEZONE", "Europe/London");
     const { router, call, jev } = build([], { loadCalendar, now });
     const [card] = await router.handle("meetings tomorrow", context);
     expect(text(card)).toContain("Retro");
@@ -1003,6 +1004,7 @@ describe("meetings", () => {
     expect(text(card)).not.toContain("Standup");
     expect(call).not.toHaveBeenCalled();
     expect(jev).not.toHaveBeenCalled();
+    vi.unstubAllEnvs();
   });
 
   it("next meeting shows how long is left, with a Join button as its one action", async () => {
