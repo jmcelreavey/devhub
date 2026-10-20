@@ -290,7 +290,8 @@ async function captureOnce(
       // detached gives the CLI its own process group so the whole tree can be
       // signalled. Killing just the direct child leaves grandchildren holding
       // the stdout pipe open, and "close" then never fires.
-      const child = spawn(bin, args, { env: runEnv(), cwd, detached: true });
+      // Prompts go in args; an open stdin pipe makes `codex exec` wait for EOF until the timeout kills it.
+      const child = spawn(bin, args, { env: runEnv(), cwd, detached: true, stdio: ["ignore", "pipe", "pipe"] });
       let out = "";
       let errText = "";
       let bytes = 0;
@@ -513,6 +514,8 @@ export async function generateTextViaCli(
   }
   const codexArgs = [
     "exec",
+    // One-shot text: the cwd is only a fallback (checkout → notes → $HOME), so don't refuse outside a trusted repo.
+    "--skip-git-repo-check",
     ...cliEffortArgs("codex", opts?.effort),
     ...(modelOverride ? ["--model", modelOverride] : []),
     prompt,

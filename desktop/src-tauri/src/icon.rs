@@ -15,6 +15,12 @@ use tauri::{AppHandle, Manager};
 /// actually mean default.
 const DEFAULT_ICON_PNG: &[u8] = include_bytes!("../icons/icon.png");
 const HALLOWEEN_ICON_PNG: &[u8] = include_bytes!("../icons/halloween/icon.png");
+/// Hollow's Dock image, pre-drawn by macOS with the same rounded tile, margins
+/// and shadow it gives the bundle icon. `setApplicationIconImage` draws a PNG
+/// as is, so the full-bleed `icon.png` showed as a hard square.
+/// Regenerate with `npm run icons:pwa --prefix dashboard` on a Mac.
+#[cfg(target_os = "macos")]
+const HALLOWEEN_DOCK_PNG: &[u8] = include_bytes!("../icons/halloween/dock.png");
 
 const PNG_MAGIC: &[u8] = b"\x89PNG\r\n\x1a\n";
 const MAX_PNG_BYTES: usize = 2 * 1024 * 1024;
@@ -125,7 +131,8 @@ fn apply_kind(app: &AppHandle, _kind: &DesktopIconKind, png: &[u8]) -> Result<()
     #[cfg(target_os = "macos")]
     match _kind {
         DesktopIconKind::Default => reset_macos_dock_to_bundle()?,
-        DesktopIconKind::Plugin | DesktopIconKind::Halloween => set_macos_dock_icon(png)?,
+        DesktopIconKind::Halloween => set_macos_dock_icon(HALLOWEEN_DOCK_PNG)?,
+        DesktopIconKind::Plugin => set_macos_dock_icon(png)?,
     }
     crate::tray::set_icon(app, matches!(_kind, DesktopIconKind::Halloween), png)?;
     Ok(())
@@ -164,6 +171,15 @@ mod tests {
         assert!(validate_png(DEFAULT_ICON_PNG).is_ok());
         assert!(validate_png(HALLOWEEN_ICON_PNG).is_ok());
         assert!(Image::from_bytes(HALLOWEEN_ICON_PNG).is_ok());
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn halloween_dock_png_is_a_tile_with_transparent_margins() {
+        assert!(validate_png(HALLOWEEN_DOCK_PNG).is_ok());
+        let image = Image::from_bytes(HALLOWEEN_DOCK_PNG).unwrap();
+        // RGBA; the top-left corner sits outside the rounded tile.
+        assert_eq!(image.rgba()[3], 0);
     }
 
     #[test]

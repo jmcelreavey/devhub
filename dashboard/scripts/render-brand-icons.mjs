@@ -27,6 +27,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
+import { spawnSync } from "node:child_process";
 
 const require = createRequire(import.meta.url);
 const sharp = require(process.env.SHARP_MODULE || "sharp");
@@ -145,8 +146,9 @@ function tileSvg(size, markScale, halloween = false) {
   const hubY = size / 2;
   const glowR = size * 0.42;
   if (halloween) {
-    // Flat tile: solid colour, no glow behind the pumpkin.
-    return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" ${A11Y}<rect width="${size}" height="${size}" fill="${p.bg}"/><g transform="translate(${size / 2} ${size / 2}) scale(${u.toFixed(5)}) translate(-32 -32)">${markBody(p, { halloween })}</g></svg>\n`;
+    // Same charcoal tile as the normal app icon, so only the mark changes.
+    // Flat: no glow behind the pumpkin.
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" ${A11Y}<rect width="${size}" height="${size}" fill="${PALETTES.dark.bg}"/><g transform="translate(${size / 2} ${size / 2}) scale(${u.toFixed(5)}) translate(-32 -32)">${markBody(p, { halloween })}</g></svg>\n`;
   }
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" ${A11Y}<defs><radialGradient id="g" gradientUnits="userSpaceOnUse" cx="${hubX.toFixed(2)}" cy="${hubY.toFixed(2)}" r="${glowR.toFixed(2)}"><stop offset="0" stop-color="${p.hub}" stop-opacity="0.24"/><stop offset="1" stop-color="${p.hub}" stop-opacity="0"/></radialGradient></defs><rect width="${size}" height="${size}" fill="${p.bg}"/><rect width="${size}" height="${size}" fill="url(#g)"/><g transform="translate(${size / 2} ${size / 2}) scale(${u.toFixed(5)}) translate(-32 -32)">${markBody(p, { halloween })}</g></svg>\n`;
 }
@@ -313,6 +315,24 @@ async function renderHalloween() {
   writeFile(path.join(dest, "icon.icns"), icnsBuffer(await Promise.all(
     frames.map(async ([type, size]) => ({ type, buffer: await tilePng(size, true) })),
   )));
+  writeDockPng(path.join(dest, "icon.icns"), path.join(dest, "dock.png"));
+}
+
+/**
+ * The runtime Dock image for Hollow. `setApplicationIconImage` draws a PNG as
+ * is, so a full-bleed tile shows as a hard square while the bundle icon gets
+ * macOS's rounded tile, margins and shadow. Ask macOS to draw the icns the way
+ * it draws the bundle icon and ship that, so both tiles match exactly.
+ * macOS only; elsewhere the committed dock.png is left alone.
+ */
+function writeDockPng(icns, out) {
+  if (process.platform !== "darwin") {
+    process.stdout.write("[render-brand-icons] not macOS: kept the committed halloween/dock.png\n");
+    return;
+  }
+  const helper = path.join(path.dirname(fileURLToPath(import.meta.url)), "render-dock-icon.swift");
+  const result = spawnSync("swift", [helper, icns, out], { stdio: "inherit" });
+  if (result.status !== 0) throw new Error("render-dock-icon.swift failed");
 }
 
 async function main() {
