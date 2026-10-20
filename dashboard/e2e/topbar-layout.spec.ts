@@ -89,7 +89,7 @@ test.describe("top bar layout", () => {
       for (const width of [900, 1112, 1312, 1432, 1622, 1920, 2560]) {
         await page.setViewportSize({ width, height: 800 });
         // Profile names deliberately ellipsise; their full name remains in the accessible label.
-        expect((await auditTopbar(page)).filter((issue) => issue.kind !== "clipped" || !issue.detail.startsWith(profile))).toEqual([]);
+        expect((await auditTopbar(page)).filter((issue) => issue.kind !== "clipped" || !issue.detail.toLowerCase().startsWith(profile))).toEqual([]);
       }
     }
   });
