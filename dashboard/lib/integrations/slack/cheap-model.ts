@@ -32,7 +32,11 @@ export const runTierModel: TierModel = async (tier, { system, prompt, maxOutputT
       prefer, fallback: false, model, ...(effort ? { effort } : {}),
     });
     return { ok: true, text: result.text.slice(0, 6000), label: `${provider} · ${model}` };
-  } catch { return { ok: false, reason: "failed" }; }
+  } catch (error) {
+    // Callers fall back to a canned reply, so this is the only trace of why the answer model failed.
+    console.warn(`[slack] ${tier} answer model (${provider} · ${model}) failed: ${error instanceof Error ? error.message : String(error)}`);
+    return { ok: false, reason: "failed" };
+  }
 };
 
 export const runCheapModel: CheapModel = (request) => runTierModel("cheap", request);

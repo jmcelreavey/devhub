@@ -1,0 +1,23 @@
+{
+  "name": "@devhub/qa",
+  "version": "0.1.2",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./browser": "./src/browser.ts"
+  },
+  "files": [
+    "src"
+  ],
+  "engines": {
+    "node": ">=22.14"
+  },
+  "dependencies": {
+    "playwright-core": "1.60.0",
+    "pngjs": "7.0.0"
+  },
+  "devDependencies": {
+    "@types/pngjs": "6.0.5"
+  }
+}
