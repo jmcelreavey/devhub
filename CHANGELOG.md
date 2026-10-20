@@ -2,9 +2,13 @@
 
 User-visible changes, newest first. Versioned sections describe the public releases; Unreleased, when present, is work that has not shipped yet.
 
-## Unreleased
+## 2.2.0 — 2026-10-20
 
 ### Added
+
+- The Slack bot reaches every DevHub, plugin and connected MCP tool, including sub-actions. Plain questions get a short answer, follow-ups in a thread use the earlier messages, and bigger questions can go to a heavier configured model in the background.
+- Alert destinations can announce PR reviews and PRs ready for review in a shared Slack channel, with a link and a tag for you. It's opt-in per destination.
+- The Halloween theme uses a seasonal version of the real DevHub logo, and the desktop app icon follows it.
 
 - Connect a Slack bot from Setup without a public URL. Ask for task status, Needs you, today's tasks or auto progress in one allowlisted channel, scoped to your active profile or `in personal`. Replies use Home's next actions and one Open in DevHub button. Tokens stay masked; setup, test delivery and read-only MCP status are covered by mocked Slack tests.
 
@@ -12,10 +16,17 @@ User-visible changes, newest first. Versioned sections describe the public relea
 
 ### Fixed
 
+- Editing a task title now links `@repo` and Jira keys the same way adding a task does, and **Add link…** in a task's links opens the picker again.
+- The Halloween atmosphere no longer lags while you type.
+- Ready-for-review Slack messages show the PR and Jira as real links.
+
 - Starting a plan no longer says six agents are running when two are. Runs that ended without DevHub hearing about it (an agent closed or deleted in Paseo, an idle agent with no result, a start Paseo never acknowledged) used to sit in "needs attention" for good and use up the limit. DevHub now marks them finished when it reads them, on every check, at startup and again just before it refuses a start. If a start is still refused, the launch sheet lists which agents are holding the limit and lets you clear one DevHub can no longer follow. Clearing doesn't stop anything in Paseo.
 - "Open in Jira" from a parent ticket chip (the ↥ key on My Tickets and task rows) does something again in the desktop app. It was calling `window.open`, which the webview drops silently, and it built the link from a build-time domain rather than your Jira's. Parent chips now carry the real browse URL and open through the system browser. "Open on GitHub" on repo cards, "Open gist" on Shared, and external links in the Links modal and entity chips had the same problem and are fixed too.
 
 ### Changed
+
+- Context menus have an icon on every item and are grouped by what the actions do, with destructive ones last.
+- Storyboard loads like the other pages, and the "older done tasks are hidden" line is gone (the setting still controls it).
 
 - Relicence the public core from MIT to **AGPL-3.0-only**. `LICENSE` is the GNU AGPL v3 text, `package.json` and the selection extension declare `AGPL-3.0-only`, and the README licence section names the copyright and a commercial-contact path via Discussions.
 - Home's My tasks list now puts Running / in-progress work right under Needs action (newest first), then Next / To do, so the collapsed preview shows what is actually moving.
