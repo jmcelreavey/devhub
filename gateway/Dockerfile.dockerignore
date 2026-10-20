@@ -1,0 +1,11 @@
+**
+!gateway/
+!gateway/package.json
+!gateway/package-lock.json
+!gateway/src/
+!gateway/src/**
+!shared/
+!shared/slack-gateway/
+!shared/slack-gateway/**
+gateway/src/*.test.ts
+gateway/src/test-device.ts

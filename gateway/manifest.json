@@ -1,0 +1,14 @@
+{
+  "display_information": { "name": "DevHub", "description": "Your laptop's DevHub, through a shared Slack gateway", "background_color": "#252525" },
+  "features": {
+    "bot_user": { "display_name": "DevHub", "always_online": false },
+    "app_home": { "home_tab_enabled": true, "messages_tab_enabled": true, "messages_tab_read_only_enabled": false },
+    "slash_commands": [{ "command": "/devhub", "description": "Link or unlink your DevHub", "usage_hint": "link CODE | unlink | devices", "should_escape": false }]
+  },
+  "oauth_config": { "scopes": { "bot": ["chat:write", "commands", "users:read", "im:write", "channels:history", "groups:history", "im:history", "app_mentions:read", "reactions:read", "reactions:write", "mpim:write", "mpim:history", "channels:read", "groups:read"] } },
+  "settings": {
+    "socket_mode_enabled": true,
+    "interactivity": { "is_enabled": true },
+    "event_subscriptions": { "bot_events": ["message.channels", "message.groups", "message.im", "app_mention", "reaction_added", "app_home_opened", "message.mpim"] }
+  }
+}
