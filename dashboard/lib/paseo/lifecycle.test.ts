@@ -4,7 +4,8 @@ import type { TaskIndex } from "@/lib/tasks/task-index";
 import type { Task } from "@/lib/tasks/types";
 import type { PaseoAgent } from "@getpaseo/client";
 
-const mock = vi.hoisted(() => ({ setWorkspacePinned: vi.fn(), updateAgentRunStatus: vi.fn() }));
+const mock = vi.hoisted(() => ({ setWorkspacePinned: vi.fn(), updateAgentRunStatus: vi.fn(), readNote: vi.fn() }));
+vi.mock("@/lib/vault/vault-registry", () => ({ getVaultStorage: () => ({ read: mock.readNote }) }));
 vi.mock("./client", () => ({
   paseoUrl: () => "ws://127.0.0.1:6767/ws",
   withPaseo: async (fn: (session: unknown) => Promise<unknown>) => fn({ daemon: { setWorkspacePinned: mock.setWorkspacePinned } }),
@@ -23,6 +24,27 @@ function entry(item: Entry["item"]): Entry {
 const mine = entry({ type: "user_message", text: "do it", clientMessageId: "devhub-run-1" });
 
 describe("paseoTurnOutcome", () => {
+  it("does not mistake a Cursor connection failure after progress for a completed result", () => {
+    const entries = [mine, entry({ type: "assistant_message", text: "I'll review the diff.", messageId: "progress" }),
+      entry({ type: "assistant_message", text: "Error: RetriableError: Connection stalled", messageId: "error" })];
+    expect(paseoTurnOutcome(run, idle, entries)).toMatchObject({ state: "failed", error: "Error: RetriableError: Connection stalled" });
+  });
+
+  it("requires a fresh saved write-up before completing a PR review", () => {
+    const review = { ...run, spec: { ...run.spec, activity: { action: "review", prUrl: "https://github.com/acme/app/pull/1", notePath: "pr-reviews/acme-app-1" } } } as AgentRun;
+    const entries = [mine, entry({ type: "assistant_message", text: "Finished." })];
+    mock.readNote.mockReturnValue(null);
+    expect(paseoTurnOutcome(review, idle, entries)).toMatchObject({ state: "failed", error: expect.stringContaining("not saved") });
+    mock.readNote.mockReturnValue({ content: "Actual review", modified: run.spec.createdAt - 1 });
+    expect(paseoTurnOutcome(review, idle, entries).state).toBe("failed");
+    mock.readNote.mockReturnValue({ content: "# PR title\n\n**PR:** [acme/app#1](https://github.com/acme/app/pull/1)\n\n## Links\n- [Repo](repo:app)\n\n## Review\n- \n\n## Notes\n- \n\n## Follow-ups\n- ", modified: Date.now() });
+    expect(paseoTurnOutcome(review, idle, entries).state).toBe("failed");
+    mock.readNote.mockReturnValue({ content: "# Review\n\nNo blocking findings. Tests pass.", modified: Date.now() });
+    expect(paseoTurnOutcome(review, idle, entries).state).toBe("completed");
+    mock.readNote.mockImplementationOnce(() => { throw new Error("Invalid JSON"); });
+    expect(paseoTurnOutcome(review, idle, entries)).toMatchObject({ state: "failed", error: "The saved PR review note could not be read: Invalid JSON" });
+  });
+
   it("keeps a steered run active and includes the result after its owner note", () => {
     const steered = { ...run, status: { ...run.status, steeringMessageIds: ["note-1"] } };
     const entries = [mine, entry({ type: "assistant_message", text: "Working" }), entry({ type: "user_message", text: "Note from John", clientMessageId: "note-1" }), entry({ type: "assistant_message", text: "Updated result" })];

@@ -22,7 +22,6 @@ DevHub API routes are local endpoints used by the dashboard UI. They are not int
 | Appraisal                  | Self-review year files, evidence suggestions, goal status                                                                                                                                       |
 | Agents                     | View shared and local agent configuration                                                                                                                                                       |
 | Agents runtime             | Paseo connection, managed daemon, update check, workspace redirects, and per-provider usage (`/api/agent/*`, `/api/paseo/*`, `/api/agent-usage`)                                               |
-| Browser (`/api/browser/*`) | Human start/stop/approve for managed Chrome, live-view stream, file transfer, and MCP agent observe/request. See [Managed browser](../guides/managed-browser.md)                               |
 | Editor (`/api/editor/*`)   | Optional code-server runtime, workspace pairing, and captured-selection discussion. See [Editor](../guides/editor.md)                                                                          |
 | Release notes              | Parsed `CHANGELOG.md` (`GET /api/release-notes`). No auth; used by What's new and `/changelog`                                                                                                 |
 | Infrastructure plugins | Optional domain operations supplied by separately installed plugins                                                                                                                             |
@@ -35,7 +34,7 @@ DevHub API routes are local endpoints used by the dashboard UI. They are not int
 | Git                        | Local repo status and merge-conflict detection/resolution                                                                                                                                       |
 | GitHub                     | Pull request/review queues, recently reviewed PRs, and repository data                                                                                                                          |
 | Jira                       | Ticket data and redirects                                                                                                                                                                       |
-| Integrations (`/api/integrations*`) | Provider search, extra accounts, write proposals, chat commands and workflow alerts. Confirmation stays in the dashboard. See [Integrations](../guides/integrations.md)                   |
+| Integrations (`/api/integrations*`) | Provider/account listing for MCP, immediate writes through `/actions`, and the separate Slack bot. |
 | Jobs                       | Scheduled job management                                                                                                                                                                        |
 | Learnings                  | Browse reusable learning notes                                                                                                                                                                  |
 | MCP                        | MCP catalog CRUD (`mcp/shared/` and personal `~/.config/devhub/mcp-personal/`); runtime process scan is under Status (`/api/status/mcp`)                                                        |
@@ -69,7 +68,7 @@ DevHub API routes are local endpoints used by the dashboard UI. They are not int
 
 - Routes return JSON unless they stream logs or redirect.
 - **Mutating routes** (`POST`, `PUT`, `PATCH`, `DELETE` under `/api/*`) are guarded globally by `dashboard/proxy.ts` via `requireDashboardAuth`. It accepts a desktop session token, a **strict** same-origin `Origin` header (matching `Host`), or `X-DevHub-Secret` matching the configured `DEVHUB_API_SECRET`. The secret doesn't disable the other alternatives. MCP's `DashboardClient` sends a matching `Origin` and adds the secret when configured. This filters cross-site browser requests; it isn't a user login or protection against a caller that can forge headers.
-- **GET routes** aren't covered by the proxy. Sensitive handlers call `requireDashboardAuth` themselves; GET/HEAD also accept a same-origin `Referer`. These include `GET /api/opencode/recap`, `GET /api/agent-usage`, the Paseo routes, **every** `/api/db` route, `GET /api/browser`, `GET /api/editor/runtime`, `GET /api/editor/incoming`, and `GET /api/integrations`. `GET /api/release-notes` is unauthenticated changelog JSON.
+- **GET routes** aren't covered by the proxy. Sensitive handlers call `requireDashboardAuth` themselves; GET/HEAD also accept a same-origin `Referer`. These include `GET /api/opencode/recap`, `GET /api/agent-usage`, the Paseo routes, **every** `/api/db` route, `GET /api/editor/runtime`, `GET /api/editor/incoming`, and `GET /api/integrations`. `GET /api/release-notes` is unauthenticated changelog JSON.
 - Long-running actions expose progress through server-sent events.
 - Optional integrations should fail clearly when unconfigured: HTTP **503** with
   `{ error: "<Name> is not configured.", code: "not_configured" }` via
@@ -78,16 +77,12 @@ DevHub API routes are local endpoints used by the dashboard UI. They are not int
   exist. E2E smoke tests tolerate 503 for optional integrations on a fresh
   checkout.
 
-## Browser, editor and release notes
+## Editor and release notes
 
 These 2.1 routes are user-facing but are not rows in the large table below.
 
 | Route | Used by | Notes |
 | ----- | ------- | ----- |
-| `GET`/`POST /api/browser` | `/browser` | Human-only (`x-devhub-client: mcp` is 403). `GET` returns `browserStatus()` plus open tasks that have an active agent run. `POST` `{ action: "start" \| "stop" \| "reset" \| "takeover" \| "resume" \| "watch" \| "capture" \| "reject" \| "approve", … }`. Reset requires `confirm: "CLEAR SAVED SIGN-INS"`. Playwright is imported only on start; a missing `browsers.json` in the packaged app returns 409 JSON instead of an empty 500. |
-| `POST /api/browser/agent` | MCP `browser_session` / `browser_observe` / `browser_request` | `{ operation: "session" \| "observe" \| "request", … }`. Cannot start Chrome, grant access or approve clicks. 409 if the lease is stale. |
-| `POST /api/browser/surface` | Live view | Same-origin human control: `stream` (SSE frames), `input`, `tab`, `dialog`, `reject-transfer`. MCP cannot call this. |
-| `POST /api/browser/transfer` | File upload/download | Query `session` + `transfer` UUIDs. Uploads need `x-file-name` and a body ≤ 20 MiB. |
 | `GET`/`POST /api/editor/runtime` | `/editor` | `GET` status. `POST` `{ action: "install" \| "start" \| "stop" \| "uninstall" \| "rollback", workspaceId?, savedBuffers? }`. Start needs `workspaceId`. Stop/uninstall/rollback require `savedBuffers: true`. Same-origin on POST. |
 | `POST /api/editor/pair` | Editor pairing | `{ workspaceId, revoke? }`. Same-origin. One workspace; pairing expires after 30 minutes or a dashboard restart. |
 | `GET`/`POST`/`DELETE /api/editor/incoming` | Selection add-on | `POST` is the extension (Bearer pairing token, **no** `Origin`). `GET`/`DELETE` are the dashboard (auth). Pending selections expire after 10 minutes. |

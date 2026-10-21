@@ -12,7 +12,7 @@ import { clearGithubUserCache } from "./github-write";
 import { execGh } from "@/lib/gh-exec";
 import { WriteInputSchema } from "./write-types";
 const signal = new AbortController().signal;
-const context = { signal, approvalId: "approved-id" };
+const context = { signal, requestId: "request-id" };
 const mockedFetch = vi.fn();
 beforeEach(() => { vi.clearAllMocks(); mockedFetch.mockReset(); clearJiraActorCache(); clearJiraTransitionCache(); clearGithubUserCache(); vi.stubGlobal("fetch", mockedFetch); });
 afterEach(() => vi.unstubAllGlobals());
@@ -68,14 +68,14 @@ describe("native provider write payloads", () => {
     await jiraProvider.executeWrite!(input, prepared, context);
     expect(await jiraProvider.transitions!(ref, context)).toEqual([]);
   });
-  it("creates PRs through gh stdin with reviewed branch SHAs and a draft default", async () => {
+  it("creates PRs through gh stdin with reviewed branch SHAs and a ready-for-review default", async () => {
     vi.mocked(execGh).mockResolvedValueOnce({ stdout: '{"login":"alice","id":7}', stderr: "" })
       .mockResolvedValueOnce({ stdout: '{"commit":{"sha":"head"}}', stderr: "" })
       .mockResolvedValueOnce({ stdout: '{"commit":{"sha":"base"}}', stderr: "" })
       .mockResolvedValueOnce({ stdout: '[]', stderr: "" });
     const input = WriteInputSchema.parse({ action: "pr.create", provider: "github", account: "default", repo: "org/repo", head: "feature", base: "main", title: "Title with \"quotes\"", body: "Line one\nLine two" });
     const prepared = await githubProvider.prepareWrite!(input, context);
-    expect(prepared.native).toMatchObject({ headSha: "head", baseSha: "base", payload: { draft: true } });
+    expect(prepared.native).toMatchObject({ headSha: "head", baseSha: "base", payload: { draft: false } });
     vi.mocked(execGh).mockResolvedValueOnce({ stdout: '{"number":42,"html_url":"https://github.com/org/repo/pull/42","title":"Title"}', stderr: "" });
     await githubProvider.executeWrite!(input, prepared, context);
     const [args, opts] = vi.mocked(execGh).mock.calls.at(-1)!;

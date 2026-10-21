@@ -269,3 +269,32 @@ describe("tasks_history query", () => {
     expect(trimmed).not.toContain(DAY);
   });
 });
+
+describe("tasks_update completion readies draft PRs", () => {
+  let env: ReturnType<typeof setup>;
+  beforeEach(() => { env = setup(); });
+  afterEach(() => { fs.rmSync(env.root, { recursive: true, force: true }); });
+
+  function withDashboard(post: (path: string, body: unknown) => Promise<unknown>) {
+    const calls: Array<{ path: string; body: unknown }> = [];
+    (env.ctx as unknown as { dashboard: unknown }).dashboard = { post: async (p: string, body: unknown) => { calls.push({ path: p, body }); return post(p, body); } };
+    return calls;
+  }
+  const update = (args: Record<string, unknown>) => env.handlers.get("tasks_update")!({ id: TASK_ID, date: DAY, ...args }) as Promise<{ content: { text: string }[] }>;
+
+  it("asks the dashboard to ready the task's PRs and reports what changed", async () => {
+    const calls = withDashboard(async () => ({ outcomes: [{ url: "https://github.com/acme/app/pull/7", result: "readied" }, { url: "https://github.com/acme/app/pull/8", result: "failed", detail: "HTTP 502" }] }));
+    const text = (await update({ status: "complete" })).content[0]!.text;
+    expect(calls).toEqual([{ path: "/api/tasks/ready-prs", body: { taskId: TASK_ID, reason: "task completed" } }]);
+    expect(text).toMatch(/^Updated task:/m);
+    expect(text).toContain("Marked ready for review: https://github.com/acme/app/pull/7.");
+    expect(text).toContain("Couldn't mark ready (logged on the task note): https://github.com/acme/app/pull/8 (HTTP 502).");
+  });
+
+  it("says so when the dashboard can't be reached, and skips edits that don't complete", async () => {
+    const calls = withDashboard(async () => { throw new Error("connect ECONNREFUSED"); });
+    expect((await update({ text: "Renamed" })).content[0]!.text).not.toContain("draft PRs");
+    expect(calls).toHaveLength(0);
+    expect((await update({ done: true })).content[0]!.text).toContain("Couldn't check this task's draft PRs (is the dashboard running?): connect ECONNREFUSED");
+  });
+});

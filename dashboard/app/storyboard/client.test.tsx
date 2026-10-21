@@ -3,7 +3,7 @@ import { cleanup, createEvent, fireEvent, render, screen, waitFor, within } from
 import { useSyncExternalStore } from "react";
 import fs from "node:fs";
 import path from "node:path";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { BoardCard, NotesBoard } from "@/lib/storyboard/notes-board-shared";
 import type { Task } from "@/lib/tasks/types";
 import type { WorkflowInboxItem } from "@/lib/workflows/inbox";
@@ -69,6 +69,10 @@ function board(cards: BoardCard[], extra: Partial<NotesBoard> = {}): NotesBoard 
 }
 
 const fetchMock = vi.fn();
+beforeAll(async () => {
+  // Compile the lazy panel before assertions so full-suite CPU load cannot consume their DOM wait timeout.
+  await import("@/components/storyboard/TaskDetailPanel");
+});
 beforeEach(() => {
   vi.clearAllMocks();
   ui.query = "";

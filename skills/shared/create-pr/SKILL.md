@@ -37,6 +37,7 @@ When enough context is available, also provide a Slack-ready review message the 
 12. **Keep DevHub context connected.** When the DevHub MCP is available and a
     matching task exists, preserve/reuse its tags, link the PR back to it, and
     update its task note. These metadata updates must be idempotent.
+13. **Open PRs ready for review.** Never pass `--draft` unless the user explicitly asks for a draft PR. If the branch already has an open draft PR that DevHub or an agent opened, run `gh pr ready <url>` once it is pushed. ("Draft mode" above means drafting the title/body text, not a GitHub draft PR.)
 
 ## Workflow
 
@@ -148,6 +149,8 @@ EOF
 )" --head "$BRANCH" --base "$BASE"
 ```
 
+No `--draft`: the PR opens ready for review. If `gh pr list` above found an open draft, run `gh pr ready <url>` instead of leaving it as a draft (unless the user asked for a draft).
+
 Return the PR URL and final title/body.
 
 Also return the Slack-ready message.
@@ -192,10 +195,13 @@ Use short plain-language sentences, without raw logs. This refreshes Summary
 and Status while preserving the plan and personal notes. Reviewers update this
 context too, without changing code or the workflow column.
 
-For UI work, capture the rendered result with available browser tooling and
-attach it with `add_media {localFile: <absolute path>, caption, phase: "after"}`.
-Use `"before"` for a baseline. The latest attachment appears in task details.
-If capture is unavailable, explain why in `currentState`.
+The implementation or QA stage owns UI capture. Reuse existing evidence when
+the code, checkout and scenario still match. Planning, review and PR creation
+capture only a specific uncovered risk or changed behaviour. Attach new evidence
+with `add_media {localFile: <absolute path>, caption, phase: "after"}` and name
+the verified commit or working-tree state, scenario and remaining gaps. Use
+`"before"` only when a baseline is required. If capture is unavailable, explain
+why in `currentState`; keep the manual check explicit.
 
 On Auto, the orchestrator handles “Pause after planning”. Finish the plan and
 summary, then stop; never approve your own plan or start implementation from a

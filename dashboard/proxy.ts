@@ -32,11 +32,6 @@ import { requireDashboardAuth } from "@/lib/api-utils";
 const MUTATING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
 export function proxy(req: NextRequest) {
-  // These exact webhook paths authenticate signatures/secrets and sender scope in
-  // their handlers. They cannot execute or confirm a provider write.
-  if (req.method === "POST" && ["/api/integrations/chat/slack", "/api/integrations/chat/telegram"].includes(req.nextUrl.pathname) && !req.headers.has("origin")) {
-    return NextResponse.next();
-  }
   // This one preview-only endpoint authenticates a short-lived workspace token
   // in its route. It grants no dashboard access and rejects browser origins.
   if (req.method === "POST" && req.nextUrl.pathname === "/api/editor/incoming"

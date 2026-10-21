@@ -6,11 +6,14 @@ import { FileText } from "lucide-react";
 import type { GithubPrRow } from "@/lib/github/prs";
 import {
   PR_REVIEW_NOTE_WATCH_EVENT,
-  prReviewNoteApiHref,
   prReviewNoteHref,
   prReviewNotePath,
 } from "@/lib/pr-review-notes";
 import { notifyNotesTreeChanged } from "@/lib/notes/path";
+import { useVaultNoteExists } from "@/components/EntityNoteAction";
+import { NOTE_INDEX_KEY } from "@/lib/create-vault-note";
+import { mutate } from "swr";
+import { openNoteInPanel, wantsFullPage } from "@/lib/notes/open-in-panel";
 
 /**
  * Tiny doc glyph once a review note exists. Checks on mount, and after a
@@ -18,21 +21,11 @@ import { notifyNotesTreeChanged } from "@/lib/notes/path";
  * Renders nothing while there is no note — status, not a labeled button.
  */
 export function PrReviewNoteLink({ row }: { row: GithubPrRow }) {
-  const [exists, setExists] = useState(false);
   const [watching, setWatching] = useState(false);
   const path = prReviewNotePath(row);
-
-  async function noteExists(): Promise<boolean> {
-    const res = await fetch(prReviewNoteApiHref(row), { cache: "no-store" });
-    return res.ok;
-  }
+  const exists = useVaultNoteExists(path);
 
   useEffect(() => {
-    let cancelled = false;
-    void noteExists().then((ok) => {
-      if (!cancelled && ok) setExists(true);
-    });
-
     function onWatch(event: Event): void {
       const detail = (event as CustomEvent<{ path?: string }>).detail;
       if (detail?.path === path) setWatching(true);
@@ -40,30 +33,18 @@ export function PrReviewNoteLink({ row }: { row: GithubPrRow }) {
 
     window.addEventListener(PR_REVIEW_NOTE_WATCH_EVENT, onWatch);
     return () => {
-      cancelled = true;
       window.removeEventListener(PR_REVIEW_NOTE_WATCH_EVENT, onWatch);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [path]);
 
   useEffect(() => {
-    if (!watching || exists) return;
-    let cancelled = false;
-    const stop = () => {
-      cancelled = true;
-      window.clearInterval(id);
-    };
-    const id = window.setInterval(() => {
-      void noteExists().then((ok) => {
-        if (cancelled || !ok) return;
-        setExists(true);
-        setWatching(false);
-        notifyNotesTreeChanged();
-        stop();
-      });
-    }, 5000);
-    return stop;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (!watching) return;
+    if (exists) {
+      notifyNotesTreeChanged();
+      return;
+    }
+    const id = window.setInterval(() => { void mutate(NOTE_INDEX_KEY); }, 5000);
+    return () => window.clearInterval(id);
   }, [watching, exists]);
 
   if (!exists) return null;
@@ -71,10 +52,15 @@ export function PrReviewNoteLink({ row }: { row: GithubPrRow }) {
   return (
     <Link
       href={prReviewNoteHref(row)}
-      title="Review note"
-      aria-label="Open review note"
+      title="PR note"
+      aria-label="Open PR note"
       className="row-note-glyph"
-      onClick={(event) => event.stopPropagation()}
+      onClick={(event) => {
+        event.stopPropagation();
+        if (wantsFullPage(event)) return;
+        event.preventDefault();
+        openNoteInPanel(path);
+      }}
     >
       <FileText size={12} aria-hidden />
     </Link>

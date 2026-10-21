@@ -96,15 +96,17 @@ const ACTIONS: Record<string, ActionDef> = {
   },
   worktree_cleanup: {
     label: "Clean idle agent worktrees",
-    description: "Remove clean, integrated checkouts idle for 2 days; trim ignored builds in kept checkouts idle for 7 days. Keeps branches.",
+    description: "Clean finished Auto PR checkouts; remove integrated checkouts idle for 2 days and trim ignored builds after 7 days. Keeps branches and local work.",
     timeoutMs: 900_000,
     mutates: true,
-    effects: ["Checks tasks, runs, Paseo and process working directories", "Removes eligible .devhub/checkouts worktrees and prunes Git metadata; keeps branches", "Deletes only ignored node_modules, .next and Cargo target directories in kept idle worktrees"],
+    effects: ["Checks tasks, runs, Paseo, process working directories and published PR commits", "Cleans eligible .devhub/checkouts and .devhub-worktrees across local repos; keeps branches", "Trims only recognised ignored dependency, web and native build directories; preserves local source and secrets"],
     cmd: "dashboard: cleanupWorktrees (TypeScript; dryRun supported)",
     run: async (emit, _repoRoot, options) => {
       const { cleanupWorktrees } = await import("./repos/worktree-report");
+      const { cleanupFinishedAutoWorktrees } = await import("./storyboard/cleanup-work");
+      const failures = await cleanupFinishedAutoWorktrees(emit, options?.dryRun);
       const report = await cleanupWorktrees(emit, { dryRun: options?.dryRun });
-      return report.errors.length ? 1 : 0;
+      return failures.length || report.errors.length ? 1 : 0;
     },
   },
   ownership_brief: {

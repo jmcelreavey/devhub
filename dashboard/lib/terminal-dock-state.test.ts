@@ -40,10 +40,10 @@ describe("agent-run tabs", () => {
     expect(isAgentRunSource(undefined)).toBe(false);
   });
 
-  it("closes an agent tab only after a clean exit", () => {
+  it("closes completed agent commands, including failures and interrupts", () => {
     expect(shouldAutoCloseAgentTab({ agentRun: true, exitCode: 0 })).toBe(true);
-    expect(shouldAutoCloseAgentTab({ agentRun: true, exitCode: 1 })).toBe(false);
-    expect(shouldAutoCloseAgentTab({ agentRun: true, exitCode: 130 })).toBe(false);
+    expect(shouldAutoCloseAgentTab({ agentRun: true, exitCode: 1 })).toBe(true);
+    expect(shouldAutoCloseAgentTab({ agentRun: true, exitCode: 130 })).toBe(true);
   });
 
   it("treats an unknown exit as not done", () => {
@@ -109,6 +109,24 @@ describe("parsePersistedDockState", () => {
     expect(state?.nextId).toBe(3);
     expect(state?.open).toBe(true);
     expect(state?.userCollapsed).toBe(false);
+  });
+});
+
+describe("restored agent terminal lifecycle", () => {
+  it("keeps running ownership and completed failures across reloads", () => {
+    const state = parsePersistedDockState(JSON.stringify({
+      tabs: [
+        { id: 1, label: "build", agentRun: true, agentCommandPending: true },
+        { id: 2, label: "failed check", agentRun: true, agentExitCode: 1 },
+        { id: 3, label: "user shell", agentRun: "true", agentExitCode: 0 },
+        { id: 4, label: "unknown", agentRun: true, agentExitCode: "0" },
+      ],
+    }));
+    expect(state?.tabs[0]).toMatchObject({ agentRun: true, agentCommandPending: true });
+    expect(shouldAutoCloseAgentTab({ agentRun: state?.tabs[1].agentRun, exitCode: state?.tabs[1].agentExitCode })).toBe(true);
+    expect(state?.tabs[2].agentRun).toBeUndefined();
+    expect(state?.tabs[2].agentExitCode).toBeUndefined();
+    expect(state?.tabs[3].agentExitCode).toBeUndefined();
   });
 });
 

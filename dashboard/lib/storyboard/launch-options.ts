@@ -31,7 +31,8 @@ export function autoLaunchPrompt(prompt: string, options?: AutoLaunchOptions): s
 }
 
 export function autoLaunchCheckout(choice: OrchestrationCheckoutChoice, options?: AutoLaunchOptions): OrchestrationCheckoutChoice {
-  return options?.worktree ? { ...choice, mode: "worktree", reason: "isolated worktree requested at launch" } : choice;
+  if (options?.worktree === undefined) return choice;
+  return { ...choice, mode: options.worktree ? "worktree" : "checkout", reason: options.worktree ? "isolated worktree requested at launch" : "shared checkout requested; stash and refresh before starting" };
 }
 
 export function autoTierDispatch(settings: ModelTierSettings | undefined, step: TierStep, picked?: { tier?: ModelTier }, options?: AutoLaunchOptions): { provider?: string; model?: string; effort?: string } {

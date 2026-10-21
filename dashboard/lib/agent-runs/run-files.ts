@@ -71,6 +71,8 @@ export interface AgentRunSpec {
   /** HEAD when the run was dispatched — the base for `agent_diff`. */
   baseSha?: string;
   worktree?: AgentRunWorktree;
+  /** Recovery receipt for a fresh run in the user's checkout, including any saved stash. */
+  checkoutPreparation?: import("./checkout").CheckoutPreparation;
 }
 
 export interface AgentRunStatus {

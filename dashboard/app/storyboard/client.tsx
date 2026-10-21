@@ -268,7 +268,7 @@ function StoryboardBoard() {
       focusTask(card.taskId);
       void run(card, () => startAuto(card, { pauseAfterPlan: pauseAfterPlan ?? true }, profileId), "On auto.");
     },
-    onCreatePr: (card: BoardCard) => void run(card, () => createPr(card, profileId), "Creating the draft PR."),
+    onCreatePr: (card: BoardCard) => void run(card, () => createPr(card, profileId), "Opening the PR."),
     onApprovePlan: (card: BoardCard) => void run(card, () => decidePlan(card, "approve", profileId), "Plan approved. Continuing on Auto."),
     onComplete: (card: BoardCard) => {
       void complete(card).then((result) => {

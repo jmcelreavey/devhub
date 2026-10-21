@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { autoTierDispatch, type AutoLaunchOptions } from "./launch-options";
+import { autoLaunchCheckout, autoTierDispatch, type AutoLaunchOptions } from "./launch-options";
 import { DEFAULT_MODEL_TIERS, TIER_STEPS, type ModelTierSettings } from "./model-tiers-shared";
 
 const settings: ModelTierSettings = { ...DEFAULT_MODEL_TIERS, tiers: {
@@ -7,6 +7,17 @@ const settings: ModelTierSettings = { ...DEFAULT_MODEL_TIERS, tiers: {
   mid: { provider: "codex", model: "gpt-6", effort: "high" },
   heavy: { provider: "claude", model: "opus", effort: "max" },
 } };
+
+describe("explicit checkout choice", () => {
+  const suggested = { mode: "worktree" as const, reason: "dirty checkout", decidedAt: "now" };
+  it("honours an unchecked worktree option even for a dirty checkout", () => {
+    expect(autoLaunchCheckout(suggested, { worktree: false }).mode).toBe("checkout");
+  });
+  it("keeps automatic selection when no choice was supplied", () => {
+    expect(autoLaunchCheckout(suggested)).toBe(suggested);
+    expect(autoLaunchCheckout({ ...suggested, mode: "checkout" }, { worktree: true }).mode).toBe("worktree");
+  });
+});
 
 describe("autoTierDispatch", () => {
   it.each(TIER_STEPS)("resolves provider, model and effort together for %s", (step) => {

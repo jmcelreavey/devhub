@@ -46,7 +46,7 @@ export async function prepareGithubWrite(input: WriteInput, context: Integration
     native: { actorId: user.id, endpoint, nodeId: pr.node_id, revision: pr.updated_at, headSha: pr.head.sha, baseSha: pr.base.sha, payload: input.action === "pr.update" ? { title: input.title, body: input.body } : null } };
 }
 export async function executeGithubWrite(input: WriteInput, prepared: PreparedWrite, context: WriteContext): Promise<WriteReceipt> {
-  if (input.provider !== "github" || !context.approvalId) throw new IntegrationError("unsupported", "An approved GitHub action is required.");
+  if (input.provider !== "github" || !context.requestId) throw new IntegrationError("unsupported", "A GitHub action is required.");
   if (input.action === "pr.publish") {
     const result = z.object({ errors: z.array(z.unknown()).optional(), data: z.object({ markPullRequestReadyForReview: z.object({ pullRequest: z.object({ url: z.string() }) }).nullable() }).nullable().optional() }).parse(await githubRequest(input.account, "graphql", context, "POST", {
       query: "mutation($id:ID!){markPullRequestReadyForReview(input:{pullRequestId:$id}){pullRequest{url}}}", variables: { id: prepared.native.nodeId },

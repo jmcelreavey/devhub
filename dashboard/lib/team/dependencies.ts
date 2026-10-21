@@ -94,7 +94,7 @@ export const teamDependencies = {
   jiraConnected: () => { try { jiraConnection("default"); return true; } catch { return false; } },
   assignJira: async (key: string, handoffId: string) => {
     const input: WriteInput = { action: "issue.assign-self", provider: "jira", account: "default", ref: { provider: "jira", account: "default", kind: "issue", id: key } };
-    const context = { signal: AbortSignal.timeout(30_000), approvalId: "team-pickup-" + handoffId };
+    const context = { signal: AbortSignal.timeout(30_000), requestId: "team-pickup-" + handoffId };
     const prepared = await prepareJiraWrite(input, context);
     await executeJiraWrite(input, prepared, context);
   },

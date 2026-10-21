@@ -1,4 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { skipPr, listSkippedPrs } from "./skipped-prs";
 import { githubScreen } from "@/lib/integrations/screen-data";
 import { isGithubCliAuthenticated, mapGithubCliError } from "@/lib/gh-exec";
 import { getGithubLogin } from "@/lib/standup/github-merged";
@@ -21,7 +25,10 @@ function payload(): GithubPrsApiPayload {
   return { configured: true, generatedAt: "2026-10-18T12:00:00.000Z", authored: [pr(1)], reviews: [pr(2)], recentlyReviewed: [] };
 }
 
+let notes: string;
 beforeEach(() => {
+  notes = fs.mkdtempSync(path.join(os.tmpdir(), "pr-list-"));
+  vi.stubEnv("NOTES_DIR", notes);
   vi.resetAllMocks();
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(new Date("2026-10-18T12:00:00Z"));
@@ -36,9 +43,25 @@ beforeEach(() => {
   vi.mocked(sortReviewRequestedPrs).mockImplementation((rows) => [...rows]);
   vi.mocked(mapGithubCliError).mockReturnValue({ status: 503, error: "GitHub unavailable" });
 });
-afterEach(() => vi.useRealTimers());
+afterEach(() => { vi.useRealTimers(); vi.unstubAllEnvs(); fs.rmSync(notes, { recursive: true, force: true }); });
 
 describe("Home's shared PR list", () => {
+  it.each(["fresh", "stale"] as const)("honours skips from another process when serving a %s cache to Home, Storyboard and Slack", async (source) => {
+    const cached = payload();
+    await skipPr({ ...cached.authored[0], updatedAt: "2026-10-18T11:00:00Z" });
+    await skipPr(cached.reviews[0]);
+    if (source === "fresh") vi.mocked(readGithubPrsListCache).mockReturnValue(cached);
+    else {
+      vi.mocked(githubScreen.prs).mockRejectedValue(new Error("upstream"));
+      vi.mocked(readStaleGithubPrsListCache).mockReturnValue(cached);
+    }
+    const result = await loadGithubPrsList();
+    expect(result.authored).toEqual([]);
+    expect(result.reviews).toEqual([]);
+    expect(listSkippedPrs()).toHaveLength(2);
+    expect(writeGithubPrsListCache).not.toHaveBeenCalled();
+  });
+
   it("keeps the unconfigured response without calling GitHub or a stale cache", async () => {
     vi.mocked(isGithubCliAuthenticated).mockResolvedValue(false);
     expect(await loadGithubPrsList()).toEqual({ configured: false, authored: [], reviews: [], recentlyReviewed: [] });

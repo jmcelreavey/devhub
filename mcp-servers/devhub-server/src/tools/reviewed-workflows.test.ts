@@ -65,39 +65,27 @@ describe("reviewed integration tools", () => {
     expect(await call("integrations_slack_test", { revision: "a".repeat(64), requestId })).toMatchObject({ isError: true });
     expect(post).toHaveBeenCalledTimes(1);
   });
-  it("lists alert destinations and chat config without writes or enabling tools", async () => {
-    const { call, tools, get, post } = setup();
-    await call("integrations_alert_destinations"); await call("integrations_chat_status");
-    expect(get).toHaveBeenCalledWith("/api/integrations/alerts");
-    expect(get).toHaveBeenCalledWith("/api/integrations/chat/config");
-    expect(post).not.toHaveBeenCalled();
-    expect([...tools.keys()].filter((name) => /integrations_.*(enable|save)/.test(name))).toEqual([]);
-    expect(TOOL_ANNOTATIONS.integrations_alert_destinations).toMatchObject({ readOnlyHint: true });
-    expect(TOOL_ANNOTATIONS.integrations_chat_status).toMatchObject({ readOnlyHint: true });
-  });
-  it("sends only a revision-bound, idempotent test and cannot change consent", async () => {
-    const { call, post } = setup();
-    const input = { id: requestId, revision: 1, requestId };
-    await call("integrations_alert_test", input);
-    expect(post).toHaveBeenCalledExactlyOnceWith("/api/integrations/alerts", { action: "test", ...input }, 30_000);
-    expect(TOOL_ANNOTATIONS.integrations_alert_test).toMatchObject({ readOnlyHint: false, openWorldHint: true, idempotentHint: true });
-    for (const invalid of [{ ...input, enabled: true }, { ...input, action: "save" }, { ...input, revision: 0 }, { id: requestId, revision: 1 }]) {
-      await expect(call("integrations_alert_test", invalid)).rejects.toThrow();
+  it("keeps removed Telegram and approval tools callable without touching the dashboard", async () => {
+    const { call, get, post } = setup();
+    for (const [name, input] of [
+      ["integrations_alert_destinations", {}],
+      ["integrations_alert_test", { id: requestId, revision: 1, requestId }],
+      ["integrations_chat_status", {}],
+      ["integrations_proposals", {}],
+      ["integrations_review", { id: requestId }],
+      ["integrations_confirm", { id: requestId, digest: "a".repeat(64), approvedBy: "go ahead" }],
+    ] as const) {
+      const result = await call(name, input);
+      expect(result.isError).not.toBe(true);
+      expect(result.content[0]).toMatchObject({ text: expect.stringContaining("removed") });
     }
-    expect(post).toHaveBeenCalledTimes(1);
+    expect(get).not.toHaveBeenCalled();
+    expect(post).not.toHaveBeenCalled();
   });
-  it("does not retry a refused test", async () => {
-    const { call, post } = setup();
-    post.mockRejectedValueOnce(new DashboardHttpError(409, {}, "Destination changed"));
-    expect(await call("integrations_alert_test", { id: requestId, revision: 1, requestId })).toMatchObject({ isError: true });
-    expect(post).toHaveBeenCalledTimes(1);
-  });
-  it("lists capabilities and proposals without provider writes", async () => {
+  it("lists provider capabilities without writing", async () => {
     const { call, get, post } = setup();
     await call("integrations_list", { taskId: requestId });
-    await call("integrations_proposals");
-    expect(get).toHaveBeenCalledWith("/api/integrations", { taskId: requestId });
-    expect(get).toHaveBeenCalledWith("/api/integrations/writes");
+    expect(get).toHaveBeenCalledExactlyOnceWith("/api/integrations", { taskId: requestId });
     expect(post).not.toHaveBeenCalled();
   });
   it.each([
@@ -107,22 +95,10 @@ describe("reviewed integration tools", () => {
     { action: "pr.create", provider: "github", account: "default", repo: "acme/payments", head: "fix/retries", base: "main", title: "Fix retries", body: "Checked locally.", draft: true },
     { action: "pr.update", provider: "github", account: "default", ref: { provider: "github", account: "default", kind: "pr", id: "acme/payments/12" }, title: "Fix retries", body: "Checked locally." },
     { action: "pr.publish", provider: "github", account: "default", ref: { provider: "github", account: "default", kind: "pr", id: "acme/payments/12" } },
-  ])("only proposes %j", async (input) => {
+  ])("immediately applies %j", async (input) => {
     const { call, post } = setup();
     await call("integrations_propose", { input });
-    expect(post).toHaveBeenCalledExactlyOnceWith("/api/integrations/writes", { action: "propose", input }, 60_000);
-  });
-  it("reviews by id; confirming needs the digest and the user's own words, and there is still no cancel tool", async () => {
-    const { call, post, tools } = setup();
-    await call("integrations_review", { id: requestId });
-    expect(post).toHaveBeenCalledExactlyOnceWith("/api/integrations/writes", { action: "review", id: requestId }, 60_000);
-    expect([...tools.keys()].filter((name) => /integrations_.*(execute|cancel)/.test(name))).toEqual([]);
-    await expect(call("integrations_review", { id: requestId, action: "confirm", confirmed: true })).rejects.toThrow();
-    expect(post).toHaveBeenCalledTimes(1);
-    const digest = "a".repeat(64);
-    await expect(call("integrations_confirm", { id: requestId, digest })).rejects.toThrow();
-    await call("integrations_confirm", { id: requestId, digest, approvedBy: "Yes, move PTF-1 to Done" });
-    expect(post).toHaveBeenLastCalledWith("/api/integrations/writes", { action: "confirm", id: requestId, digest, confirmed: true, via: "chat", quote: "Yes, move PTF-1 to Done" }, 60_000);
+    expect(post).toHaveBeenCalledExactlyOnceWith("/api/integrations/actions", input, 60_000);
   });
   it.each([
     { ...issue, title: " " }, { ...issue, action: "confirm" }, { ...issue, confirmed: true },
@@ -137,7 +113,7 @@ describe("reviewed integration tools", () => {
   it("surfaces stale/profile conflicts without retry", async () => {
     const { call, post } = setup();
     post.mockRejectedValueOnce(new DashboardHttpError(409, {}, "Preview changed"));
-    expect(await call("integrations_review", { id: requestId })).toMatchObject({ isError: true });
+    expect(await call("integrations_propose", { input: issue })).toMatchObject({ isError: true });
     expect(post).toHaveBeenCalledTimes(1);
   });
 });

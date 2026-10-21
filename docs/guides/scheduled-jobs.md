@@ -78,15 +78,9 @@ Turn wake off per job for anything frequent — an hourly job with wake on wakes
 
 The installed helper is independent of the app bundle, so rebuilding or reinstalling DevHub does not break it. When a DevHub release ships a newer helper (`jobs_list` and the card show its version), Remove and Enable it again.
 
-## Agent jobs and approval
+## Agent jobs
 
-An agent job runs with approvals off every time it fires, so it needs a human before its first run:
-
-- Created on the Actions page: approved immediately — you are the human.
-- Created or rewritten from an MCP client that supports confirmation prompts: approved when you accept the prompt in chat.
-- Otherwise it shows **waiting for approval** and never runs until you click **Approve**.
-
-Changing an agent job's prompt, repo or provider from MCP sends it back for approval. An approved job skips any leftover CLI first-run dock chip — Paseo dispatch never shows one, and nobody is at the dock at 3am.
+MCP calls to `jobs_create`, `jobs_update` and `jobs_run` apply immediately with `confirm: true`. No chat prompt or dashboard approval is needed. Jobs created on the Actions page are also ready to run immediately.
 
 Agent runs still obey the usual caps (`DEVHUB_AGENT_MAX_RUNS`, `DEVHUB_AGENT_MAX_COST_USD`, …). A refused dispatch is recorded as the job's last error and logged; that occurrence is not retried.
 
@@ -106,7 +100,7 @@ The `jobs` toolset of the DevHub MCP covers the whole feature. The server's inst
 
 Resources: `devhub://jobs` (jobs and wake status) and `devhub://jobs/log` (recent activity) for clients that read resources instead of calling tools.
 
-MCP cannot approve agent jobs or install the wake helper — both need you, in DevHub.
+Installing the wake helper still requires macOS authorisation in DevHub.
 
 ## Logs and troubleshooting
 
@@ -151,8 +145,8 @@ All routes need the same dashboard auth as other routes.
 | `/api/jobs` | `POST` | Create — `{ name, cron, script \| agent: { provider, prompt, cwd, model?, worktree?, maxTurns? }, wake?, enabled?, source?, confirmed? }` |
 | `/api/jobs/log` | `GET` | `{ file, lines, helper }` — scheduler log tail; `?job=<id>` filters to one job, `?lines=` caps it (default 200, max 1000) |
 | `/api/jobs/<id>` | `GET` | Read one job |
-| `/api/jobs/<id>` | `PATCH` | Update `name`, `cron`, `enabled`, `wake`, `script` or `agent`; `{ approve: true }` approves an agent job (UI only) |
+| `/api/jobs/<id>` | `PATCH` | Update `name`, `cron`, `enabled`, `wake`, `script` or `agent`; `{ approve: true }` approves an agent job |
 | `/api/jobs/<id>` | `DELETE` | Remove the job |
 | `/api/jobs/<id>` | `POST` | Trigger now — `202` with `{ runId }` (a script run id or an agent run id) |
 
-`source: "ui"` or `confirmed: true` marks the request as human-approved; anything else leaves new or rewritten agent jobs pending. Jobs are stored in `~/.local/state/devhub/jobs.json`.
+`source: "ui"` or `confirmed: true` makes the job ready to run; anything else leaves new or rewritten agent jobs pending. Jobs are stored in `~/.local/state/devhub/jobs.json`.

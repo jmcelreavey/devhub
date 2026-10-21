@@ -1,6 +1,6 @@
 [package]
 name = "devhub-desktop"
-version = "2.1.1"
+version = "2.2.1"
 description = "DevHub desktop shell"
 authors = ["DevHub"]
 edition = "2021"

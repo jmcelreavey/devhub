@@ -10,7 +10,7 @@ export const WriteInputSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("issue.assign-self"), provider: z.literal("jira"), account, ref: RefSchema }).strict(),
   z.object({ action: z.literal("issue.create"), provider: z.literal("jira"), account, projectKey: z.string().regex(/^[A-Z][A-Z0-9_]*$/), title, body: body.min(1).max(5000), parentKey: z.string().regex(/^[A-Z][A-Z0-9_]*-[1-9][0-9]*$/).nullable().default(null), taskId: z.string().regex(/^[a-zA-Z0-9_-]{1,200}$/).optional(), assignToMe: z.boolean().default(true), sprintId: z.number().int().positive().nullable().default(null) }).strict(),
   z.object({ action: z.literal("issue.transition"), provider: z.literal("jira"), account, ref: RefSchema, transitionId: z.string().regex(/^[0-9]+$/) }).strict(),
-  z.object({ action: z.literal("pr.create"), provider: z.literal("github"), account, repo, head: branch, base: branch, title, body, draft: z.boolean().default(true) }).strict(),
+  z.object({ action: z.literal("pr.create"), provider: z.literal("github"), account, repo, head: branch, base: branch, title, body, draft: z.boolean().default(false) }).strict(),
   z.object({ action: z.literal("pr.update"), provider: z.literal("github"), account, ref: RefSchema, title, body }).strict(),
   z.object({ action: z.literal("pr.publish"), provider: z.literal("github"), account, ref: RefSchema }).strict(),
 ]).superRefine((input, ctx) => {
@@ -33,22 +33,16 @@ export interface PreparedWrite {
   /** Exact native request plus remote revision/branch evidence. Never credentials. */
   native: Record<string, unknown>;
 }
-export interface WriteContext { signal: AbortSignal; approvalId: string }
+export interface WriteContext { signal: AbortSignal; requestId: string }
 export interface WriteReceipt { item?: IntegrationItem; detail: string }
-export interface WriteProposal {
+export interface WriteResult {
   id: string;
   profile: string;
   input: WriteInput;
   source: string;
   createdAt: string;
-  expiresAt: string;
-  state: "requested" | "pending" | "unknown" | "succeeded" | "failed" | "cancelled";
-  /** "direct" is a person's own click in DevHub; "review" is a proposal confirmed in DevHub; "chat" is one the person approved in a chat or through MCP. Absent on older records. */
-  approval?: "direct" | "review" | "chat";
-  /** For "chat": the words in which the person approved it. */
-  approvalNote?: string;
+  state: "unknown" | "succeeded" | "failed";
   prepared?: PreparedWrite;
-  digest?: string;
   detail?: string;
   confirmedAt?: string;
   finishedAt?: string;

@@ -125,8 +125,14 @@ Before writing findings, digest the comments and reviews from step 1:
 - **Author replies** often explain non-obvious choices — fold that reasoning
   into the explanation instead of guessing at intent.
 
-**Re-review.** Auto-review re-runs when a PR changes after its note was
-written. If the note already exists, read it first: its **Reviewed at** SHA is
+**Evidence reuse.** Read the implementation handoff and existing screenshots
+before opening a browser. Check that the code, checkout and scenario match.
+Reuse passing checks and valid visual evidence; investigate only a specific
+coverage gap or suspected defect. Preserve unresolved manual checks. Record
+failed automation approaches so later stages do not repeat them.
+
+**Re-review.** When a PR changes after its note was written, update that same
+note. If the note already exists, read it first: its **Reviewed at** SHA is
 the last commit you judged. Diff what changed since:
 
 ```bash
@@ -626,10 +632,13 @@ Use short plain-language sentences, without raw logs. This refreshes Summary
 and Status while preserving the plan and personal notes. Reviewers update this
 context too, without changing code or the workflow column.
 
-For UI work, capture the rendered result with available browser tooling and
-attach it with `add_media {localFile: <absolute path>, caption, phase: "after"}`.
-Use `"before"` for a baseline. The latest attachment appears in task details.
-If capture is unavailable, explain why in `currentState`.
+The implementation or QA stage owns UI capture. Reuse existing evidence when
+the code, checkout and scenario still match. Planning, review and PR creation
+capture only a specific uncovered risk or changed behaviour. Attach new evidence
+with `add_media {localFile: <absolute path>, caption, phase: "after"}` and name
+the verified commit or working-tree state, scenario and remaining gaps. Use
+`"before"` only when a baseline is required. If capture is unavailable, explain
+why in `currentState`; keep the manual check explicit.
 
 On Auto, the orchestrator handles “Pause after planning”. Finish the plan and
 summary, then stop; never approve your own plan or start implementation from a

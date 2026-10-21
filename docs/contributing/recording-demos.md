@@ -51,11 +51,10 @@ By default the fixture dashboard runs a production build (`next build --webpack`
 | Command palette, Diagrams and docs, Repos | `<clip>.mp4` and `<clip>.gif` | docs, and the [feature tour](../guides/feature-tour.md) |
 | System | `system.mp4` only (`gif: false`) | docs |
 | Skills and voice | `<clip>.gif` only (`mp4: false`) | the README and the feature tour |
-| Integrations, Review assignment, Git client, Databases, Conventions, Token usage | `<clip>.gif` only (`mp4: false`) | the feature tour |
+| Setup, Review assignment, Git client, Databases, Conventions, Token usage | `<clip>.gif` only (`mp4: false`) | the feature tour |
 | Neon workshop, Resize | `neon-workshop.gif`, `resize.gif` | theming guide and feature tour |
-| Browser, Editor Ask AI | `browser.gif`, `editor-ask-ai.gif` | their guides, feature tour and README |
-| Telegram setup | `telegram-setup.gif` only | integrations guide |
-| Integration proposals, Review persistence | `integration-proposals.gif`, `review-persistence.gif` | their guides |
+| Editor Ask AI | `editor-ask-ai.gif` | their guides, feature tour and README |
+| Review persistence | `review-persistence.gif` | their guides |
 
 The fixture adds what the walks need on top of the README seed: a project note, a diagram, three completed days of tasks, and two local git repos. `payments-api` also carries a SQLite file (`orders.db`) for the Databases clip, and `search-service` has a GitHub remote URL that is never fetched, plus a seeded rule file so Conventions has something to show. The repo, reviewers and comments are invented. It also points Paseo at a dead port and stubs the LAN-address badge. The Token usage clip stubs `/api/agent-usage` during both warm-up and capture: a throwaway `HOME` doesn't isolate the macOS Keychain. These controls don't scrub text already in the checkout; review the frames before publishing.
 
@@ -71,11 +70,11 @@ DevHub's docs viewer renders a lone `.mp4` link as an inline player (served by `
 
 To work on one walk: `DEVHUB_DEMO_SERVER=dev npm run demos:record -- serve` keeps the fixture dashboard up, then run the recorder against it with `DEMO_URL=http://127.0.0.1:1350 DEMO_OUT_DIR=/tmp/out DEMO_FRAMES_DIR=/tmp/frames DEMO_ONLY=notes npx --prefix dashboard tsx dashboard/scripts/record-walkthroughs.ts`.
 
-Don't record account-backed features against live data. Browser, integration proposals, editor selection discussions use real controls with invented, intercepted API responses. Their captions and embeds say so; no Chrome session, provider write, assistant dispatch or AWS worker runs. Calendar, Datadog, the live briefing and notes AI still have no account-backed capture.
+Don't record account-backed features against live data. Editor selection discussions use real controls with invented, intercepted API responses. Their captions and embeds say so; no Chrome session, provider write, assistant dispatch or AWS worker runs. Calendar, Datadog, the live briefing and notes AI still have no account-backed capture.
 
 ### New-feature GIFs
 
-New-feature walks live in `dashboard/scripts/record-new-features.ts` and use the same capture/encoding pipeline. The 2.1.0 overview lives in `dashboard/scripts/record-overview.ts`: `npm run demos:record -- overview` creates only `docs/assets/demos/overview-2.1.0.gif`. It tours theme effects, cursor follower, What's new, Browser, integration proposals, a simulated Telegram test send, Editor Ask AI and panel resize. Existing GIFs are not re-recorded. Fixture-only walks refuse the packaged app's port and block unstubbed writes.
+New-feature walks live in `dashboard/scripts/record-new-features.ts` and use the same capture/encoding pipeline. The 2.1.0 overview lives in `dashboard/scripts/record-overview.ts`: `npm run demos:record -- overview` creates only `docs/assets/demos/overview-2.1.0.gif`. It tours theme effects, cursor follower, What's new, Editor Ask AI and panel resize. Existing GIFs are not re-recorded. Fixture-only walks refuse the packaged app's port and block unstubbed writes.
 
 ```bash
 # First terminal: disposable development server, no production build
@@ -85,11 +84,11 @@ DEVHUB_DEMO_SERVER=dev npm run demos:record -- serve
 DEMO_URL=http://127.0.0.1:1350 \
 DEMO_OUT_DIR=../docs/assets/demos \
 DEMO_FRAMES_DIR=/tmp/devhub-demo-fixture/frames \
-DEMO_ONLY=neon-workshop,browser,integration-proposals,editor-ask-ai,review-persistence,resize \
+DEMO_ONLY=neon-workshop,editor-ask-ai,review-persistence,resize \
 ./node_modules/.bin/tsx scripts/record-walkthroughs.ts
 ```
 
-The Browser stream and file request are simulated; the walk rejects the download. Integration proposals stop at Cancel. Editor Ask AI previews a captured buffer and question, then closes without dispatch. Review persistence shows fixture evidence and an approval surviving a page reload, not a recorded service restart; the durable-store/recovery tests cover the latter. Keep these distinctions in the captions rather than presenting a fixture as production evidence.
+Editor Ask AI previews a captured buffer and question, then closes without dispatch. Review persistence shows fixture evidence and an approval surviving a page reload, not a recorded service restart; the durable-store/recovery tests cover the latter. Keep these distinctions in the captions rather than presenting a fixture as production evidence.
 
 ## Illustrated flows
 

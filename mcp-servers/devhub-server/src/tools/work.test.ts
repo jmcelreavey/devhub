@@ -66,14 +66,6 @@ describe("jira_ticket_create", () => {
     expect(result.isError).not.toBe(true);
   });
 
-  it("does not claim a ticket was created when the dashboard only proposed it", async () => {
-    const { create, post } = setupCreate();
-    post.mockResolvedValueOnce({ confirmationRequired: true, proposal: { id: "abc" } });
-    const result = await create({ ...issue, confirm: true });
-    expect(result.content[0]).toMatchObject({ text: expect.stringContaining("Proposed, not applied") });
-    expect(result.content[0]).toMatchObject({ text: expect.stringContaining("Nothing has changed in Jira yet") });
-    expect(result.structuredContent).toEqual({ proposed: true, proposalId: "abc" });
-  });
 
   it("leaves optional defaults to the dashboard", async () => {
     const { create, post } = setupCreate();
@@ -111,7 +103,7 @@ describe("jira_ticket_transition", () => {
   function setupTransition() {
     let run: (input: unknown) => Promise<DashboardToolResult> = async () => { throw new Error("Tool not registered"); };
     const dashboard = new DashboardClient("http://localhost:1337");
-    const post = vi.spyOn(dashboard, "post").mockResolvedValue({ confirmationRequired: true, proposal: { id: "abc" } });
+    const post = vi.spyOn(dashboard, "post").mockResolvedValue({ key: "PTF-1", ok: true });
     const server = {
       registerTool(name: string, config: { inputSchema?: z.ZodRawShape }, handler: (input: unknown) => Promise<DashboardToolResult>) {
         if (name === "jira_ticket_transition") { const schema = z.object(config.inputSchema!); run = async input => handler(schema.parse(input)); }
@@ -121,12 +113,18 @@ describe("jira_ticket_transition", () => {
     return { run, post };
   }
 
-  it("reports a proposal as proposed, because a person still has to confirm it", async () => {
+  it("applies the transition immediately with confirm:true", async () => {
     const { run, post } = setupTransition();
     const result = await run({ key: "PTF-1", transitionId: "41", confirm: true });
     expect(post).toHaveBeenCalledWith("/api/jira/ticket/PTF-1/transition", { transitionId: "41" });
-    expect(result.content[0]).toMatchObject({ text: expect.stringContaining("Proposed, not applied") });
-    expect(JSON.stringify(result.content)).not.toContain("Moved PTF-1");
+    expect(result.content[0]).toMatchObject({ text: expect.stringContaining("Moved PTF-1") });
+  });
+
+  it("reports a directly applied transition as moved", async () => {
+    const { run, post } = setupTransition();
+    post.mockResolvedValue({ key: "PTF-1", ok: true, from: "In Progress", to: "Code Review" });
+    const result = await run({ key: "PTF-1", transitionId: "71", confirm: true });
+    expect(result.content[0]).toMatchObject({ text: "Moved PTF-1 via transition 71 (In Progress → Code Review)." });
   });
 });
 

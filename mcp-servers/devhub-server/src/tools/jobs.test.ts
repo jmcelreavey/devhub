@@ -1,12 +1,15 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
-  buildJobConsentRequest,
+  registerJobsTools,
   formatJob,
   formatSchedulerLog,
   formatWake,
   PREFER_JOBS,
   type JobSummary,
 } from "./jobs.ts";
+import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { Context } from "../context.ts";
+import { DashboardClient, type DashboardToolResult } from "../dashboard-client.ts";
 import { SERVER_INSTRUCTIONS } from "../server.ts";
 
 const base: JobSummary = {
@@ -64,20 +67,6 @@ describe("formatSchedulerLog", () => {
   });
 });
 
-describe("buildJobConsentRequest", () => {
-  it("spells out that the agent runs with approvals off and requires a boolean", () => {
-    const req = buildJobConsentRequest({ name: base.name, cron: base.cron, agent: base.agent! });
-    expect(req.message).toContain("approvals OFF");
-    expect(req.message).toContain("~/Developer/app");
-    expect(req.requestedSchema.required).toEqual(["confirm"]);
-  });
-
-  it("clips long prompts", () => {
-    const req = buildJobConsentRequest({ name: "x", cron: "* * * * *", agent: { ...base.agent!, prompt: "p".repeat(2_000) } });
-    expect(req.message.length).toBeLessThan(700);
-  });
-});
-
 describe("scheduling preference", () => {
   it("steers harnesses away from their own cron tools", () => {
     expect(PREFER_JOBS).toMatch(/CronCreate/);
@@ -86,5 +75,45 @@ describe("scheduling preference", () => {
   it("tells harnesses to prefer DevHub for tasks, notes, Jira, PRs and repos, and to fall back when it is down", () => {
     expect(SERVER_INSTRUCTIONS).toMatch(/Prefer DevHub[\s\S]*tasks_\*[\s\S]*jira_\*[\s\S]*prs_\*[\s\S]*repos_\*/);
     expect(SERVER_INSTRUCTIONS).toMatch(/unreachable[\s\S]*normal tools/);
+  });
+});
+
+describe("immediate MCP job writes", () => {
+  function setup() {
+    const handlers = new Map<string, (input: unknown) => Promise<DashboardToolResult>>();
+    const dashboard = new DashboardClient("http://localhost:1350");
+    const post = vi.spyOn(dashboard, "post").mockResolvedValue({ ...base, approval: "approved", runId: "run-1" });
+    const request = vi.spyOn(dashboard, "request").mockResolvedValue({ ...base, approval: "approved" });
+    const get = vi.spyOn(dashboard, "get").mockResolvedValue(base);
+    const elicitInput = vi.fn().mockRejectedValue(new Error("Must not ask for approval"));
+    const server = { registerTool: (name: string, _config: unknown, handler: (input: unknown) => Promise<DashboardToolResult>) => handlers.set(name, handler), server: { elicitInput, getClientCapabilities: () => ({ elicitation: { form: {} } }) } };
+    registerJobsTools(server as unknown as McpServer, { dashboard } as Context);
+    return { call: (name: string, input: unknown) => handlers.get(name)!(input), post, request, get, elicitInput };
+  }
+
+  it("creates and updates agent jobs without elicitation", async () => {
+    const { call, post, request, elicitInput } = setup();
+    await call("jobs_create", { name: base.name, cron: base.cron, agent: base.agent, confirm: true });
+    expect(post).toHaveBeenCalledWith("/api/jobs", expect.objectContaining({ source: "mcp", confirmed: true, agent: base.agent }));
+    await call("jobs_update", { id: base.id, name: "Renamed", confirm: true });
+    expect(request).toHaveBeenCalledWith("/api/jobs/j1", { method: "PATCH", body: { name: "Renamed", source: "mcp", confirmed: true } });
+    expect(elicitInput).not.toHaveBeenCalled();
+  });
+
+  it("runs a previously pending job immediately", async () => {
+    const { call, post, request, elicitInput } = setup();
+    await call("jobs_run", { id: base.id, confirm: true });
+    expect(request).toHaveBeenCalledWith("/api/jobs/j1", { method: "PATCH", body: { approve: true, source: "mcp", confirmed: true } });
+    expect(post).toHaveBeenCalledWith("/api/jobs/j1", {});
+    expect(elicitInput).not.toHaveBeenCalled();
+  });
+
+  it("keeps confirm false as a preview without writes", async () => {
+    const { call, post, request } = setup();
+    await call("jobs_create", { name: base.name, cron: base.cron, agent: base.agent, confirm: false });
+    await call("jobs_update", { id: base.id, name: "Renamed", confirm: false });
+    await call("jobs_run", { id: base.id, confirm: false });
+    expect(post).not.toHaveBeenCalled();
+    expect(request).not.toHaveBeenCalled();
   });
 });

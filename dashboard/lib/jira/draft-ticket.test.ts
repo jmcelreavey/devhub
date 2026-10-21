@@ -1,5 +1,5 @@
 import { fileURLToPath } from "node:url";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { generateAiText } from "@/lib/ai/generate";
 import { resolveEntityContext } from "@/lib/entity-links/resolve";
 import { resolveSkillForRead } from "@/lib/skill-catalog";
@@ -38,7 +38,10 @@ function stepTrace(events: DraftEvent[]): string[] {
 
 beforeEach(() => {
   vi.resetAllMocks();
-  vi.unstubAllEnvs();
+  // Dashboard-triggered checks inherit the user's configured draft model.
+  for (const key of ["JIRA_DRAFT_PROVIDER", "JIRA_DRAFT_MODEL", "JIRA_DRAFT_REASONING_EFFORT"]) {
+    vi.stubEnv(key, undefined);
+  }
   vi.mocked(resolveSkillForRead).mockReturnValue({
     file: fileURLToPath(new URL("../../../skills/shared/devhub-draft-jira-ticket/SKILL.md", import.meta.url)),
     dir: "/skill", source: "devhub", readOnly: false,
@@ -57,6 +60,7 @@ beforeEach(() => {
   }));
   vi.mocked(generateAiText).mockResolvedValue({ text: JSON.stringify(draft), provider: "api" });
 });
+afterEach(() => vi.unstubAllEnvs());
 
 describe("draftJiraTicket", () => {
   it("uses the task, linked and nearby notes, Jira parent descriptions, skill and developer voice", async () => {

@@ -30,6 +30,9 @@ export { ROW_LONG_PRESS_MOVE_PX, ROW_LONG_PRESS_MS };
  * The data attribute is the contract; the class names are legacy chips that
  * predate it and have not been migrated yet.
  */
+/** Nearest card or row around a kebab when no explicit context-menu host wraps it. */
+const KEBAB_HOST_FALLBACK = "article, [role='row'], li, tr";
+
 export const ENTITY_CHIP_SELECTOR = "[data-entity-chip], .entity-link-chip, .jira-key-chip";
 
 export interface ContextMenuItem {
@@ -508,7 +511,8 @@ export function useContextMenu<T>() {
     if (typeof document.elementFromPoint !== "function") return null;
     const hit = document.elementFromPoint(x, y);
     if (!(hit instanceof Element)) return null;
-    return hit.closest<HTMLElement>("[data-context-menu-host]");
+    // Kebabs on cards that bind their own onContextMenu (no host attr) still mark their card.
+    return hit.closest<HTMLElement>("[data-context-menu-host]") ?? hit.closest<HTMLElement>(KEBAB_HOST_FALLBACK);
   }, []);
 
   const close = useCallback(() => {

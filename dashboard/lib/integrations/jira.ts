@@ -38,13 +38,6 @@ export const jiraProvider: IntegrationProvider = {
   executeWrite: executeJiraWrite,
   accounts: () => accountsFor("jira"),
   async get(ref, context) { return item(ref.account, IssueSchema.parse(await jiraRequest(ref.account, "/issue/" + key(ref) + "?fields=summary,status,updated", context))); },
-  async search(account, kind, query, cursor, context) {
-    if (kind !== "issue") throw new IntegrationError("unsupported", "Jira supports issue search.");
-    // Jira can return an empty search for bad credentials; check auth first.
-    await jiraRequest(account, "/myself", context);
-    const result = z.object({ issues: z.array(IssueSchema), nextPageToken: z.string().optional(), isLast: z.boolean().optional() }).parse(await jiraRequest(account, "/search/jql", context, { jql: query || "assignee = currentUser() ORDER BY updated DESC", fields: ["summary", "status", "updated"], maxResults: 30, ...(cursor ? { nextPageToken: cursor } : {}) }));
-    return { items: result.issues.map((raw) => item(account, raw)), next: result.isLast ? undefined : result.nextPageToken };
-  },
   async transitions(ref, context) {
     // The picker, hover prefetch and the MCP listing all ask for the same list within seconds.
     const cacheKey = ref.account + ":" + key(ref);

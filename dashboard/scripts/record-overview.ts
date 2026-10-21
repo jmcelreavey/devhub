@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { chromium, expect, type Page } from "@playwright/test";
 import { clickOn, encodeGif, hydrated, MAC_USER_AGENT, OVERLAY_SCRIPT, requiredEnv, setCaption, startScreencast, THEME_PIN_SCRIPT, VIEWPORT } from "./demo-kit";
-import { browserStubs, editorStubs, integrationStubs, telegramStubs } from "./record-new-features";
+import { editorStubs } from "./record-new-features";
 
 const baseUrl = requiredEnv("DEMO_URL");
 const output = requiredEnv("DEMO_OUT");
@@ -33,13 +33,11 @@ async function main(): Promise<void> {
     await context.addInitScript(THEME_PIN_SCRIPT);
     await context.addInitScript(OVERLAY_SCRIPT);
     await context.route("**/api/status/lan", (route) => route.fulfill({ json: { addresses: [] } }));
-    await integrationStubs(context);
-    await browserStubs(context);
     await editorStubs(context);
     await context.route("**/api/release-notes", (route) => route.fulfill({ json: {
-      currentVersion: "2.1.0", releases: [{ version: "2.1.0", date: "2026-10-11", markdown: "### Added\n\n- Theme effects and a soft cursor follower.\n- Managed task browser with explicit approvals.\n- Reviewed integration proposals and opt-in Telegram tests.\n- Editor selection discussions and durable task reviews.\n\n### Fixed\n\n- Resize cards from every edge and corner.\n- Dismiss What's new until the next version.", highlights: [] }],
+      currentVersion: "2.1.0", releases: [{ version: "2.1.0", date: "2026-10-11", markdown: "### Added\n\n- Theme effects and a soft cursor follower.\n- Editor selection discussions and durable task reviews.\n\n### Fixed\n\n- Resize cards from every edge and corner.\n- Dismiss What's new until the next version.", highlights: [] }],
     } }));
-    for (const route of ["/browser", "/integrations", `/editor?workspace=payments-api&selection=${selection}`, "/"]) await navigate(page, route);
+    for (const route of [ `/editor?workspace=payments-api&selection=${selection}`, "/"]) await navigate(page, route);
     await expect(page.getByText("Review search rewrite plan").first()).toBeVisible();
     await setCaption(page, "DevHub 2.1.0 · Graphite Neon (Default) · disposable demo data");
     const stop = await startScreencast(page, VIEWPORT);
@@ -59,41 +57,6 @@ async function main(): Promise<void> {
     await pause(page, 3500);
     await capture(page, "whats-new");
     await clickOn(page, page.getByRole("button", { name: "Done", exact: true }));
-    await navigate(page, "/browser");
-    await expect(page.getByAltText("Live page in the task browser")).toBeVisible();
-    await page.getByRole("region", { name: "Live browser", exact: true }).scrollIntoViewIfNeeded();
-    await setCaption(page, "Task browser · your control · explicit site and file approvals");
-    await pause(page, 3500);
-    await capture(page, "browser");
-    await integrationStubs(context);
-    await navigate(page, "/integrations");
-    await clickOn(page, page.getByRole("link", { name: "Write actions", exact: true }));
-    await page.getByLabel("Project key", { exact: true }).fill("DEMO");
-    await page.getByLabel("Title", { exact: true }).fill("Add webhook idempotency");
-    await page.getByLabel("Description", { exact: true }).fill("Reject duplicate payment events before writing another receipt.");
-    await clickOn(page, page.getByRole("button", { name: "Review action…", exact: true }));
-    const review = page.getByRole("dialog", { name: "Review this action" });
-    await expect(review).toBeVisible();
-    await setCaption(page, "Review the exact account, destination and content · no provider write");
-    await pause(page, 3500);
-    await capture(page, "proposal");
-    await clickOn(page, review.getByRole("button", { name: "Cancel action" }));
-    await telegramStubs(context);
-    await navigate(page, "/integrations");
-    const alerts = page.locator("#alerts");
-    await clickOn(page, alerts.getByText("Enable a destination", { exact: true }));
-    await alerts.getByRole("combobox", { name: /^Channel/ }).selectOption("telegram");
-    await alerts.getByLabel("Destination label").fill("Demo work phone");
-    await alerts.getByLabel("Bot token variable name").fill("DEVHUB_TELEGRAM_TOKEN");
-    await alerts.getByLabel("Telegram chat ID", { exact: false }).fill("123456");
-    await alerts.getByLabel(/I approve these event templates/).check();
-    await clickOn(page, alerts.getByRole("button", { name: "Enable alerts", exact: true }));
-    await clickOn(page, alerts.getByRole("button", { name: "Send test message" }));
-    await expect(alerts.getByRole("status")).toContainText("Test message sent to Demo work phone");
-    await alerts.getByRole("status").scrollIntoViewIfNeeded();
-    await setCaption(page, "Telegram · one explicit test send · provider acceptance is simulated");
-    await pause(page, 3800);
-    await capture(page, "telegram");
     await editorStubs(context);
     await navigate(page, `/editor?workspace=payments-api&selection=${selection}`);
     const discussion = page.getByRole("dialog", { name: "Ask AI about selection" });

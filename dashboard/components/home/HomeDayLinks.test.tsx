@@ -13,6 +13,7 @@ vi.mock("@/lib/hooks/use-tag-menu", () => ({ useTagMenuGroup: () => ({ group: nu
 vi.mock("@/components/EntityNoteAction", () => ({ useVaultNoteExists: () => false }));
 vi.mock("@/components/jira/JiraTransitionModal", () => ({ JiraTransitionModal: ({ open, jiraKey }: { open: boolean; jiraKey: string }) => open ? <div role="dialog" aria-label={`Move ${jiraKey} status`} /> : null }));
 vi.mock("@/lib/desktop/bridge", () => ({ openInBrowser: state.openInBrowser }));
+import { NOTES_OPEN_PATH_EVENT } from "@/lib/notes/open-in-panel";
 vi.mock("@/components/prs/WorktreeCleanupPanel", () => ({ WORKTREE_CLEANUP_KEY: "/api/repos/worktree-cleanup", WORKTREE_CLEANUP_OPTS: { refreshInterval: 0 } }));
 
 const pr = (n: number) => ({ repo: "acme/app", number: n, title: `PR ${n}`, url: `https://github.com/acme/app/pull/${n}` });
@@ -21,6 +22,7 @@ const ticket = (n: number) => ({ key: `APP-${n}`, summary: `Ticket ${n}`, url: `
 const now = Date.parse("2026-10-18T12:00:00Z");
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.stubGlobal("fetch", vi.fn(async () => new Response(null, { status: 404 })));
   state.payloads = {
     "/api/jira/tickets": { data: { configured: true, tickets: Array.from({ length: 6 }, (_, n) => ticket(n)) } },
     "/api/github/prs/owned": { data: { prs: Array.from({ length: 5 }, (_, n) => pr(n + 10)), failedRepos: [], limited: false } },
@@ -29,7 +31,7 @@ beforeEach(() => {
   };
   state.live.mockImplementation((key: string | null) => ({ ...(key ? state.payloads[new URL(key, "http://localhost").pathname] : {}), mutate: state.retry }));
 });
-afterEach(cleanup);
+afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
 describe("Home day coverage", () => {
   it("keeps peer reviews in Review with deduplication, preview expansion and shared actions", () => {
@@ -177,4 +179,28 @@ it("opens the shared PR and Jira menus on right-click and from the keyboard", ()
   fireEvent.click(within(ticketMenu).getByText("Update ticket state", { exact: false }));
   expect(screen.getByRole("dialog", { name: "Move APP-0 status" })).toBeInTheDocument();
   expect(tickets.getByRole("button", { name: "Actions for APP-1" })).toHaveAttribute("aria-haspopup", "menu");
+});
+
+describe("Home Review tab PR click", () => {
+  it("opens the review note in the Notes side panel and keeps GitHub as a secondary link", async () => {
+    vi.mocked(fetch).mockResolvedValue(new Response("Saved review"));
+    const onOpen = vi.fn();
+    window.addEventListener(NOTES_OPEN_PATH_EVENT, onOpen);
+    render(<HomeDayLinks profile="work" unavailable={false} prs={{ ...prs, reviews: [pr(20)] }} githubUnavailable={false} />);
+    const region = within(screen.getByRole("region", { name: "PRs" }));
+    fireEvent.click(region.getByRole("button", { name: "Review" }));
+    const title = region.getByRole("link", { name: "PR 20 acme/app #20" });
+    expect(title.getAttribute("href")).toMatch(/^\/notes\//);
+    expect(title).not.toHaveAttribute("target");
+    expect(region.getByRole("link", { name: "Open acme/app#20 on GitHub" })).toHaveAttribute("href", "https://github.com/acme/app/pull/20");
+    const click = new MouseEvent("click", { bubbles: true, cancelable: true, button: 0 });
+    fireEvent(title, click);
+    expect(click.defaultPrevented).toBe(true);
+    await vi.waitFor(() => expect(onOpen).toHaveBeenCalledTimes(1));
+    expect(fetch).toHaveBeenCalledExactlyOnceWith(expect.any(String), { cache: "no-store" });
+    const modified = new MouseEvent("click", { bubbles: true, cancelable: true, button: 0, metaKey: true });
+    fireEvent(title, modified);
+    expect(modified.defaultPrevented).toBe(false);
+    window.removeEventListener(NOTES_OPEN_PATH_EVENT, onOpen);
+  });
 });

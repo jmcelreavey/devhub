@@ -135,8 +135,10 @@ interface DockTab {
   reattached?: boolean;
   /** Last inject mode — interactive agent TUIs are not reused. */
   lastMode?: "oneshot" | "interactive";
-  /** Opened for a command an agent asked for over MCP; closes itself after a clean exit. */
+  /** Opened for an MCP command; close after completion, retaining the disk transcript. */
   agentRun?: boolean;
+  agentCommandPending?: boolean;
+  agentExitCode?: number;
 }
 
 interface OpenDetail {
@@ -342,6 +344,9 @@ export function TerminalDock() {
     const saved = readPersistedDockState();
     if (saved) {
       idRef.current = saved.nextId;
+      for (const tab of saved.tabs) {
+        if (tab.agentRun && tab.agentCommandPending) agentCommandSentRef.current.add(tab.id);
+      }
       userCollapsedRef.current = saved.userCollapsed;
       // eslint-disable-next-line react-hooks/set-state-in-effect -- rehydrating tabs from sessionStorage on mount
       setTabs(
@@ -352,6 +357,9 @@ export function TerminalDock() {
           sessionId: tab.sessionId,
           kind: tab.kind,
           repoName: tab.repoName,
+          agentRun: tab.agentRun,
+          agentCommandPending: tab.agentCommandPending,
+          agentExitCode: tab.agentExitCode,
           status: "connecting" as Status,
           generation: 0,
         })),
@@ -374,6 +382,9 @@ export function TerminalDock() {
         sessionId: tab.sessionId ?? null,
         kind: tab.kind,
         repoName: tab.repoName,
+        agentRun: tab.agentRun,
+        agentCommandPending: tab.agentCommandPending,
+        agentExitCode: tab.agentExitCode,
       })),
       activeId,
       nextId: idRef.current,
@@ -774,7 +785,11 @@ export function TerminalDock() {
         pendingInjectRef.current.delete(tabId);
         setInjectQueuedId(null);
         setInjectError(null);
-        if (tabsRef.current.find((t) => t.id === tabId)?.agentRun) agentCommandSentRef.current.add(tabId);
+        if (tabsRef.current.find((t) => t.id === tabId)?.agentRun) {
+          agentCommandSentRef.current.add(tabId);
+          setTabs((prev) => prev.map((tab) => tab.id === tabId
+            ? { ...tab, agentCommandPending: true, agentExitCode: undefined } : tab));
+        }
         if (pending.proposalId && pending.serverTracked) {
           void fetch("/api/terminal/propose", {
             method: "PATCH",
@@ -930,15 +945,15 @@ export function TerminalDock() {
 
   /**
    * A finished agent command leaves nothing to do in its tab, so it closes
-   * itself (which also ends the shell). Failures stay: that is the part worth
-   * reading. The delay lets a quick command be glimpsed, and anything that
-   * starts running in the tab meanwhile cancels the close.
+   * itself (which also ends the shell). Keep completion in tab state so a
+   * prompt repaint or UI remount cannot permanently cancel cleanup. Starting
+   * a new user command relinquishes ownership instead.
    */
   const closeAgentTabAfterExit = useCallback(
     (id: number, exitCode: number | null | undefined) => {
       const tab = tabsRef.current.find((t) => t.id === id);
       if (!shouldAutoCloseAgentTab({ agentRun: tab?.agentRun, exitCode })) return;
-      clearAgentTabClose(id);
+      if (agentCloseTimersRef.current.has(id)) return;
       agentCloseTimersRef.current.set(
         id,
         window.setTimeout(() => {
@@ -946,13 +961,38 @@ export function TerminalDock() {
           const current = tabsRef.current.find((t) => t.id === id);
           if (!current) return;
           if (current.busy && current.status !== "closed") return;
-          if (current.lastExitCode != null && current.lastExitCode !== 0) return;
+          if (!current.agentRun || current.agentCommandPending || current.agentExitCode !== exitCode) return;
           closeTab(id);
         }, AGENT_TAB_CLOSE_DELAY_MS),
       );
     },
-    [clearAgentTabClose, closeTab],
+    [closeTab],
   );
+
+  useEffect(() => {
+    for (const tab of tabs) {
+      if (tab.agentCommandPending || (tab.busy && tab.status !== "closed")) {
+        clearAgentTabClose(tab.id);
+      } else {
+        closeAgentTabAfterExit(tab.id, tab.agentExitCode);
+      }
+    }
+  }, [tabs, clearAgentTabClose, closeAgentTabAfterExit]);
+
+  useEffect(() => {
+    const timers = agentCloseTimersRef.current;
+    return () => {
+      for (const timer of timers.values()) window.clearTimeout(timer);
+      timers.clear();
+    };
+  }, []);
+
+  const keepUserTerminal = useCallback((id: number) => {
+    if (agentCommandSentRef.current.has(id)) return;
+    clearAgentTabClose(id);
+    setTabs((prev) => prev.map((tab) => tab.id === id && tab.agentExitCode != null
+      ? { ...tab, agentRun: false, agentExitCode: undefined } : tab));
+  }, [clearAgentTabClose]);
 
   const toggle = useCallback(() => {
     setOpen((wasOpen) => {
@@ -2077,12 +2117,16 @@ export function TerminalDock() {
                       prev.map((t) => (t.id === tab.id ? { ...t, lastExitCode: code } : t)),
                     );
                     if (!openRef.current) setUnread(true);
-                    closeAgentTabAfterExit(tab.id, code);
+                    setTabs((prev) => prev.map((t) => t.id === tab.id && t.agentRun
+                      ? { ...t, agentCommandPending: false, agentExitCode: code } : t));
                   }}
                   onCommandExit={(code) => {
                     completeCommandBlocks(tab.id, code);
                     // Only the command the agent sent: later commands typed here are the user's.
-                    if (agentCommandSentRef.current.delete(tab.id)) closeAgentTabAfterExit(tab.id, code);
+                    if (agentCommandSentRef.current.delete(tab.id)) {
+                      setTabs((prev) => prev.map((t) => t.id === tab.id
+                        ? { ...t, agentCommandPending: false, agentExitCode: code } : t));
+                    }
                     setTabs((prev) =>
                       prev.map((t) => (t.id === tab.id ? { ...t, lastExitCode: code } : t)),
                     );
@@ -2097,8 +2141,14 @@ export function TerminalDock() {
                       prev.map((t) => (t.id === tab.id ? { ...t, reattached } : t)),
                     )
                   }
-                  onCommandSubmit={(command) => beginCommandBlock(tab.id, command, "typed")}
-                  onOscCommand={(command) => beginCommandBlock(tab.id, command, "osc")}
+                  onCommandSubmit={(command) => {
+                    keepUserTerminal(tab.id);
+                    beginCommandBlock(tab.id, command, "typed");
+                  }}
+                  onOscCommand={(command) => {
+                    keepUserTerminal(tab.id);
+                    beginCommandBlock(tab.id, command, "osc");
+                  }}
                   onTypedLine={(line) =>
                     setLiveLines((prev) =>
                       prev[tab.id] === line ? prev : { ...prev, [tab.id]: line },

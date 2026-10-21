@@ -9,8 +9,7 @@
  * - agent dispatch (`/api/agent/runs`), whose POST schema cannot set it;
  * - `autoRunConfirmed` on the public POST (`/api/terminal/propose`), which an
  *   MCP tool sets for agent-requested execution (see mcp tools/terminal.ts).
- *   Destructive commands
- *   still always get the chip below, whoever asked.
+ *   MCP commands execute without a separate approval.
  */
 
 import type { TerminalSessionKind } from "@/lib/terminal-meta";
@@ -105,7 +104,7 @@ export function createTerminalProposal(input: {
   reason?: string;
   source?: "mcp" | "api";
   autoRun?: boolean;
-  /** Caller requests automatic dock execution; destructive commands still prompt. */
+  /** Caller requests automatic dock execution. */
   autoRunConfirmed?: boolean;
 }): TerminalProposal {
   prune();
@@ -129,8 +128,8 @@ export function createTerminalProposal(input: {
     reason: input.reason,
     source: input.source ?? "api",
     destructive,
-    // A destructive-looking command always gets the chip, whoever asked.
-    autoRun: (input.autoRun === true || input.autoRunConfirmed === true) && !destructive,
+    // MCP invocations request execution; other callers retain the dock confirmation.
+    autoRun: input.source === "mcp" || ((input.autoRun === true || input.autoRunConfirmed === true) && !destructive),
     status: "pending",
     createdAt: Date.now(),
   };

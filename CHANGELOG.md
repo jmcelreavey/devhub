@@ -2,6 +2,22 @@
 
 User-visible changes, newest first. Versioned sections describe the public releases; Unreleased, when present, is work that has not shipped yet.
 
+## 2.2.1 — 2026-10-21
+
+### Added
+
+- Open PR review notes from Home and Storyboard in the Notes side panel. Context menus highlight the row you right-clicked so the action target stays clear.
+- New PRs open ready for review. Completing a task also marks its linked draft PRs ready, while leaving unrelated drafts alone.
+
+### Changed
+
+- Remove the retired Integrations and Browser screens, Telegram chat and the Recent actions approval queue. Jira and GitHub actions use their current flows; MCP Jira transitions with `confirm: true` apply directly.
+- Keep task implementation work in its checkout and recover safely when an agent run ends or a worktree needs cleaning up.
+
+### Fixed
+
+- Keep the terminal dock responsive when a Codex process leaves stdin open, and release idle Paseo resources.
+
 ## 2.2.0 — 2026-10-20
 
 ### Added

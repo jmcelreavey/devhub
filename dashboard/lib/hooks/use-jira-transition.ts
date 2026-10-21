@@ -2,13 +2,12 @@
 import { useCallback } from "react";
 import { mutate } from "swr";
 import { useToast } from "@/lib/hooks/use-toast";
-import { integrationFetch } from "@/lib/integrations/client-fetch";
 import { clearTransitionOverride, isTransitionPending, setTransitionOverride } from "@/lib/jira/transition-state";
 import type { JiraTicket } from "@/lib/jira/client";
 import { profileHeaders } from "@/lib/tasks/profile-scope";
 
 interface Undo { toStatusId: string; label: string }
-interface MoveResponse { undo?: Undo | null; from?: string | null; to?: string | null; proposal?: { id: string }; error?: string }
+interface MoveResponse { undo?: Undo | null; from?: string | null; to?: string | null; error?: string }
 export interface JiraMove { transitionId?: string; toStatusId?: string }
 export interface JiraMoveOptions {
   /** Destination label. Lets the chip change before Jira answers. */
@@ -40,12 +39,11 @@ async function run(toast: Toasts, key: string, change: JiraMove, options: JiraMo
     options.onChanged?.();
   };
   try {
-    const res = await integrationFetch(`/api/jira/ticket/${key}/transition`, {
+    const res = await fetch(`/api/jira/ticket/${key}/transition`, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...profileHeaders(options.profile) },
       body: JSON.stringify(change),
     });
-    if (!res) { await settle(); return false; }
     const body = (await res.json().catch(() => ({}))) as MoveResponse;
     if (!res.ok) {
       await settle();
@@ -58,7 +56,6 @@ async function run(toast: Toasts, key: string, change: JiraMove, options: JiraMo
     toast.success(to ? `${key} moved to ${to}` : `Updated ${key}`, {
       duration: undo ? UNDO_WINDOW_MS : undefined,
       action: undo ? { label: "Undo", onClick: () => void run(toast, key, { toStatusId: undo.toStatusId }, { to: body.from ?? undefined, onChanged: options.onChanged, profile: options.profile }) } : undefined,
-      link: body.proposal ? { label: "Details", href: `/integrations#write-${body.proposal.id}` } : undefined,
     });
     await settle();
     return true;
@@ -72,7 +69,7 @@ async function run(toast: Toasts, key: string, change: JiraMove, options: JiraMo
 /**
  * One click moves a ticket. The chip shows the destination at once with a
  * spinner on the chip only, the request runs in the background, and the result
- * is a toast with Undo and a link to the recorded action.
+ * is a toast with Undo.
  */
 export function useJiraTransition() {
   const toast = useToast();

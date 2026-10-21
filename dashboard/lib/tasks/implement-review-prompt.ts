@@ -48,6 +48,7 @@ export function buildImplementReviewPrompt(input: ImplementReviewPromptInput): s
     `Save the review as the DevHub note ${input.notePath} (create it, or replace its body if it exists). Its ## Links section must carry a **Repo:** backlink to the local clone folder and a **Task:** backlink for task id ${input.taskId} dated ${input.date}.`,
     "Also follow the code-review skill on this same diff. The spec is this task and its Jira ticket. Put its reports in this same note under ## Standards and ## Spec, and leave those two sections separate from the other findings.",
     `${REVIEW_TASK_NOTE_LINE} Task id ${input.taskId}, date ${input.date}.`,
+    "Read the existing review note and implementation handoff first. Reuse passing checks and UI evidence for the same code and scenario; do not repeat tests or screenshots merely because this is a review stage. Investigate a specific missing check or suspected defect when needed, and retain unresolved manual checks. On a fix round, review the changed code and recheck earlier findings; broaden to a full review if the base changed or the delta cannot be established. Update the same note and preserve its backlinks.",
     "Finish by replying with the verdict and a numbered list of must-fix findings, each with a file and line. If there are none, say so.",
   );
   return lines.join("\n");

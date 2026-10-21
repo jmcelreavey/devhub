@@ -238,9 +238,7 @@ function validateAction(input: { script?: string; agent?: AgentJobSpec }): strin
 }
 
 /**
- * `approved` is true only for a human acting in the DevHub UI, or an MCP
- * client whose user just confirmed in-band. It decides whether a new or
- * rewritten agent job may run before someone clicks Approve.
+ * `approved` covers UI actions and MCP calls made with confirm:true.
  */
 export function createJob(input: JobInput, opts: { approved: boolean }): Job | { error: string } {
   const actionError = validateAction(input);
@@ -294,9 +292,9 @@ export function updateJob(
   }
 
   if (next.agent) {
-    // Only a change to what the agent does needs a fresh human decision.
+    // Confirmed MCP calls apply immediately, including previously pending jobs.
     const rewritten = defined.agent !== undefined || (current.script !== undefined && next.script === undefined);
-    next.approval = rewritten ? (opts.approved ? "approved" : "pending") : (current.approval ?? "pending");
+    next.approval = opts.approved ? "approved" : rewritten ? "pending" : (current.approval ?? "pending");
   } else {
     delete next.approval;
   }

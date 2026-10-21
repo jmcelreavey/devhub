@@ -30,7 +30,7 @@ export const TASK_NOTE_STATUS_LABEL: Record<TaskNoteStatus, string> = {
   "in-progress": "In progress",
   "needs-you": "Needs you",
   blocked: "Blocked",
-  "draft-pr": "Draft PR",
+  "draft-pr": "PR open",
   "ready-for-review": "Ready for review",
   done: "Done",
 };

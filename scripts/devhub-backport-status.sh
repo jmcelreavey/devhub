@@ -26,7 +26,7 @@ cd "$REPO_ROOT"
 # shellcheck source=lib/public-paths.sh
 source "$REPO_ROOT/scripts/lib/public-paths.sh"
 
-WATERMARK_FILE=".git/devhub-backport-watermark"
+WATERMARK_FILE="$(git rev-parse --git-common-dir)/devhub-backport-watermark"
 SINCE=""
 QUIET=0
 SET_WATERMARK=0

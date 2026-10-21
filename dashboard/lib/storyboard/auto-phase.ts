@@ -32,7 +32,7 @@ const PROGRESS: Record<AutoPhase, { step: number; label: string }> = {
   plan: { step: 1, label: "Planning" },
   baseline: { step: 2, label: "Recording the before video" },
   implement: { step: 2, label: "Building" },
-  "draft-pr": { step: 3, label: "Opening a draft PR" },
+  "draft-pr": { step: 3, label: "Opening the PR" },
   verify: { step: 4, label: "Reviewing" },
   fix: { step: 4, label: "Fixing" },
   ready: { step: 5, label: "Ready for review" },

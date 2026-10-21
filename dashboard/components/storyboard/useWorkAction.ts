@@ -24,7 +24,7 @@ export function useWorkAction(profile?: string) {
       : action.kind === "auto-retry" ? await retryAuto(card.taskId, profile)
       : action.kind === "clear" && action.attention.action.kind === "clear" ? await clearRun(card.taskId, action.attention.action.runId, profile)
       : { ok: false, error: "Open the task details to continue." };
-    if (result.ok) toast.success(action.kind === "create-pr" ? "Creating the draft PR. The PR is tagged on the task when it opens." : action.kind === "follow-up" ? "Follow-up task created." : action.kind === "reopen-feedback" ? "Task reopened. Addressing feedback." : action.kind === "reopen" ? "Task reopened." : action.kind === "start-auto" ? "On auto." : action.label === "One more round" ? "One more fix round." : "Task updated.");
+    if (result.ok) toast.success(action.kind === "create-pr" ? "Opening the PR. It is tagged on the task when it opens." : action.kind === "follow-up" ? "Follow-up task created." : action.kind === "reopen-feedback" ? "Task reopened. Addressing feedback." : action.kind === "reopen" ? "Task reopened." : action.kind === "start-auto" ? "On auto." : action.label === "One more round" ? "One more fix round." : "Task updated.");
     else toast.error(result.error ?? "Couldn't update the task.");
     void mutate((key) => typeof key === "string" && (key.startsWith("/api/storyboard") || key.startsWith("/api/tasks/workflow") || key.startsWith("/api/sidebar/counts")));
     return result;

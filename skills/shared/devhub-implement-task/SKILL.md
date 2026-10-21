@@ -119,6 +119,10 @@ When any linked run ends, DevHub appends a `### Run <runId>` snapshot to the han
 
 ## 1. Gather context (DevHub MCP)
 
+Read [preflight.md](preflight.md) before preparing repos or starting services.
+It owns local repo reuse, safe freshness checks, stored upstarts and recovery
+checkpoints. Validate and reuse the recorded environment on later stages.
+
 With the plan in hand, pull the surrounding context via the notes MCP:
 
 - `notes_read` the task note at `notePath` (if it exists) - it may hold a
@@ -253,7 +257,19 @@ post-implementation step.** If they fail, fix or report - do not offer a PR
 on a red baseline. Run the single test file as you go, and the full suite
 once at this gate. Check the final diff for unrelated changes and record the
 verification outcome in the structured task status. Keep exact commands and
-detailed results in the task note’s verification section.
+detailed results in the task note’s verification section. Record the checked
+commit or working-tree state, checkout, commands and outcomes. Later stages
+reuse passing checks while those inputs remain unchanged. New code, failures,
+missing coverage or changed dependencies/environment require the relevant
+checks again; keep required hooks and CI enabled.
+
+For UI changes, choose one visual verification owner and record it under
+`## Verification`: the implementer for native/manual tooling, or Jev for a
+runnable browser preview. When Jev owns final capture, the implementer only
+captures a reproduction or a specific risk that Jev will not cover. A before
+capture is optional: add `Baseline capture: required` under `## Verification`
+only when requested by the user or needed to reproduce/compare the change.
+Otherwise spend visual verification on the finished behaviour.
 
 When the user asked for test-first, or you are locking a bug in with a
 regression test: red, then green. One failing test at the public seam the
@@ -270,6 +286,14 @@ opening a browser. **localhost:1337 is the packaged production app**, not
 webpack — do not test checkout changes there.
 
 ## 4.5 Pre-commit review gate
+
+**Auto exception:** in a DevHub Auto implementation or fix run, the orchestrator
+owns the independent review. Finish verification and the authorised commit,
+then stop. DevHub opens
+the draft PR and launches the chosen reviewer; it owns subsequent fix rounds.
+Do not invoke `tasks_implement_review`, launch a nested reviewer, write a second
+self-review note or open Cursor for a commit approval in that mode. Keep the PR
+a draft. The interactive workflow below still requires its pre-commit review.
 
 Before offering commit/push, invoke the `pr-explain-review` skill in local-diff
 mode against the exact implementation branch and intended remote base. This is
@@ -360,7 +384,8 @@ answer:
    is open in Cursor (§4.5), propose a conventional-commit message
    (`feat:`/`fix:`/...), confirm branch naming, then commit and push. Never
    commit without an explicit yes.
-2. **Create a PR?** Ask draft vs ready. Use the `create-pr` skill; keep the
+2. **Create a PR?** Open it ready for review, never as a draft unless the user
+   explicitly asks for one (no `--draft`). Use the `create-pr` skill; keep the
    PR body factual and free of AI attribution. Pass this task's exact `id`,
    `date`, `notePath`, and existing links to the skill.
 3. **Sync DevHub context:** after a PR exists, call `tasks_context_sync` with
@@ -383,8 +408,10 @@ answer:
    complete (`tasks_update` / done). Only mark it done if they say yes. This
    is separate from the Jira status — do not treat a Code Review transition as
    completing the DevHub task.
-7. **Learning?** If anything notable surfaced (a gotcha, a reusable pattern),
-   capture it via the notes MCP learnings tree. Skip if nothing did.
+7. **Recovery checkpoint.** If a meaningful blocker or workaround occurred,
+   complete the checkpoint in [preflight.md](preflight.md) before handing off,
+   including on Auto. Record whether it was fixed at source, documented as a
+   workaround, or needs a follow-up. Skip this for routine successful work.
 
 The user may stop after any step - that's fine. Their "no" is a complete
 answer; do not re-ask.
@@ -410,10 +437,13 @@ Use short plain-language sentences, without raw logs. This refreshes Summary
 and Status while preserving the plan and personal notes. Reviewers update this
 context too, without changing code or the workflow column.
 
-For UI work, capture the rendered result with available browser tooling and
-attach it with `add_media {localFile: <absolute path>, caption, phase: "after"}`.
-Use `"before"` for a baseline. The latest attachment appears in task details.
-If capture is unavailable, explain why in `currentState`.
+The implementation or QA stage owns UI capture. Reuse existing evidence when
+the code, checkout and scenario still match. Planning, review and PR creation
+capture only a specific uncovered risk or changed behaviour. Attach new evidence
+with `add_media {localFile: <absolute path>, caption, phase: "after"}` and name
+the verified commit or working-tree state, scenario and remaining gaps. Use
+`"before"` only when a baseline is required. If capture is unavailable, explain
+why in `currentState`; keep the manual check explicit.
 
 On Auto, the orchestrator handles “Pause after planning”. Finish the plan and
 summary, then stop; never approve your own plan or start implementation from a

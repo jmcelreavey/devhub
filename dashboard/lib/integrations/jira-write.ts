@@ -66,7 +66,7 @@ export async function prepareJiraWrite(input: WriteInput, context: IntegrationCo
     native: { domain, accountId: me.accountId, parentRevision: parent?.fields.updated ?? null, payload: { fields } } };
 }
 export async function executeJiraWrite(input: WriteInput, prepared: PreparedWrite, context: WriteContext): Promise<WriteReceipt> {
-  if (input.provider !== "jira" || !context.approvalId) throw new IntegrationError("unsupported", "An approved Jira action is required.");
+  if (input.provider !== "jira" || !context.requestId) throw new IntegrationError("unsupported", "A Jira action is required.");
   try {
     if (input.action === "issue.assign-self") {
       await jiraRequest(input.account, "/issue/" + encodeURIComponent(input.ref.id) + "/assignee", context, prepared.native.payload, "PUT");

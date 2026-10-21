@@ -110,7 +110,10 @@ store path instead.
   `command not found`. Inherited `PORT` makes anything that does
   `process.env.PORT || <default>` bind to 1337 and collide with DevHub. Before
   install/start: `unset NODE_ENV` and `unset PORT` (or set the project's real
-  port; install with `--include=dev` if needed).
+  port; install with `--include=dev` if needed). For a preview that assigns a
+  port, support an explicit validated argument such as `--port {port}` and apply
+  it after clearing inherited `PORT`. Preserve that requested port through the
+  startup command so preview readiness checks reach the right process.
 - **Inherited-but-empty vars beat `.env`.** `dotenv` (and most equivalents) never
   overwrite a key already present in the environment, and an *empty* value still
   counts as present. zsh exports `ENV` (the POSIX startup-file path) as an empty
@@ -181,8 +184,12 @@ with nobody tracking it. That is the failure this section exists to prevent.
   it is up; do not propose a second start that races the first for the port.
 - **Read output with `terminal_tail`**, using the session id from
   `terminal_list`, rather than teeing the command into a log file of your own.
-- **Killing it is the user's call.** The tab is theirs; say the run is in the
-  dock and leave it. Only tear down processes you started in your own shell.
+- **Clean up task-owned runs when their work is done.** Keep an upstart alive
+  while implementation, review or QA still needs it. Afterwards stop only the
+  service you started, confirm it exited, and close its dock tab. Preserve a
+  service borrowed from another task or explicitly left running by the user.
+  Capture the result and session id first; transcripts remain available after
+  the tab closes. Check `terminal_list` before declaring cleanup complete.
 - Requires the dashboard running. If `terminal_propose_run` is unavailable, say
   the dock could not be reached and hand the user the command — do not silently
   fall back to backgrounding it yourself.

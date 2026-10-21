@@ -81,17 +81,9 @@ Every open task, filterable by tag, date or status, plus History for what got do
 
 Checks, independent reviews and your publication decisions stay with the task across restarts. A code change makes old evidence stale. You approve the exact destination and content before publication; an interrupted command isn't quietly rerun. See [Task checks and review persistence](docs/guides/task-checks-and-reviews.md).
 
-### Browser
+### Slack
 
-Browse inside DevHub, or open the same task profile in native Chrome for private sign-in. The agent only reads when you hand over control; clicks, typed values and file transfers need their own approval. Windows/WSL browser controls aren't enabled yet.
-
-![Task browser controls and a reviewed file request](docs/assets/demos/browser.gif)
-
-<sub>Real controls with a simulated Chrome stream and file request, not a live account. [Browser guide](docs/guides/managed-browser.md).</sub>
-
-### Integrations
-
-Find and link Jira/GitHub work across accounts, then review exact ticket or PR proposals before anything is sent. Slack and Telegram can request allowlisted actions and deliver opt-in workflow alerts; chat cannot approve a write. See [Integrations](docs/guides/integrations.md).
+Follow task progress and answer questions in Slack. Configure the bot in Setup. See [Slack](docs/guides/integrations.md).
 
 ### Editor and code discussions
 

@@ -23,21 +23,20 @@ beforeEach(() => clearTransitionOverride("PTF-5106"));
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
 describe("useJiraTransition", () => {
-  it("paints the destination before Jira answers, then confirms with Undo and Details", async () => {
+  it("paints the destination before Jira answers, then reports success with Undo", async () => {
     const { hook, resolvers, transitionCalls } = setup();
     let done: Promise<boolean>;
     act(() => { done = hook.result.current.move("PTF-5106", { transitionId: "41" }, { to: "Done" }); });
     // Optimistic and pending, with no response yet.
     expect(hook.result.current.override).toEqual({ status: "Done", pending: true });
     const [, init] = transitionCalls()[0];
-    expect(new Headers(init.headers).get("x-devhub-intent")).toBe("direct");
     expect(JSON.parse(init.body as string)).toEqual({ transitionId: "41" });
     await act(async () => { resolvers[0](moved()); await done; });
     expect(await done!).toBe(true);
     await waitFor(() => expect(hook.result.current.override).toBeUndefined());
     expect(document.body).toHaveTextContent("PTF-5106 moved to Done");
     expect(document.body.querySelector("button.toast-action")).toHaveTextContent("Undo");
-    expect(document.body.querySelector("a.toast-action")).toHaveAttribute("href", "/integrations#write-c3a1f7a4-0b52-4a0e-9f0b-2f2b7b0f5e11");
+    expect(document.body.querySelector("a.toast-action")).toBeNull();
   });
   it("Undo moves back by status, not by a transition id it cannot know", async () => {
     const { hook, resolvers, transitionCalls } = setup();

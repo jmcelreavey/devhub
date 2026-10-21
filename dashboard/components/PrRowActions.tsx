@@ -2,13 +2,14 @@
 
 import type { ContextMenuGroup,ContextMenuItem } from "@/components/shell/ContextMenu";
 import { launchAgentJob } from "@/lib/agent-job";
-import { createOrOpenVaultNote } from "@/lib/create-vault-note";
+import { vaultNoteApi, vaultNoteHref } from "@/lib/create-vault-note";
 import { openInBrowser } from "@/lib/desktop/bridge";
 import type { GithubPrRow,GithubPrsApiPayload } from "@/lib/github/prs";
 import { withTagsGroup } from "@/lib/hooks/use-tag-menu";
 import type { useToast } from "@/lib/hooks/use-toast";
 import { openPrInCursor } from "@/lib/open-in-cursor-client";
-import { buildPrNoteMarkdown,prNotePath } from "@/lib/pr-note";
+import { prNotePath } from "@/lib/pr-note";
+import { openNoteHrefInPanel } from "@/lib/notes/open-in-panel";
 import { notifyPrReviewNoteWatch,prReviewNotePath } from "@/lib/pr-review-notes";
 import { buildSlackMessage,copyTextAndToast } from "@/lib/pr-slack";
 import {
@@ -30,6 +31,7 @@ ScanSearch,
 Wrench,
 } from "lucide-react";
 import { mutate as globalMutate } from "swr";
+import { isGithubPrsListKey } from "@/lib/github/prs-swr";
 
 export type PrRowKind = "authored" | "reviews" | "reviewed";
 
@@ -78,6 +80,7 @@ export function buildPrRowMenuGroups({
   toast,
   openNote,
   repLocked = false,
+  canSkip = true,
   openRep,
   tagsGroup = null,
 }: {
@@ -87,6 +90,7 @@ export function buildPrRowMenuGroups({
   openNote: () => void | Promise<void>;
   /** Today's unfinished daily rep is this PR — agent review stays locked until findings are saved. */
   repLocked?: boolean;
+  canSkip?: boolean;
   openRep?: () => void;
   /** Linked entities on this PR — see useTagMenuGroup. */
   tagsGroup?: ContextMenuGroup | null;
@@ -150,7 +154,7 @@ export function buildPrRowMenuGroups({
     description: "Hides this PR until something changes on it",
     icon: <CircleSlash size={12} />,
     onSelect: async () => {
-      const key = "/api/github/prs";
+      const key = isGithubPrsListKey;
       // Optimistic: the refetch takes seconds (two gh searches), so drop the row
       // now and reconcile with the server in the background.
       await globalMutate<GithubPrsApiPayload>(
@@ -180,6 +184,7 @@ export function buildPrRowMenuGroups({
         });
         if (!res.ok) throw new Error(String(res.status));
         toast.info("Skipped — it comes back if the PR is updated.");
+        void globalMutate("/api/github/prs/skip");
         // No revalidate on success. The row is already gone locally and the
         // server dropped its cache, so the next scheduled poll picks it up —
         // refetching per skip means two `gh` searches each time, which trips
@@ -230,7 +235,7 @@ export function buildPrRowMenuGroups({
           onSelect: () => void copyTextAndToast(buildSlackMessage(row, "awaiting"), "Slack message", toast),
         },
         noteItem,
-        skipPr,
+        ...(canSkip ? [skipPr] : []),
       ]),
       tagsGroup,
     );
@@ -245,7 +250,7 @@ export function buildPrRowMenuGroups({
         openGithub,
         ...copyUrlItems(row, toast),
         noteItem,
-        skipPr,
+        ...(canSkip ? [skipPr] : []),
       ]),
       tagsGroup,
     );
@@ -280,16 +285,15 @@ export async function openPrRowNote(
   toast: ReturnType<typeof useToast>,
 ): Promise<void> {
   try {
-    const result = await createOrOpenVaultNote({
-      path: prNotePath({ repo: row.repo, number: row.number }),
-      markdown: buildPrNoteMarkdown({
-        repo: row.repo,
-        number: row.number,
-        title: row.title,
-        url: row.url,
-      }),
-    });
-    push(result.href);
+    const path = prNotePath({ repo: row.repo, number: row.number });
+    const response = await fetch(vaultNoteApi(path), { cache: "no-store" });
+    if (response.status === 404) {
+      toast.info("No saved PR note yet. Use Review with agent to create one.");
+      return;
+    }
+    if (!response.ok) throw new Error("Couldn't load PR note.");
+    const href = vaultNoteHref(path);
+    if (!openNoteHrefInPanel(href)) push(href);
   } catch {
     toast.error("Couldn't open PR note.");
   }

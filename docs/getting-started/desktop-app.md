@@ -66,9 +66,6 @@ and keep the server running from a tray icon; Linux has no tray, so close
 destroys the window, stops the sidecar, and scheduled jobs do not run until
 you open DevHub again.
 
-The packaged Browser needs a graphical session (`DISPLAY` or
-`WAYLAND_DISPLAY`). Headless SSH and WSL are refused — see
-[Managed browser](../guides/managed-browser.md).
 
 ### Unsigned installers
 
@@ -262,13 +259,6 @@ you open DevHub from another device over your network — it hands out a real
 shell, and that is not something to expose to a network. Use it on the machine
 DevHub is running on.
 
-**The Browser page is blank or returns an empty 500.** Playwright loads only
-when you start a Chrome session. The packaged app must include
-`playwright-core`'s `browsers.json` (Next's file tracer drops it). 2.1.1 stages
-that file; if an older build is missing it, the start action returns JSON such
-as "Playwright could not load because browsers.json is missing. Reinstall
-DevHub." Reinstall from the [latest release](https://github.com/jmcelreavey/devhub/releases/latest).
-See [Managed browser](../guides/managed-browser.md#packaged-app).
 
 **Nothing works and you want to start clean.** Quit DevHub and move the
 `config` folder inside the app-data directory aside. Your notes and tasks are

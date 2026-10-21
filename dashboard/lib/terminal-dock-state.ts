@@ -22,6 +22,10 @@ export interface PersistedDockTab {
   sessionId?: string | null;
   kind?: TerminalSessionKind;
   repoName?: string;
+  /** MCP ownership and completion survive a dashboard remount. */
+  agentRun?: boolean;
+  agentCommandPending?: boolean;
+  agentExitCode?: number;
 }
 
 export interface PersistedDockState {
@@ -54,14 +58,14 @@ export function isAgentRunSource(source: string | undefined): boolean {
 /**
  * Should a tab opened for an agent's command close itself once it is done?
  *
- * Only on success: a failure is the one thing worth coming back to read, and
- * an unknown exit code is not evidence of success.
+ * A known failure is finished too; its transcript remains on disk.
+ * Quiet output or a disconnected socket alone does not prove completion.
  */
 export function shouldAutoCloseAgentTab(opts: {
   agentRun: boolean | undefined;
   exitCode: number | null | undefined;
 }): boolean {
-  return opts.agentRun === true && opts.exitCode === 0;
+  return opts.agentRun === true && Number.isInteger(opts.exitCode);
 }
 
 export function parsePersistedDockState(raw: string | null): PersistedDockState | null {
@@ -86,6 +90,11 @@ export function parsePersistedDockState(raw: string | null): PersistedDockState 
         ...(typeof sessionId === "string" || sessionId === null ? { sessionId } : {}),
         ...(kind ? { kind } : {}),
         ...(typeof repoName === "string" ? { repoName } : {}),
+        ...(tab.agentRun === true ? {
+          agentRun: true,
+          ...(tab.agentCommandPending === true ? { agentCommandPending: true } : {}),
+          ...(Number.isInteger(tab.agentExitCode) ? { agentExitCode: tab.agentExitCode } : {}),
+        } : {}),
       });
     }
     if (tabs.length === 0) return null;

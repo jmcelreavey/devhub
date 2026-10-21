@@ -4,9 +4,9 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createTask, findTask, patchTask } from "@shared/tasks/store.ts";
 import type { IntegrationProvider } from "./types";
-import { WriteInputSchema, type WriteProposal } from "./write-types";
+import { WriteInputSchema, type WriteResult } from "./write-types";
 import { captureTaskJiraKey, linkCreatedJiraTask } from "./jira-task-link";
-import { confirmWrite, listWrites, requestWrite, reviewWrite } from "./write-store";
+import { writeNow } from "./write-store";
 
 vi.mock("./registry", () => ({ providerFor: vi.fn() }));
 vi.mock("@/lib/tasks/storage", () => ({ ensureTasksMigrated: async () => undefined }));
@@ -31,9 +31,9 @@ afterEach(() => {
   fs.rmSync(root, { recursive: true, force: true });
 });
 
-function proposal(taskId: string, taskJiraKey: string | null = null): WriteProposal {
+function proposal(taskId: string, taskJiraKey: string | null = null): WriteResult {
   return {
-    id: "c2bf5680-9be3-421c-ad48-e428e536a6dc", profile: "work", source: "MCP", createdAt: new Date(now).toISOString(), expiresAt: new Date(now + 60000).toISOString(), state: "succeeded", taskJiraKey,
+    id: "c2bf5680-9be3-421c-ad48-e428e536a6dc", profile: "work", source: "MCP", createdAt: new Date(now).toISOString(), state: "succeeded", taskJiraKey,
     input: WriteInputSchema.parse({ action: "issue.create", provider: "jira", account: "default", projectKey: "PTF", parentKey: "PTF-4891", taskId, title: "Android login", body: "Fix the login screen." }),
     receipt: { detail: "Created PTF-5271", item: { ref: { provider: "jira", account: "default", kind: "issue", id: "PTF-5271" }, title: "Android login", url: "https://jira.example.test/browse/PTF-5271" } },
   };
@@ -80,10 +80,10 @@ describe("created Jira ticket write-back", () => {
     expect(findTask(home, task.id)).toEqual(other);
   });
 
-  it("does not link unconfirmed, uncertain or unmatched receipts, or the parent's own key", async () => {
+  it("does not link uncertain or unmatched receipts, or the parent's own key", async () => {
     const task = createTask(work, { text: "Android login" });
     const saved = proposal(task.id);
-    for (const state of ["requested", "pending", "unknown", "failed"] as const) expect(await linkCreatedJiraTask({ ...saved, state })).toBe("skipped");
+    for (const state of ["unknown", "failed"] as const) expect(await linkCreatedJiraTask({ ...saved, state })).toBe("skipped");
     expect(await linkCreatedJiraTask({ ...saved, taskJiraKey: undefined })).toBe("skipped");
     expect(await linkCreatedJiraTask({ ...saved, receipt: undefined })).toBe("skipped");
     saved.receipt!.item!.ref.id = "PTF-4891";
@@ -91,7 +91,7 @@ describe("created Jira ticket write-back", () => {
     expect(findTask(work, task.id)).toEqual(task);
   });
 
-  it("persists taskId and the original key on a proposal, then links only after human confirmation", async () => {
+  it("creates and links the ticket immediately in the captured profile", async () => {
     const task = createTask(work, { text: "Android login", parentKey: "PTF-4891" });
     const input = proposal(task.id).input;
     const provider: IntegrationProvider = {
@@ -100,15 +100,9 @@ describe("created Jira ticket write-back", () => {
       executeWrite: vi.fn(async () => proposal(task.id).receipt!),
     };
     const options = { root: path.join(root, "writes"), now, provider: () => provider };
-    const pending = await requestWrite(input, "work", "MCP", options);
-    expect(listWrites("work", options.root)[0]).toMatchObject({ taskJiraKey: null, input: { taskId: task.id } });
-    const reviewed = await reviewWrite(pending.id, "work", signal, options);
-    expect(findTask(work, task.id)?.jiraKey).toBeUndefined();
-    expect(provider.executeWrite).not.toHaveBeenCalled();
-    const result = await confirmWrite(reviewed.id, reviewed.digest!, "work", signal, options);
-    expect(result).toMatchObject({ state: "succeeded", taskLink: "linked" });
+    const { result } = await writeNow(input, "work", signal, options);
+    expect(result).toMatchObject({ state: "succeeded", taskLink: "linked", taskJiraKey: null, input: { taskId: task.id } });
     expect(findTask(work, task.id)?.jiraKey).toBe("PTF-5271");
-    await expect(confirmWrite(reviewed.id, reviewed.digest!, "work", signal, options)).rejects.toThrow("no longer");
     expect(provider.executeWrite).toHaveBeenCalledTimes(1);
   });
 });
