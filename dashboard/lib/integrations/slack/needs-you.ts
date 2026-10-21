@@ -1,6 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { readAlerts } from "../alert-store";
-import { isQuiet } from "../alert-types";
+import { slackQuietHours } from "./quiet-hours";
 import { slackRouteContext } from "./answers";
 import { capabilityRequest } from "./capabilities-route";
 import { classifySlackFailure, type SlackMessage, type SlackMessageUpdate, type SlackReceipt, type SlackTransport } from "./client";
@@ -60,7 +59,7 @@ function defaultDependencies(): SlackNeedsDependencies {
     store: new SlackThreadStore(), profile: () => slackRouteContext().activeProfile,
     primary: () => process.env.DEVHUB_SCHEDULER !== "0", now: Date.now,
     snapshot: loadSlackNeedsSnapshot, questions: slackTaskQuestions, answer: answerSlackTask, retry: retrySlackTask, decidePlan: decideSlackPlan, messages: new SlackTaskMessageStore(),
-    quiet: (profile, now) => readAlerts().destinations.some((destination) => destination.enabled && destination.provider === "slack" && destination.workProfile === profile && isQuiet(destination, now)),
+    quiet: slackQuietHours,
   };
 }
 
@@ -134,6 +133,15 @@ export class SlackNeedsYou implements SlackNeedsHandler {
     });
   }
 
+  private currentNeeds(items: SlackNeed[], profile: string): SlackNeed[] {
+    const previous = this.items(profile).find(([, item]) => item.entityId === "prs:actionable" && !item.resolved)?.[1];
+    return items.map((item) => {
+      if (item.entityId !== "prs:actionable" || !item.prRows?.length || !previous?.prRows?.length) return item;
+      const unchanged = item.prRows.every((row) => previous.prRows!.some((prior) => row.href === prior.href && row.title === prior.title && row.needed === prior.needed && !!row.itemKey && row.itemKey === prior.itemKey));
+      return unchanged ? { ...item, itemKey: previous.itemKey } : item;
+    });
+  }
+
   private async postNeedsYou(): Promise<void> {
     if (!this.active()) return;
     const profile = this.dependencies.profile();
@@ -145,9 +153,9 @@ export class SlackNeedsYou implements SlackNeedsHandler {
     const snapshot = await this.dependencies.snapshot(profile);
     if (!this.active() || this.dependencies.profile() !== profile) { this.reset(); return; }
     if (snapshot.items.some((item) => item.profile !== profile)) throw new Error("Slack snapshot profile mismatch");
-    const current = new Map(snapshot.items.map((item) => [slackThreadItemId(item, this.audience), item]));
+    const current = new Map(this.currentNeeds(snapshot.items, profile).map((item) => [slackThreadItemId(item, this.audience), item]));
     this.latest = { profile, baseline, milestones: snapshot.milestones ?? [] };
-    this.noteChange(profile, [...current.keys()]);
+    this.noteChange(profile, snapshot.items.map((item) => slackThreadItemId(item, this.audience)));
     await this.dependencies.store.change((state) => {
       if (!this.recovered) {
         for (const item of Object.values(state.items)) if (item.delivery === "sending") item.delivery = "unknown";
@@ -158,6 +166,11 @@ export class SlackNeedsYou implements SlackNeedsHandler {
         item.resolution = item.questionId ? "Answered in DevHub" : `Resolved · ${item.needed}`;
         item.revision = undefined;
         item.dirty = !!(item.ts || item.digestTs);
+      }
+      for (const [id, item] of current) {
+        const stored = state.items[id];
+        if (!stored?.prRows || !item.prRows || JSON.stringify(stored.prRows) === JSON.stringify(item.prRows)) continue;
+        Object.assign(stored, { prRows: item.prRows, needed: item.needed, dirty: !!(stored.ts || stored.digestTs) });
       }
       for (const [token, confirmation] of Object.entries(state.confirmations)) {
         if (confirmation.expiresAt < now - 86400000) delete state.confirmations[token];

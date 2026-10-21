@@ -7,6 +7,8 @@ vi.mock("node:os", async () => (await import("@/lib/test-home")).isolatedOs());
 const paseo = vi.hoisted(() => ({ startPaseoAgent: vi.fn() }));
 const providers = vi.hoisted(() => ({ listPaseoProviders: vi.fn() }));
 const lifecycle = vi.hoisted(() => ({ reconcileCapacityRuns: vi.fn(async () => undefined) }));
+const checkout = vi.hoisted(() => ({ prepareImplementationCheckout: vi.fn(), checkoutPreparationPrompt: () => "Prepared checkout receipt" }));
+vi.mock("./checkout", () => checkout);
 const git = vi.hoisted(() => ({ gitHead: vi.fn(async () => "base-sha"), createRunWorktree: vi.fn() }));
 const paseoClient = vi.hoisted(() => ({ openPaseoSession: vi.fn(async () => ({ close: async () => undefined })) }));
 vi.mock("@/lib/paseo/providers", () => providers);
@@ -30,6 +32,12 @@ beforeEach(() => {
   vi.stubEnv("DEVHUB_AGENT_ALLOWED_ROOTS", root);
   vi.stubEnv("DEVHUB_AGENT_MAX_RUNS", "6");
   vi.clearAllMocks();
+  checkout.prepareImplementationCheckout.mockReset();
+  checkout.prepareImplementationCheckout.mockImplementation(async (_cwd, _id, options) => {
+    const receipt = { originalBranch: "old-work", originalHead: "old", branch: "main", stashMessage: "saved work", stashSha: "stash-sha", baseSha: "fresh-main" };
+    options.record(receipt);
+    return receipt;
+  });
   lifecycle.reconcileCapacityRuns.mockResolvedValue(undefined);
   providers.listPaseoProviders.mockResolvedValue([{ id: "claude", ready: true, label: "Claude", models: ["haiku"] }]);
   paseo.startPaseoAgent.mockImplementation(async ({ run, resumeAgentId, onSubmission }) => {
@@ -41,6 +49,32 @@ afterEach(() => { vi.unstubAllEnvs(); fs.rmSync(root, { recursive: true, force: 
 const input = () => ({ provider: "claude", model: "haiku", prompt: "Synthetic test", cwd: root, depth: 0, worktree: false, requestId: "one-action" });
 
 describe("durable Paseo dispatch", () => {
+  it("prepares a fresh implementation before starting Paseo and records the recovery receipt", async () => {
+    const run = await dispatchAgentRun({ ...input(), activity: { source: "interactive", action: "implement" } });
+    expect(checkout.prepareImplementationCheckout).toHaveBeenCalledTimes(1);
+    expect(run.spec).toMatchObject({ baseSha: "fresh-main", checkoutPreparation: { originalBranch: "old-work", stashSha: "stash-sha" } });
+    expect(paseo.startPaseoAgent).toHaveBeenCalledWith(expect.objectContaining({ prompt: expect.stringContaining("Prepared checkout receipt") }));
+  });
+
+  it("never starts an agent when checkout preparation fails", async () => {
+    checkout.prepareImplementationCheckout.mockRejectedValueOnce(new Error("main has diverged"));
+    const run = await dispatchAgentRun({ ...input(), activity: { source: "interactive", action: "implement" } });
+    expect(run.status).toMatchObject({ state: "failed", error: "main has diverged" });
+    expect(paseo.startPaseoAgent).not.toHaveBeenCalled();
+  });
+
+  it("keeps inherited implementation edits and their original baseline", async () => {
+    const run = await dispatchAgentRun({ ...input(), prepareCheckout: true, inherit: { baseSha: "task-base" }, activity: { source: "interactive", action: "implement" } });
+    expect(checkout.prepareImplementationCheckout).not.toHaveBeenCalled();
+    expect(run.spec.baseSha).toBe("task-base");
+  });
+
+  it("leaves ordinary reviews and explicitly continued runs alone", async () => {
+    await dispatchAgentRun({ ...input(), prepareCheckout: false, activity: { source: "interactive", action: "implement" } });
+    await dispatchAgentRun({ ...input(), requestId: "review-only", activity: { source: "interactive", action: "review" } });
+    expect(checkout.prepareImplementationCheckout).not.toHaveBeenCalled();
+  });
+
   it("rejects dispatch for a pending pickup before starting an agent", async () => {
     vi.stubEnv("TASKS_DIR", path.join(root, "tasks"));
     const task = createTask(getActiveTasksDir(), { text: "Imported task", teamPickup: { handoffId: "h1", cwd: root, branch: "feature/task", status: "pending" } });

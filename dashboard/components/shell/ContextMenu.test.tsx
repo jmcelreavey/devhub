@@ -217,6 +217,42 @@ function HostHighlightHarness() {
   );
 }
 
+function CardHarness() {
+  const menu = useContextMenu<string>();
+  return (
+    <article data-testid="card" tabIndex={0}
+      onContextMenu={(event) => { event.preventDefault(); menu.openAtPoint(event.clientX, event.clientY, "card", event.currentTarget); }}
+      onKeyDown={(event) => { if (event.key === "ContextMenu") menu.openAtPoint(0, 0, "card", event.currentTarget); }}>
+      Card
+      <RowMenuKebab label="Card actions" onOpen={(x, y) => menu.openAtPoint(x, y, "card")} />
+      {menu.target ? <button type="button" data-testid="close-card" onClick={() => menu.close()}>Close</button> : null}
+    </article>
+  );
+}
+
+describe("context-menu target on cards without a bindRow host", () => {
+  it("marks the card for right-click and the ContextMenu key, and clears on close", () => {
+    render(<CardHarness />);
+    const card = screen.getByTestId("card");
+    fireEvent.contextMenu(card, { clientX: 10, clientY: 10 });
+    expect(card.getAttribute("data-context-menu")).toBe("open");
+    fireEvent.click(screen.getByTestId("close-card"));
+    expect(card.getAttribute("data-context-menu")).toBeNull();
+    fireEvent.keyDown(card, { key: "ContextMenu" });
+    expect(card.getAttribute("data-context-menu")).toBe("open");
+    fireEvent.click(screen.getByTestId("close-card"));
+    expect(card.getAttribute("data-context-menu")).toBeNull();
+  });
+
+  it("marks the surrounding card when its kebab opens the menu", () => {
+    render(<CardHarness />);
+    const kebab = screen.getByRole("button", { name: "Card actions" });
+    Object.defineProperty(document, "elementFromPoint", { configurable: true, value: vi.fn(() => kebab) });
+    fireEvent.click(kebab, { clientX: 50, clientY: 60 });
+    expect(screen.getByTestId("card").getAttribute("data-context-menu")).toBe("open");
+  });
+});
+
 describe("useContextMenu host highlight", () => {
   it("marks the host on contextmenu and clears on close", () => {
     render(<HostHighlightHarness />);

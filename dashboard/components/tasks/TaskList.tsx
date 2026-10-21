@@ -1,5 +1,4 @@
 "use client";
-import { integrationFetch } from "@/lib/integrations/client-fetch";
 
 import { Fragment, useState, useEffect, useCallback, useRef, type ReactNode } from "react";
 import { isTaskOpen, type Task } from "@/lib/tasks/types";
@@ -546,12 +545,11 @@ export function TaskList({ inputId = "task-add-text", searchQuery, noteTags, exc
       setTransitionPrompt(null);
       if (transitionId && prompt.task.jiraKey) {
         try {
-          const res = await integrationFetch(`/api/jira/ticket/${prompt.task.jiraKey}/transition`, {
+          const res = await fetch(`/api/jira/ticket/${prompt.task.jiraKey}/transition`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ transitionId }),
           });
-          if (!res) return;
           if (!res.ok) throw new Error(await res.text());
         } catch (e) {
           console.error("apply transition:", e);

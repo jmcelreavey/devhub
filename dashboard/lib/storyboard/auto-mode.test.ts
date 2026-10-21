@@ -58,7 +58,7 @@ function deps(w: World, patch: Partial<AutoDeps> = {}): AutoDeps {
       return { spec: { id } } as unknown as AgentRun;
     }),
     findTask: vi.fn(async () => task),
-    noteView: () => ({ view: view(w), markdown: "## Plan\n- app/sidebar.tsx", notePath: `task-notes/2026-10-17-${TASK_ID}` }),
+    noteView: () => ({ view: view(w), markdown: "## Plan\n- app/sidebar.tsx\n\n## Verification\nBaseline capture: required", notePath: `task-notes/2026-10-17-${TASK_ID}` }),
     runStatus: (_taskId, runId) => w.runs.get(runId),
     runWork: () => ({ cwd: "/repo/app" }),
     prepareTaskQa: vi.fn((input) => {
@@ -206,7 +206,7 @@ describe("auto mode", () => {
     await advanceAuto(TASK_ID, d, notes);
     expect(record().auto).toMatchObject({ phase: "draft-pr", work: { cwd: "/repo/app" } });
     expect(w.dispatched.at(-1)).toMatchObject({ action: "create-pr" });
-    expect(w.dispatched.at(-1)!.prompt).toContain("DRAFT pull request");
+    expect(w.dispatched.at(-1)!.prompt).toContain("ready for review (not a draft)");
 
     finishLatest(w);
     const verify = await advanceAuto(TASK_ID, d, notes);
@@ -217,11 +217,59 @@ describe("auto mode", () => {
     finishLatest(w);
     await advanceAuto(TASK_ID, d, notes);
     expect(record().auto!.phase).toBe("verify"); // Jev still running
+    d.cleanupWork = vi.fn(async () => {});
+    expect(d.cleanupWork).not.toHaveBeenCalled();
     finishQa(w, "qa-2");
-    await advanceAuto(TASK_ID, d, notes);
+    const cleanup = await advanceAuto(TASK_ID, d, notes);
+    expect(cleanup).toHaveLength(1);
+    expect(d.cleanupWork).not.toHaveBeenCalled();
+    await cleanup[0]();
+    expect(d.cleanupWork).toHaveBeenCalledExactlyOnceWith(TASK_ID);
+    expect(await advanceAuto(TASK_ID, d, notes)).toEqual([]);
     expect(record()).toMatchObject({ status: "ready-for-review", auto: { phase: "ready" } });
     expect(w.noteStatuses).toEqual(["in-progress", "in-progress", "draft-pr", "ready-for-review"]);
     expect(d.stopPreview).toHaveBeenCalled();
+  });
+
+  it.each([
+    "## Plan\n- app/sidebar.tsx",
+    "## Plan\nBaseline capture: required\n\n## Verification\n- Run component tests",
+    "## Verification\nBaseline capture: optional",
+  ])("starts implementation without a baseline unless Verification requests it (%s)", async (markdown) => {
+    const w = world();
+    w.runs.set("run-plan0001-0000000a", "done");
+    await seed();
+    const d = deps(w, {
+      noteView: () => ({ view: view(w), markdown, notePath: "task-notes/sidebar" }),
+      resolvePreview: vi.fn(),
+    });
+    await advanceAuto(TASK_ID, d, notes);
+    expect(record().auto!.phase).toBe("implement");
+    expect(d.resolvePreview).not.toHaveBeenCalled();
+    expect(d.prepareTaskQa).not.toHaveBeenCalled();
+    expect(w.dispatched).toHaveLength(1);
+  });
+
+  it("finishes an already-started baseline when the note no longer requests one", async () => {
+    const w = world();
+    await seed((r) => { r.auto!.phase = "baseline"; r.auto!.baselineQaRunId = "qa-existing"; });
+    const d = deps(w, { noteView: () => ({ view: view(w), markdown: "", notePath: "task-notes/sidebar" }) });
+    w.qa.set("qa-existing", { finished: false, bugs: 0 });
+    await advanceAuto(TASK_ID, d, notes);
+    expect(record().auto!.phase).toBe("baseline");
+    expect(d.dispatch).not.toHaveBeenCalled();
+    finishQa(w, "qa-existing");
+    await advanceAuto(TASK_ID, d, notes);
+    expect(record().auto!.phase).toBe("implement");
+    expect(d.prepareTaskQa).not.toHaveBeenCalled();
+  });
+
+  it.each([0, 1, 2])("reuses the original review note in round %i", async (round) => {
+    const w = world({ ui: false });
+    await seed((r) => { r.auto!.phase = "verify"; r.auto!.round = round; });
+    await advanceAuto(TASK_ID, deps(w), notes);
+    expect(w.dispatched[0].prompt).toContain("Save the review as the DevHub note pr-reviews/storyboard-aaaaaaaa-r0");
+    expect(w.dispatched[0].prompt).toContain("Read the existing review note");
   });
 
   it("stops at Needs you on open plan questions and carries on once they are answered", async () => {
@@ -423,6 +471,23 @@ describe("auto mode", () => {
     expect(record().auto).toMatchObject({ phase: "implement", attempt: 1, recoveryGuidance: { text: "Use a longer timeout", phase: "implement", attempt: 1 } });
     expect(w.dispatched.at(-1)?.prompt).toContain("Use a longer timeout");
     expect(w.dispatched.map((item) => item.requestId)).toEqual([`storyboard-auto-${TASK_ID}-${record().auto!.cycleId}-implement-r0-a0`, `storyboard-auto-${TASK_ID}-${record().auto!.cycleId}-implement-r0-a1`]);
+  });
+
+  it("prepares an explicitly shared checkout once and preserves partial implementation on retry", async () => {
+    const w = world();
+    await seed((r) => { r.auto!.phase = "implement"; r.launchOptions = { worktree: false }; });
+    const d = deps(w, {
+      chooseCheckout: async () => ({ mode: "worktree", reason: "dirty checkout", decidedAt: new Date().toISOString() }),
+      runWork: () => ({ cwd: "/repo/app", baseSha: "prepared-base" }),
+    });
+    await advanceAuto(TASK_ID, d, notes);
+    expect(d.dispatch).toHaveBeenLastCalledWith(expect.objectContaining({ worktree: false, prepareCheckout: true }), { defer: true });
+    expect(vi.mocked(d.dispatch).mock.calls[0][0].inherit).toBeUndefined();
+    finishLatest(w, "failed");
+    await advanceAuto(TASK_ID, d, notes);
+    await retryAuto(TASK_ID, "retry-shared", "http://localhost:1337", notes, () => true);
+    await advanceAuto(TASK_ID, d, notes);
+    expect(d.dispatch).toHaveBeenLastCalledWith(expect.objectContaining({ worktree: false, inherit: { baseSha: "prepared-base" } }), { defer: true });
   });
 
   it("keeps Build's checkout decision when Build is retried, so the label doesn't flip mid-run", async () => {

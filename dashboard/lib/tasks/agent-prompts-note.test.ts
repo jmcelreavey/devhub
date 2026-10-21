@@ -37,11 +37,32 @@ describe("task agent prompts keep the note current", () => {
     expect(prompt).toMatch(/remove_item or clear_section/);
   });
 
+  it.each(prompts.filter(([name]) => name === "auto implement" || name === "auto fix"))("%s leaves the independent review to Auto", (_, prompt) => {
+    expect(prompt).toContain("do not call tasks_implement_review");
+    expect(prompt).toContain("after the PR step and after fixes");
+    expect(prompt).toContain("preflight.md");
+    expect(prompt).toContain("recovery checkpoint");
+  });
+
+  it("publishes the checked commit without another test or screenshot pass", () => {
+    const prompt = buildAutoDraftPrPrompt(base);
+    expect(prompt).toContain("reuse its checks and UI evidence for the unchanged commit");
+    expect(prompt).toContain("Do not rerun tests, take screenshots or start another review");
+    expect(prompt).toContain("Keep hooks enabled");
+  });
+
+  it.each(prompts)("%s scopes new UI captures to missing or changed evidence", (_, prompt) => {
+    expect(prompt).toContain("implementation or QA stage owns UI capture");
+    expect(prompt).toContain("code, checkout and scenario still match");
+  });
+
   it("review run files its findings as bugs on the note", () => {
     expect(prompts.find(([name]) => name === "review")![1]).toMatch(/add_bug for each must-fix finding/);
   });
 
-  it("create-PR run moves the card to Draft PR", () => {
-    expect(prompts.find(([name]) => name === "create PR")![1]).toMatch(/set_status draft-pr/);
+  it("create-PR run opens the PR ready for review and moves the card there", () => {
+    const prompt = prompts.find(([name]) => name === "create PR")![1];
+    expect(prompt).toMatch(/set_status ready-for-review/);
+    expect(prompt).toMatch(/no `--draft` unless/);
   });
 });

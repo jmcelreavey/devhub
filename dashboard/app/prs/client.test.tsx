@@ -3,22 +3,24 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { GithubPrRow, GithubPrsApiPayload } from "@/lib/github/prs";
+import type { OwnedPrsResponse } from "@/lib/github/owned-prs";
 import PrsPage from "./client";
+import { useGithubPrSearch } from "@/lib/hooks/use-github-pr-search";
 
 const state = vi.hoisted(() => ({
   query: "", data: undefined as GithubPrsApiPayload | undefined,
   repos: ["acme/app"] as string[] | undefined, ownedError: undefined as Error | undefined,
-  replace: vi.fn(), refresh: vi.fn(),
+  replace: vi.fn(), refresh: vi.fn(), ownedPrs: undefined as OwnedPrsResponse | undefined, ownedPrsError: undefined as Error | undefined,
 }));
 vi.mock("next/navigation", () => ({ useSearchParams: () => new URLSearchParams(state.query), useRouter: () => ({ replace: state.replace }) }));
 vi.mock("@/lib/hooks/use-fetch", () => ({ useLive: (key: string) => ({
-  data: key === "/api/github/prs" ? state.data : key === "/api/own" ? state.repos ? { repos: state.repos.map((fullName) => ({ fullName })) } : undefined : key === "/api/tasks/profiles" ? { active: "work" } : key === "/api/github/prs/skip" ? { skipped: [] } : { rows: [] },
-  error: key === "/api/own" ? state.ownedError : undefined, mutate: state.refresh, isLoading: false, isValidating: false,
+  data: key === "/api/github/prs" ? state.data : key === "/api/own" ? state.repos ? { repos: state.repos.map((fullName) => ({ fullName })) } : undefined : key === "/api/tasks/profiles" ? { active: "work" } : key === "/api/github/prs/skip" ? { skipped: [] } : key?.startsWith("/api/github/prs/owned?") ? state.ownedPrs : { rows: [] },
+  error: key === "/api/own" ? state.ownedError : key?.startsWith("/api/github/prs/owned?") ? state.ownedPrsError : undefined, mutate: state.refresh, isLoading: false, isValidating: false,
 }) }));
 vi.mock("swr", () => ({ mutate: vi.fn() }));
 vi.mock("@/lib/hooks/use-toast", () => ({ useToast: () => ({ info: vi.fn(), error: vi.fn() }) }));
 vi.mock("@/lib/hooks/use-sidebar-counts", () => ({ useMarkPrsSeen: vi.fn() }));
-vi.mock("@/lib/hooks/use-github-pr-search", () => ({ useGithubPrSearch: () => ({ results: [], loading: false }) }));
+vi.mock("@/lib/hooks/use-github-pr-search", () => ({ useGithubPrSearch: vi.fn(() => ({ results: [], loading: false, retry: vi.fn() })) }));
 vi.mock("@/components/today/TodayBootScreen", () => ({ BootScreen: () => null, useBootGate: () => ({}) }));
 vi.mock("@/components/PrRow", () => ({ PrRow: ({ row }: { row: GithubPrRow }) => <article>{row.title}</article> }));
 vi.mock("@/components/github/PrStatusMenu", () => ({ usePrStatusMenu: () => ({ bind: {}, menuNode: null }) }));
@@ -28,7 +30,7 @@ vi.mock("@/components/prs/WorktreeCleanupPanel", () => ({ WorktreeCleanupPanel: 
 vi.mock("@/components", () => ({
   FetchError: ({ message }: { message: string }) => <p role="alert">{message}</p>,
   EmptyState: ({ title }: { title: ReactNode }) => <p>{title}</p>,
-  InlineSearch: ({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) => <input aria-label={label} value={value} onChange={(event) => onChange(event.target.value)} />,
+  InlineSearch: ({ label, value, onChange, trailing }: { label: string; value: string; onChange: (value: string) => void; trailing?: ReactNode }) => <><input aria-label={label} value={value} onChange={(event) => onChange(event.target.value)} />{trailing}</>,
   SkeletonRows: () => <div role="status">Loading PRs</div>,
 }));
 
@@ -36,19 +38,67 @@ const pr = (number: number, title: string, patch: Partial<GithubPrRow> = {}): Gi
 beforeEach(() => {
   vi.clearAllMocks();
   state.query = ""; state.repos = ["acme/app"]; state.ownedError = undefined;
+  state.ownedPrs = { prs: [pr(4, "Owned review")], failedRepos: [], limited: false }; state.ownedPrsError = undefined;
   state.data = { configured: true, authored: [pr(1, "Mine failing", { repo: "other/mine", checks: "failing" }), pr(2, "Mine waiting"), pr(3, "Mine ready", { approved: true })], reviews: [pr(4, "Owned review"), pr(5, "Team review", { repo: "team/other" })], recentlyReviewed: [] };
 });
 afterEach(cleanup);
 
+describe("PR search", () => {
+  it("shows counts on every tab, including zero totals", () => {
+    render(<PrsPage />);
+    for (const label of ["Mine + Owned 3", "Mine 3", "Owned 1", "Review requested 2", "Recently reviewed 0", "Skipped 0", "Worktrees 0"]) {
+      expect(screen.getByRole("button", { name: label })).toBeInTheDocument();
+    }
+  });
+
+  it.each(["failed", "partial"] as const)("does not call %s Owned totals loading", (mode) => {
+    state.query = "tab=owned&q=Owned";
+    if (mode === "failed") { state.ownedPrs = undefined; state.ownedPrsError = new Error("Offline"); }
+    else state.ownedPrs!.failedRepos = ["acme/app"];
+    render(<PrsPage />);
+    expect(screen.getByText("Owned totals are unavailable.")).toBeInTheDocument();
+    expect(screen.queryByText("Loading Owned totals…")).toBeNull();
+  });
+
+  it("labels capped Owned counts as loaded results", () => {
+    state.query = "tab=owned&q=Owned"; state.ownedPrs!.limited = true;
+    render(<PrsPage />);
+    expect(screen.getByRole("button", { name: "Owned 1+" })).toBeInTheDocument();
+    expect(screen.getByText("1 matches among 1 loaded PRs. Owned results are limited.")).toBeInTheDocument();
+  });
+
+  it("filters the selected tab immediately and searches GitHub only after submission", () => {
+    state.query = "tab=reviews";
+    render(<PrsPage />);
+    const input = screen.getByRole("textbox");
+    fireEvent.change(input, { target: { value: "Owned" } });
+    expect(screen.getAllByRole("article").map((row) => row.textContent)).toEqual(["Owned review"]);
+    expect(screen.getByText("1 of 2 PRs in Review requested match.")).toBeInTheDocument();
+    expect(vi.mocked(useGithubPrSearch).mock.lastCall?.[1]).toBe(false);
+    fireEvent.click(screen.getByRole("button", { name: "Search GitHub" }));
+    expect(vi.mocked(useGithubPrSearch).mock.lastCall?.[1]).toBe(true);
+    fireEvent.change(input, { target: { value: "Team" } });
+    expect(vi.mocked(useGithubPrSearch).mock.lastCall?.[1]).toBe(false);
+    expect(screen.getAllByRole("article").map((row) => row.textContent)).toEqual(["Team review"]);
+  });
+
+  it.each(["owned", "skipped", "cleanup"])("does not offer a GitHub-wide search on %s", (tab) => {
+    state.query = `tab=${tab}&q=Owned`;
+    render(<PrsPage />);
+    expect(vi.mocked(useGithubPrSearch).mock.lastCall?.[1]).toBe(false);
+    expect(screen.queryByRole("button", { name: "Search GitHub" })).toBeNull();
+  });
+});
+
 describe("calm PR default", () => {
   it("defaults to Mine + Owned needing action, with the shared actionable header total", () => {
     render(<PrsPage />);
-    expect(screen.getByRole("button", { name: "Mine + Owned" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: /^Mine \+ Owned/ })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getAllByRole("article").map((row) => row.textContent)).toEqual(["Mine failing", "Mine ready", "Owned review"]);
     expect(screen.getByLabelText("3 pull requests need you")).toHaveTextContent("3");
     expect(screen.queryByText("Mine waiting")).toBeNull();
     expect(screen.queryByText("Team review")).toBeNull();
-    expect(screen.getByRole("button", { name: "Review requested" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Review requested/ })).toBeInTheDocument();
   });
 
   it("keeps the all-requested review tab reachable without an inventory header count", () => {
@@ -56,7 +106,7 @@ describe("calm PR default", () => {
     render(<PrsPage />);
     expect(screen.getAllByRole("article").map((row) => row.textContent)).toEqual(["Owned review", "Team review"]);
     expect(screen.getByLabelText("3 pull requests need you")).toHaveTextContent("3");
-    expect(screen.getByRole("button", { name: "Review requested" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: /^Review requested/ })).toHaveAttribute("aria-pressed", "true");
   });
 
   it("retains authored, owned and worktree bookmarks", () => {
@@ -72,7 +122,7 @@ describe("calm PR default", () => {
   it("preserves other query parameters when changing tabs", () => {
     state.query = "q=login&repo=app";
     render(<PrsPage />);
-    fireEvent.click(screen.getByRole("button", { name: "Review requested" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Review requested/ }));
     expect(state.replace).toHaveBeenCalledWith("/prs?q=login&repo=app&tab=reviews", { scroll: false });
   });
 

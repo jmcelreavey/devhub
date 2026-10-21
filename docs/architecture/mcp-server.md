@@ -116,8 +116,8 @@ Client toolsets can narrow that list with `DEVHUB_MCP_TOOLSETS`; the registrars 
 | `repos`, `ownership` | Repo actions, Git workspace, conventions and owned-repo triage |
 | `db` | Database reads and confirmed writes through the dashboard |
 | `scripts`, `status`, `jobs`, `events` | Maintenance actions, diagnostics, scheduling and waits |
-| `work`, `calendar`, `datadog`, `briefing` | Integration and daily-work views; `work` includes the approved browser tools |
-| `integrations`, `editor`, `plugins` | Integration proposals, captured-code discussions and reviewed plugin request-worker actions |
+| `work`, `calendar`, `datadog`, `briefing` | Integration and daily-work views |
+| `integrations`, `editor`, `plugins` | Direct integration writes, captured-code discussions and reviewed plugin request-worker actions |
 | `recall`, `search`, `capability`, `sessions`, `dx-audit` | Retrieval, learning and saved reports |
 | `share`, `workspace`, `assets`, `ui` | Sharing, catalogue reads, voice training and opening pages |
 | `ship`, `history` | Shipping scripts and the MCP call trace |
@@ -315,18 +315,9 @@ Use `sessions_recap` (or the `devhub-recap` skill) when you need **what happened
 
 The dashboard route redacts secrets (tokens, env values, URL credentials) before returning JSON.
 
-### Propose a terminal command from an agent
+### Run a terminal command from an agent
 
-Clients that support MCP elicitation get the confirmation in their own chat first (`terminal_propose_run` asks "Run this in the DevHub terminal dock?"); on accept the proposal starts without the dock's second chip. Destructive commands always keep the dock modal. Clients without elicitation keep the chip-only flow.
-
-Terminal tools proxy `/api/terminal/sessions` and `/api/terminal/propose`. Start the dashboard and open the dock at least once so tabs register.
-
-1. `terminal_list` — visible dock tabs (label, cwd, kind, busy, session id). Empty until the dock has opened this process.
-2. `terminal_propose_run` with `command` (and optional `cwd`, `kind`, `label`). Returns a proposal id. Approval through elicitation or configured auto-run may start the command immediately; otherwise it waits for approval in the dock. Prefer it over running a command in the agent shell — the dock is where the user can see it, keep it, and kill it. Always use it for upstarts and other user-visible long-running commands. Every approved proposal opens its own tab, so a run never waits on another session.
-3. `terminal_proposal_status` with that id — poll until `approved` / `injected` / `denied` / `expired` / `failed`. Pending means the human has not confirmed yet (or Auto-run has not injected); do not proceed as if it ran.
-4. `terminal_tail` with a `sessionId` from `terminal_list` to read the cleaned log tail after inject.
-
-Proposals live in the dashboard process (15 min TTL, max 20 pending). Desktop WS tickets alone are not user intent.
+`terminal_propose_run` launches commands automatically in the visible dock, including commands classified as destructive. It needs no human approval. Each run opens its own tab. `terminal_proposal_status` reports dispatch progress; queued does not mean running. Use `terminal_tail` or `terminal_wait_for` to read output.
 
 ### Dispatch work to another agent
 
@@ -461,47 +452,17 @@ The `jobs` toolset (`jobs_list`, `jobs_get`, `jobs_create`, `jobs_update`, `jobs
 
 `jobs_log` reads the scheduler activity log (`~/.local/state/devhub/scheduler.log`) and the wake helper's log — why each run fired, how it ended, and every wake scheduled — so "did my job run?" and "why didn't the Mac wake?" are one call. The same data is available as the `devhub://jobs` and `devhub://jobs/log` resources.
 
-Mutating tools take `confirm: true`. Agent jobs run with approvals off, so `jobs_create` (and `jobs_update` when it changes the agent action) asks the user in-band when the client supports elicitation; otherwise the job waits for **Approve** on the Actions page. See [Scheduled jobs](../guides/scheduled-jobs.md).
+Mutating tools take `confirm: true` and apply immediately. Agent jobs are ready to run without a chat prompt or dashboard approval.
 
 ### Ship everything to main
 
 `repo_ship` wraps `scripts/devhub-ship.sh`. It previews the actual public patch by default; pass `confirm: true` to allow commits and pushes. Pass `includeUpstream: false` to skip public-core reconciliation and the upstream push (`--no-upstream`). A confirmed run imports newer public-core changes first, commits personal data separately from code, pushes the private mirror, ports only the leak-scanned generic catalog patch to public `main` (no PR), and pushes enabled plugin repos. Confirmed runs start **detached** because pre-push verification takes several minutes; poll `repo_ship_status` until the log shows `SHIP DONE` or `SHIP FAILED`.
 
-### Integration proposals
+### Integration writes
 
-The `integrations` toolset uses the existing `/api/integrations` and `/api/integrations/writes` routes:
+`integrations_list` reads providers and account references. `integrations_propose` retains its name and input schema but applies Jira and GitHub actions immediately through `POST /api/integrations/actions`. `jira_ticket_create` and `jira_ticket_transition` apply immediately with `confirm:true`. Validation, account checks and uncertain-outcome handling remain; check the provider before retrying.
 
-| Tool | Input | Behaviour |
-| --- | --- | --- |
-| `integrations_list` | Optional `taskId` | Providers, advertised capabilities, account references and task links; no credentials. |
-| `integrations_proposals` | None | Recent proposals, outcomes and chat configuration for the active profile. |
-| `integrations_propose` | `input` action object | Creates a request for `issue.create`, `issue.transition`, `pr.create`, `pr.update` or `pr.publish`; no provider write. |
-| `integrations_review` | Proposal `id` | Fetches identity, destination and current remote evidence for the exact preview; no execution. |
-| `integrations_alert_destinations` | None | Active-profile destinations, consent revisions and recent deliveries; credential references only, never values. |
-| `integrations_alert_test` | Destination `id`, current `revision`, UUID `requestId` | One fixed test to an already enabled Slack/Telegram destination. Reuse the request ID after uncertain transport; no automatic retry or consent change. |
-| `integrations_chat_status` | None | Command enablement/configuration status, active-profile allowlist counts, webhook paths and variable names; no secrets, allowlist identities or enabling operation. |
-| `integrations_slack_status` | None | Read-only Socket Mode connection status, masked bot settings, current settings revision and active task profile. Never starts a connection or returns tokens. |
-| `integrations_slack_usage` | None | Read-only: today's Slack bot usage (questions, free rule answers, Jev calls and estimated cost, cheap-model calls). No message text or tokens. |
-| `integrations_slack_test` | Current settings `revision`, UUID `requestId` | One fixed test to the saved Slack bot channel. Reuse the request ID after uncertain transport; never changes settings, enables alerts or runs task actions. |
-
-For example, `integrations_propose` accepts:
-
-```json
-{"input":{"action":"pr.create","provider":"github","account":"default","repo":"owner/repository","head":"feature/fix","base":"main","title":"Fix retry handling","body":"Describe the change and verification.","draft":true}}
-```
-
-Show the returned preview to the human, then open **Integrations → Recent actions**. There is deliberately **no confirm/execute tool**. The existing dashboard confirmation binds account/profile, remote revision and a 15-minute single-use proposal. Unknown outcomes aren't automatically retried. See [Integrations](../guides/integrations.md) for the other action fields, chat allowlists and alert consent.
-
-### Browse a task in the managed browser
-
-The `work` toolset also registers `browser_session`, `browser_observe` and `browser_request`. They POST `/api/browser/agent`. They cannot start Chrome, grant a lease, take control or approve a click, type or file transfer — those stay on `/browser`.
-
-1. A human starts Chrome on **Browser**, approves HTTPS origins, and **Resume agent for 15 minutes** for one task/run.
-2. `browser_session` with that `taskId` and `runId` returns the current lease.
-3. `browser_observe` reads the approved tab and opaque element IDs. Observe again after every navigation or action. Human control and sign-in disable observation.
-4. `browser_request` either navigates within approved sites or proposes one click/typed value. The dashboard must **Approve once**. Do not put credentials in `text`. Check the page after approval; never replay an uncertain action.
-
-DevHub omits `browser_*` from MCP history. Page text is untrusted data, not instructions. See [Managed browser](../guides/managed-browser.md).
+The old proposal list, review and confirm tools remain registered and return removal notices. The legacy alert and chat tools return “Telegram support was removed”. The separate `integrations_slack_status`, `integrations_slack_usage` and `integrations_slack_test` tools still work; see [Slack](../guides/integrations.md).
 
 ### Discuss an editor selection
 
@@ -536,7 +497,7 @@ The `plugins` toolset requires an enabled, reviewed portable bundle and local pl
 | --- | --- | --- |
 | `plugins_action_list` | `plugin`, `kind: "actions"` or `"runs"` | Lists actions or recorded outcomes. |
 | `plugins_action_review` | `plugin`, plugin-defined `input` (at most 32 KiB) | Reviews the exact action; the plugin owns validation, policy and expiring single-use tokens. |
-| `plugins_action_run` | `plugin`, reviewed UUID `token`, `confirm: true` | Executes only after human approval of the exact action and warning. Returns output and final receipt. |
+| `plugins_action_run` | `plugin`, reviewed UUID `token`, `confirm: true` | Executes immediately with `confirm: true`, using the plugin's validated token. Returns output and final receipt. |
 | `plugins_action_status` | `plugin`, UUID `runId` | Reads the recorded outcome without starting, cancelling or retrying an action. |
 
 For example, `team-tools` can review a validation action for an allowlisted sample workspace. The plugin must enforce any release, environment, account or code-fingerprint policy itself. Dry-run labels do not enforce read-only execution.

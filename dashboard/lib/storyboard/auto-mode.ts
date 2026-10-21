@@ -88,6 +88,8 @@ export interface AutoDeps {
   /** A URL for Jev, starting the repo's preview when its config allows; null skips Jev with the reason. */
   resolvePreview: (input: { record: OrchestrationRecord; task: Task; markdown: string | null; cwd?: string }) => Promise<PreviewTarget>;
   stopPreview: (taskId: string) => void;
+  /** Release disposable checkout/builds only after PR review and QA finish. */
+  cleanupWork?: (taskId: string) => Promise<void>;
   /** Did the implementation change any files (commits or working tree) since its base? Null when git can't say. A report-only task changes none. */
   workChanged?: (work: NonNullable<AutoState["work"]>) => Promise<boolean | null>;
   /** The pinned checkout may have been cleaned up since. Put it back from its branch when it can be. */
@@ -112,7 +114,7 @@ function currentRun(auto: AutoState): AutoRun | undefined {
 /** What tells this run from the same step's earlier ones in Paseo's list: its retry or fix round. */
 function runLabel(auto: AutoState): string | undefined {
   if (auto.phase === "fix") return `fix round ${auto.round}${auto.attempt ? `, retry ${auto.attempt}` : ""}`;
-  if (auto.phase === "draft-pr") return auto.attempt ? `draft PR, retry ${auto.attempt}` : "draft PR";
+  if (auto.phase === "draft-pr") return auto.attempt ? `opening PR, retry ${auto.attempt}` : "opening PR";
   return auto.attempt ? `retry ${auto.attempt}` : undefined;
 }
 
@@ -233,8 +235,8 @@ async function dispatchPhase(ctx: StepContext): Promise<boolean> {
   }
   const prompt = { origin: auto.origin, taskId: task.id, date: record.taskDate, repoName: record.repo?.name, jiraKey: task.jiraKey };
   const work = auto.work;
-  const followUp = work ? { cwd: work.worktree ? work.worktree.path : work.cwd, worktree: false, ...(work.worktree ? { inherit: { worktree: work.worktree, ...(work.baseSha ? { baseSha: work.baseSha } : {}) } } : {}) } : null;
-  let request: Pick<AgentDispatchInput, "prompt" | "cwd" | "title" | "worktree" | "inherit"> & { action: string };
+  const followUp = work ? { cwd: work.worktree ? work.worktree.path : work.cwd, worktree: false, inherit: { ...(work.worktree ? { worktree: work.worktree } : {}), ...(work.baseSha ? { baseSha: work.baseSha } : {}) } } : null;
+  let request: Pick<AgentDispatchInput, "prompt" | "cwd" | "title" | "worktree" | "inherit" | "prepareCheckout"> & { action: string };
   let choice: OrchestrationCheckoutChoice | undefined;
   switch (auto.phase) {
     case "plan": {
@@ -245,7 +247,7 @@ async function dispatchPhase(ctx: StepContext): Promise<boolean> {
       // A retried or resumed plan; the first one is dispatched by Start on auto (orchestrator.ts).
       choice = autoLaunchCheckout(await deps.chooseCheckout(task, record.taskDate, checkoutCwd, record.runIds), record.launchOptions);
       const isolated = choice.mode === "worktree";
-      request = { action: "plan", prompt: buildTaskPlanPrompt({ ...prompt, pauseAfterPlan: auto.pauseAfterPlan, ...(isolated ? { isolated } : { cwd: checkoutCwd }) }), cwd: checkoutCwd, worktree: isolated, title: `Plan ${task.text}` };
+      request = { action: "plan", prompt: buildTaskPlanPrompt({ ...prompt, pauseAfterPlan: auto.pauseAfterPlan, ...(isolated ? { isolated } : { cwd: checkoutCwd }) }), cwd: checkoutCwd, worktree: isolated, prepareCheckout: record.launchOptions?.worktree === false, title: `Plan ${task.text}` };
       break;
     }
     case "implement": {
@@ -261,11 +263,13 @@ async function dispatchPhase(ctx: StepContext): Promise<boolean> {
       }
       choice = decided ?? inspected;
       const isolated = choice.mode === "worktree";
-      request = { action: "implement", prompt: buildAutoImplementPrompt({ ...prompt, ...(record.launchOptions?.skipPlan ? { skipPlan: true } : {}), ...(isolated ? {} : { cwd: checkoutCwd }) }), cwd: checkoutCwd, worktree: isolated, title: `Implement ${task.text}` };
+      const previous = auto.runs.filter((entry) => entry.phase === "implement").at(-1);
+      const previousWork = previous ? deps.runWork(previous.runId) : null;
+      request = { action: "implement", ...(choice.mode === "checkout" && previousWork?.baseSha ? { inherit: { baseSha: previousWork.baseSha } } : {}), prepareCheckout: record.launchOptions?.worktree === false, prompt: buildAutoImplementPrompt({ ...prompt, ...(record.launchOptions?.skipPlan ? { skipPlan: true } : {}), ...(isolated ? {} : { cwd: checkoutCwd }) }), cwd: checkoutCwd, worktree: isolated, title: `Implement ${task.text}` };
       break;
     }
     case "draft-pr":
-      request = { action: "create-pr", prompt: buildAutoDraftPrPrompt({ ...prompt, cwd: followUp?.cwd ?? checkoutCwd, branch: work?.worktree?.branch }), title: `Draft PR ${task.text}`, ...(followUp ?? { cwd: checkoutCwd, worktree: false }) };
+      request = { action: "create-pr", prompt: buildAutoDraftPrPrompt({ ...prompt, cwd: followUp?.cwd ?? checkoutCwd, branch: work?.worktree?.branch }), title: `Open PR ${task.text}`, ...(followUp ?? { cwd: checkoutCwd, worktree: false }) };
       break;
     case "fix":
       request = {
@@ -291,6 +295,7 @@ async function dispatchPhase(ctx: StepContext): Promise<boolean> {
       cwd: request.cwd,
       title: request.title,
       worktree: request.worktree,
+      prepareCheckout: request.prepareCheckout ?? false,
       ...(request.inherit ? { inherit: request.inherit } : {}),
       ...(tier.tier ? { tier: tier.tier } : {}),
       ...(tier.reason ? { tierReason: tier.reason } : {}),
@@ -459,6 +464,8 @@ async function stepBaseline(ctx: StepContext): Promise<boolean> {
     return toImplement();
   }
   const markdown = deps.noteView(task, record.taskDate).markdown;
+  const verification = markdown?.match(/^##\s+Verification\b[^\n]*\n([\s\S]*?)(?=^##\s|(?![\s\S]))/im)?.[1];
+  if (!/^\s*(?:-\s+)?Baseline capture:\s*required\s*$/im.test(verification ?? "")) return toImplement();
   const target = await uiAndPreview(ctx, markdown);
   if (target.ui && target.state === "starting") return false;
   if (!target.ui || !target.url) return toImplement();
@@ -497,13 +504,13 @@ async function stepVerify(ctx: StepContext): Promise<boolean> {
         provider: "",
         prompt: withRecoveryGuidance(buildImplementReviewPrompt({
           origin: auto.origin, taskId: task.id, date: record.taskDate, taskText: task.text, cwd,
-          notePath: `pr-reviews/storyboard-${task.id.slice(0, 8)}-r${auto.round}`,
+          notePath: `pr-reviews/storyboard-${task.id.slice(0, 8)}-r0`,
           ...(record.repo?.name ? { repoName: record.repo.name } : {}), ...(task.jiraKey ? { jiraKey: task.jiraKey } : {}),
           ...(work.worktree?.branch ? { branch: work.worktree.branch } : {}),
         }), auto),
         cwd,
         worktree: false,
-        ...(work.worktree ? { inherit: { worktree: work.worktree, ...(work.baseSha ? { baseSha: work.baseSha } : {}) } } : {}),
+        inherit: { ...(work.worktree ? { worktree: work.worktree } : {}), ...(work.baseSha ? { baseSha: work.baseSha } : {}) },
         title: `Review ${task.text}`,
         ...(tier.tier ? { tier: tier.tier } : {}),
         ...(tier.reason ? { tierReason: tier.reason } : {}),
@@ -592,6 +599,7 @@ async function stepVerify(ctx: StepContext): Promise<boolean> {
     if (applied) {
       deps.stopPreview(record.taskId);
       safeNoteStatus(deps, task, record.taskDate, "ready-for-review");
+      if (deps.cleanupWork) ctx.executes.push(() => deps.cleanupWork!(record.taskId));
     }
     return applied;
   }

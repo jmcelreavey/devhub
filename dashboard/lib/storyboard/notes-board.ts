@@ -243,7 +243,7 @@ function orchestrationColumn(orchestration: OrchestrationSummary): TaskNoteStatu
   }
 }
 
-/** A run counts while it is live; an open PR from the implementation means a draft PR is waiting (DevHub only opens drafts). */
+/** A run counts while it is live; an open PR from the implementation means a PR is waiting for review (the column id is still draft-pr). */
 function runColumn(runs: BoardRunSource[]): TaskNoteStatus | null {
   const latest = runs[0];
   if (latest && isActiveTaskAgentRunStatus(latest.status)) return latest.role === "plan" || latest.role === "discuss" ? "planning" : "in-progress";

@@ -172,6 +172,13 @@ describe("sweepPaseoWorkspaces: idle chats", () => {
 });
 
 describe("cleanup activity evidence", () => {
+  it("allows idle pinned plans during checkout preparation but keeps cleanup protection", async () => {
+    listing(workspace("pinned", "p", "local_checkout", live, { pinnedAt: daysAgo(1) }));
+    daemon.fetchAgents.mockResolvedValue(page([chat("pinned", daysAgo(1))]));
+    expect((await loadPaseoWorktreeActivity())[0].active).toBe(true);
+    expect((await loadPaseoWorktreeActivity({ ignoreIdlePins: true }))[0].active).toBe(false);
+  });
+
   it("reports active workspaces, scripts and waiting chats without archiving anything", async () => {
     listing(workspace("done", "p", "worktree", live), workspace("running", "p", "worktree", gone, { status: "running" }),
       workspace("script", "p", "worktree", "/script", { scripts: [{ lifecycle: "running" }] }),

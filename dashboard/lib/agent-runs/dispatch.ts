@@ -2,6 +2,7 @@
 import { agentBudgets,costRefusalMessage,spentToday } from "@/lib/agent-runs/budget";
 import { createRunWorktree,gitHead,type AgentWorktreeLabel } from "@/lib/agent-runs/git";
 import { agentRunTitle } from "./title";
+import { prepareImplementationCheckout, checkoutPreparationPrompt } from "./checkout";
 import { withTaskOwnerNotes } from "@/lib/tasks/owner-notes-server";
 import { parseJiraIssueKey } from "@/lib/entity-note";
 import { ensureTasksMigrated, getTasks } from "@/lib/tasks/storage";
@@ -59,6 +60,8 @@ export interface AgentDispatchInput {
   effort?: string;
   /** Run in an isolated git worktree instead of the checkout itself. */
   worktree?: boolean;
+  /** Auto sets this for fresh checkout launches, never for review/fix continuations. */
+  prepareCheckout?: boolean;
   maxTurns?: number;
   /**
    * Caller's nesting level, forwarded by the MCP server from DEVHUB_AGENT_DEPTH.
@@ -258,7 +261,18 @@ async function finishDispatchedRun(ctx: FinishDispatch): Promise<AgentRun> {
       } else {
         run = updateAgentRunStatus(run, { startupPhase: "agent" });
         const headStarted = performance.now();
-        baseSha = await gitHead(cwd);
+        const prepare = input.prepareCheckout ?? (input.worktree === false && input.activity?.action === "implement" && !input.parentRunId && !input.resumeSessionId);
+        if (prepare) {
+          const receipt = await prepareImplementationCheckout(cwd, id, {
+            record: (checkoutPreparation) => {
+              run.spec = { ...run.spec, checkoutPreparation };
+              writeRunSpec(run.dir, run.spec);
+            },
+          });
+          baseSha = receipt.baseSha;
+        } else {
+          baseSha = await gitHead(cwd);
+        }
         logAgentTiming("git-head", headStarted, `run=${id}`);
       }
     }
@@ -274,7 +288,7 @@ async function finishDispatchedRun(ctx: FinishDispatch): Promise<AgentRun> {
     if (readAgentRun(id)?.status.state === "cancelled") throw new AgentDispatchError("This run was cancelled before it started.", 409);
     const paseoStarted = performance.now();
     const startedAgent = await startPaseoAgent({
-      run, launch, prompt: withTaskOwnerNotes(input.prompt, input.activity?.taskId), resumeAgentId: input.resumeSessionId, session,
+      run, launch, prompt: withTaskOwnerNotes(run.spec.checkoutPreparation ? `${input.prompt}\n\n${checkoutPreparationPrompt(run.spec.checkoutPreparation)}` : input.prompt, input.activity?.taskId), resumeAgentId: input.resumeSessionId, session,
       // Only the send/create can lose its ack. A failed connection or preflight
       // must release capacity instead of leaving an ambiguous active run.
       onSubmission: (messageId) => { run = updateAgentRunStatus(run, { submissionAttemptedAt: Date.now(), messageId }); },

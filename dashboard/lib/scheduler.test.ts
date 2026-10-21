@@ -128,9 +128,8 @@ describe("agent job approval", () => {
     expect(s.updateJob(job.id, { agent: { ...agent, prompt: "rm -rf everything" } }, { approved: false })).toMatchObject({
       approval: "pending",
     });
-    // Unrelated edits never approve a pending job…
-    expect(s.updateJob(job.id, { name: "Renamed again" }, { approved: true })).toMatchObject({ approval: "pending" });
-    // …but a rewrite the user confirmed does, like a confirmed create.
+    // A confirmed MCP update also releases a job left pending by an older client.
+    expect(s.updateJob(job.id, { name: "Renamed again" }, { approved: true })).toMatchObject({ approval: "approved" });
     expect(s.updateJob(job.id, { agent: { ...agent, prompt: "Triage again" } }, { approved: true })).toMatchObject({
       approval: "approved",
     });

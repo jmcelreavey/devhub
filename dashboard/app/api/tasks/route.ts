@@ -12,6 +12,7 @@ import { withErrorHandler } from "@/lib/api-utils";
 import { currentTaskNode, loadTaskIndex } from "@/lib/tasks/task-index";
 import { isActiveTaskAgentRunStatus, isValidTaskAgentTaskId, listTaskAgentRuns } from "@/lib/tasks/task-agent-runs";
 import { readOrchestration } from "@/lib/storyboard/orchestration-store";
+import { queueReadyLinkedDraftPrs } from "@/lib/tasks/ready-linked-prs";
 
 export const GET = withErrorHandler(async (req: Request) => {
   const taskId = new URL(req.url).searchParams.get("taskId");
@@ -73,6 +74,7 @@ export const PATCH = withErrorHandler(async (req: Request) => {
     }
     const task = await setTaskCompletion(id, completion, date);
     if (!task) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    if (completion && task.done) queueReadyLinkedDraftPrs(task.id, "task completed");
     return NextResponse.json(task);
   }
 
@@ -108,6 +110,7 @@ export const PATCH = withErrorHandler(async (req: Request) => {
   if (done !== undefined) {
     const task = await toggleTask(id, date);
     if (!task) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    if (task.done) queueReadyLinkedDraftPrs(task.id, "task completed");
     return NextResponse.json(task);
   }
 

@@ -1,7 +1,10 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { cache } from "swr/_internal";
+import type { GithubPrsApiPayload } from "@/lib/github/prs";
 import type { GithubPrRow } from "@/lib/github/prs";
 import type { useToast } from "@/lib/hooks/use-toast";
-import { buildPrRowMenuGroups, type PrRowKind } from "@/components/PrRowActions";
+import { buildPrRowMenuGroups, openPrRowNote, type PrRowKind } from "@/components/PrRowActions";
+import { NOTES_OPEN_PATH_EVENT } from "@/lib/notes/open-in-panel";
 
 const toast = {
   success: vi.fn(),
@@ -36,6 +39,44 @@ function itemIds(
     .flatMap((group) => group.items)
     .map((item) => item.id);
 }
+
+afterEach(() => { vi.unstubAllGlobals(); vi.clearAllMocks(); for (const key of cache.keys()) cache.delete(key); });
+
+describe("PR notes", () => {
+  it.each([404, 500])("does not create an empty note when opening returns %s", async (status) => {
+    const fetch = vi.fn(async () => new Response(null, { status }));
+    vi.stubGlobal("fetch", fetch);
+    const push = vi.fn();
+    await openPrRowNote(row(), push, toast);
+    expect(push).not.toHaveBeenCalled();
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(fetch.mock.calls[0]).toEqual(["/api/notes/pr-reviews/example-org-example-service-123", { cache: "no-store" }]);
+    expect(status === 404 ? toast.info : toast.error).toHaveBeenCalled();
+  });
+
+});
+
+describe("PR visibility across screens", () => {
+  it.each(["authored", "reviews"] as const)("skips %s PRs in every profile cache without refetching", async (kind) => {
+    const skipped = row();
+    const kept = row({ number: 456, url: "https://github.com/example-org/example-service/pull/456" });
+    const payload: GithubPrsApiPayload = { configured: true, authored: [skipped, kept], reviews: [skipped, kept], recentlyReviewed: [] };
+    const keys = ["/api/github/prs", "/api/github/prs?taskProfile=work", "/api/github/prs?taskProfile=personal"];
+    for (const key of [...keys, "/api/github/prs/owned"]) {
+      const entry = { _k: key, data: payload };
+      cache.set(key, entry);
+    }
+    const fetch = vi.fn(async () => Response.json({ ok: true }));
+    vi.stubGlobal("fetch", fetch);
+    const skip = buildPrRowMenuGroups({ row: skipped, kind, toast, openNote: vi.fn() }).flatMap((group) => group.items).find((item) => item.id === "skip-pr")!;
+    await skip.onSelect();
+    for (const key of keys) {
+      expect(cache.get(key)?.data).toMatchObject({ authored: [kept], reviews: [kept] });
+    }
+    expect(cache.get("/api/github/prs/owned")?.data).toEqual(payload);
+    expect(fetch).toHaveBeenCalledExactlyOnceWith("/api/github/prs/skip", expect.objectContaining({ method: "POST" }));
+  });
+});
 
 describe("buildPrRowMenuGroups", () => {
   it.each(["authored", "reviews", "reviewed"] as const)(
@@ -98,7 +139,32 @@ describe("buildPrRowMenuGroups", () => {
     expect(itemIds("reviewed")).not.toContain("skip-pr");
   });
 
+  it.each(["authored", "reviews"] as const)("omits ineffective skip actions for %s inventory and skipped rows", (kind) => {
+    const groups = buildPrRowMenuGroups({ row: row(), kind, canSkip: false, toast, openNote: vi.fn() });
+    expect(groups.flatMap((group) => group.items).map((item) => item.id)).not.toContain("skip-pr");
+  });
+
   it("never locks authored rows", () => {
     expect(itemIds("authored", row(), { repLocked: true })).toContain("agent-review");
+  });
+});
+
+describe("openPrRowNote", () => {
+  it("opens the PR note in the Notes side panel rather than navigating away", async () => {
+    const fetch = vi.fn(async () => Response.json({ content: [] }));
+    vi.stubGlobal("fetch", fetch);
+    const target = new EventTarget();
+    vi.stubGlobal("window", target);
+    const onOpen = vi.fn();
+    target.addEventListener(NOTES_OPEN_PATH_EVENT, onOpen);
+    const push = vi.fn();
+    try {
+      await openPrRowNote(row(), push, toast);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+    expect(push).not.toHaveBeenCalled();
+    expect(onOpen).toHaveBeenCalledTimes(1);
+    expect(fetch).toHaveBeenCalledExactlyOnceWith("/api/notes/pr-reviews/example-org-example-service-123", { cache: "no-store" });
   });
 });

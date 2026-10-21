@@ -99,6 +99,13 @@ describe("Start on auto", () => {
     }
   });
 
+  it("prepares the shared checkout before Auto planning when isolation is disabled", async () => {
+    const dependencies = deps();
+    dependencies.inspectCheckout = async () => ({ dirty: true, activeRuns: 0 });
+    await start(dependencies, input({ worktree: false }));
+    expect(dependencies.dispatch).toHaveBeenCalledWith(expect.objectContaining({ worktree: false, prepareCheckout: true, activity: { source: "interactive", action: "plan", taskId: TASK_ID, taskDate: expect.any(String), repoName: expect.any(String) } }), { defer: true });
+  });
+
   it("retains launch settings while waiting for a repo", async () => {
     const dependencies = deps(task({ links: [] }));
     const result = await start(dependencies, input({ instructions: "Keep the CLI stable", worktree: false }));

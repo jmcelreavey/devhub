@@ -87,16 +87,6 @@ Select lines in **Repos → Changes → Send to AI** and review the captured sna
 
 Docs: [Editor and selection chat](editor.md)
 
-## A browser the task doesn't own
-
-Browse in DevHub's live view or native Chrome with a separate task profile. Sign in under human control, approve exact HTTPS sites, then lease reading to one linked conversation. Each agent click, typed value and file transfer has its own human approval. Take control revokes agent access; it can't undo a request already sent.
-
-![Task browser controls and a simulated file approval](../assets/demos/browser.gif)
-
-*Real controls with a simulated Chrome stream and file request; no live account or transfer.*
-
-Docs: [Managed browser](managed-browser.md)
-
 ## Notes, in a real editor
 
 A block editor over plain files in git. Daily notes, meetings, projects and learnings, with links between them, tags, and cross-links to tasks, PRs, tickets and repos. Share a note as a secret Gist or a one-time link. Link a note to a repo and open it in Cursor beside the checkout; **Apply Cursor changes** brings your edits back. Optional in-editor AI uses any OpenAI-compatible provider.

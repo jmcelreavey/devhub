@@ -39,16 +39,15 @@ const dxx: ToolHints = { ...dx, openWorldHint: true };
 export const TOOL_ANNOTATIONS: Readonly<Record<string, ToolHints>> = {
   integrations_list: rox,
   integrations_alert_destinations: ro,
-  integrations_alert_test: { ...wrx, idempotentHint: true },
+  integrations_alert_test: ro,
   integrations_chat_status: ro,
   integrations_slack_status: { ...ro, openWorldHint: false },
   integrations_slack_usage: { ...ro, openWorldHint: false },
   integrations_slack_test: { ...wrx, idempotentHint: true },
   integrations_proposals: ro,
-  integrations_propose: wr,
-  integrations_review: wrx,
-  // Executes a reviewed Jira/GitHub write the user approved in chat: external and not repeatable.
-  integrations_confirm: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+  integrations_propose: dxx,
+  integrations_review: ro,
+  integrations_confirm: ro,
   editor_selection: ro,
   editor_discussions: ro,
   editor_discuss: wrx,
@@ -59,8 +58,8 @@ export const TOOL_ANNOTATIONS: Readonly<Record<string, ToolHints>> = {
   plugins_action_run: dxx,
   plugins_action_status: rox,
   browser_session: ro,
-  browser_observe: { ...rox, idempotentHint: false }, // refreshes opaque observation IDs
-  browser_request: wrx, // navigation or a single pending approval
+  browser_observe: ro,
+  browser_request: ro,
   // ── notes ──────────────────────────────────────────────────────────────
   notes_list: ro,
   notes_read: ro,
@@ -277,7 +276,7 @@ export const TOOL_ANNOTATIONS: Readonly<Record<string, ToolHints>> = {
   terminal_list: ro,
   terminal_tail: ro,
   terminal_proposal_status: ro,
-  terminal_propose_run: { ...wrx, idempotentHint: false }, // the command runs once approved
+  terminal_propose_run: { ...wrx, idempotentHint: false }, // the command launches immediately
   terminal_wait_for: ro,
   // ── db ─────────────────────────────────────────────────────────────────
   db_connections: ro,

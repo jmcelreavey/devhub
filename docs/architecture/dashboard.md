@@ -13,7 +13,7 @@ related:
 
 # Dashboard Architecture
 
-The dashboard is the main DevHub interface. It is a local Next.js app with pages for tasks, notes, integrations, skills, actions, status, and setup.
+The dashboard is the main DevHub interface. It is a local Next.js app with pages for tasks, notes, skills, actions, status, and setup.
 
 ## What The Dashboard Provides
 
@@ -31,8 +31,7 @@ The dashboard is the main DevHub interface. It is a local Next.js app with pages
 | Setup        | Environment and integration configuration                                                                   |
 | Repos        | Sibling git checkout discovery, per-repo **work hub**, GitHub clone/search, Cursor/GitKraken/CLI launch, compose-up, Repo Learning, and owned-repo radar (`?view=owned`) |
 | Databases    | In-app client for PostgreSQL, MongoDB, and SQLite (`/db`) — see [Database client](database-client.md)       |
-| Integrations | Calendar, Jira, Datadog, GitHub, and `/integrations` for write proposals and workflow alerts                     |
-| Browser      | Managed Chrome for one task (`/browser`) — System tab, not a sidebar row. See [Managed browser](../guides/managed-browser.md) |
+| Integrations | Calendar, Jira, Datadog, GitHub and Slack |
 | Editor       | Selection chat beside a diff, plus optional in-app code-server (`/editor`). See [Editor](../guides/editor.md) |
 | Workflows    | Durable checks, reviews and publication proposals (`/workflow`). See [Task checks](../guides/task-checks-and-reviews.md) |
 
@@ -88,7 +87,7 @@ Coding chats live on **Agents** (`/agents`). `/chamber` and `/opencode` redirect
 | Datadog    | `/datadog`  | Tools group; gated on `datadog`                                                               |
 | Databases  | `/db`       | Tools group. Desktop nav only, **ungated**. SQLite works with no setup; plugins can add connection providers. See [Database client](database-client.md) |
 | Agents     | `/agents`   | System group. Tabs: Chats / Usage / Connection (old `?view=activity` links open Chats). See [Agents (Paseo)](../guides/paseo-agents.md) |
-| Settings   | `/status`   | System group. Top-bar tabs: Status, Logs (desktop), Actions (desktop), Plugins, Integrations, Browser, Setup. Links under the title: Agent skills, QA lab |
+| Settings   | `/status`   | System group. Top-bar tabs: Status, Logs (desktop), Actions (desktop), Plugins, Setup. Links under the title: Agent skills, QA lab |
 
 ### Merged destinations
 
@@ -108,7 +107,7 @@ review** (`/review`). Whitespace-separated terms are AND-ed on every tab.
 
 **Library** and **Settings** use `SectionTabs` in the top bar on sibling routes such as `/docs` and `/setup`. Library tabs are **Notes**, **Docs**, **Diagrams**, **Live links** (gated on GitHub), and **Radar**. Search and Databases have sidebar destinations. Appraisal, Research, My Voice and Conventions remain reachable through **⌘P**.
 
-Settings tabs are **Status**, **Logs** (desktop), **Actions** (desktop), **Plugins**, **Integrations**, **Browser** and **Setup**. Agent skills and the QA lab are links under the Settings title rather than tabs, because the top-bar strip is already as wide as the bar allows. **Tools** is a sidebar group (id `infra`): Ops comes from the infrastructure plugin, Datadog and Databases from core.
+Settings tabs are **Status**, **Logs** (desktop), **Actions** (desktop), **Plugins** and **Setup**. Agent skills and the QA lab are links under the Settings title rather than tabs, because the top-bar strip is already as wide as the bar allows. **Tools** is a sidebar group (id `infra`): Ops comes from the infrastructure plugin, Datadog and Databases from core.
 
 **Diagrams** (`/diagrams`, Library tab) opens a browse-by-folder landing page — recent diagrams plus folder cards (`lib/diagrams/diagram-browse.ts`). Click a card or recent item to open the tldraw editor at `/diagrams/[...path]`.
 

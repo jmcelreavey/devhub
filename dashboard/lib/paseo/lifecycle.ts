@@ -1,4 +1,6 @@
 import { withMutex } from "@/lib/atomic-write";
+import { blocksToText } from "@/lib/markdown-convert";
+import { getVaultStorage } from "@/lib/vault/vault-registry";
 import { withAgentAdmission } from "@/lib/agent-runs/claims";
 import { clip } from "@/lib/agent-runs/events";
 import { appendRunEvent, isActiveAgentRunState, type AgentRunStatus } from "@/lib/agent-runs/run-files";
@@ -12,6 +14,23 @@ import { releaseIdlePaseoRuntimesIfDue } from "./idle-runtimes";
 import { sweepPaseoWorkspacesIfDue } from "./workspaces";
 
 type TimelineEntry = FetchAgentTimelinePayload["entries"][number];
+
+function reviewNoteProblem(notePath: string, startedAt: number): string | undefined {
+  try {
+    const note = getVaultStorage("notes").read(notePath);
+    if (note && note.modified >= startedAt) {
+      const text = typeof note.content === "string" ? note.content : Array.isArray(note.content) ? blocksToText(note.content) : "";
+      // The row's old note action created headings, links and empty bullets. That is not a review.
+      const body = text.split(/(?=^#{1,6} )/m).filter((section) => !/^## Links\s*$/m.test(section))
+        .join("\n").split("\n").filter((line) => !/^#|^\*\*PR:\*\*/.test(line.trim()))
+        .map((line) => line.replace(/^\s*[-*]\s*$/, "").trim()).join("").trim();
+      if (body.length > 0) return;
+    }
+    return "The agent stopped, but a finished PR review note was not saved. Open the agent to inspect or retry it.";
+  } catch (error) {
+    return `The saved PR review note could not be read: ${error instanceof Error ? error.message : String(error)}`;
+  }
+}
 
 /**
  * Outcome of the turn DevHub submitted, found by the user message carrying
@@ -61,6 +80,16 @@ export function paseoTurnOutcome(run: AgentRun, agent: PaseoAgent, entries: Time
   }
   const finalText = segments.map((segment) => segment.trim()).filter(Boolean).join("\n\n");
   if (!finalText) return lost("The turn stopped without a result. Open the agent in Paseo to inspect it.");
+  // Cursor ACP can emit provider failures as assistant text rather than an error event.
+  const finalMessage = segments.at(-1)?.trim() ?? "";
+  if (/^Error: RetriableError:/.test(finalMessage)) {
+    return { state: "failed", finishedAt: Date.now(), resultText: clip(finalText, 8000), error: clip(finalMessage, 2000) };
+  }
+  const activity = run.spec.activity;
+  if (activity?.prUrl && activity.notePath && (activity.action === "review" || activity.action === "pr-review")) {
+    const problem = reviewNoteProblem(activity.notePath, run.status.startedAt ?? run.spec.createdAt);
+    if (problem) return { state: "failed", finishedAt: Date.now(), resultText: clip(finalText, 8000), error: clip(problem, 2000) };
+  }
   const usage = isLatestTurn ? agent.lastUsage : undefined;
   return {
     state: "completed", finishedAt: Date.now(), resultText: clip(finalText, 8000), error: undefined,

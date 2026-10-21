@@ -15,11 +15,12 @@ export function buildCreatePrPrompt(input: CreatePrPromptInput): string {
     lines.push(
       `DevHub task id ${input.taskId} on ${input.date} — pass that exact id/date through the skill's DevHub sync step.`,
       TASK_STATUS_UPDATE_INSTRUCTION,
-      "Task note: once the PR exists, update it with the task_note_update MCP tool: set_status draft-pr (or ready-for-review when it is not a draft), set_meta addLinks with the PR, and set_status_update with what the PR does. Tidy stale items while you are there.",
+      "Task note: once the PR exists, update it with the task_note_update MCP tool: set_status ready-for-review (draft-pr only if John explicitly asked for a draft), set_meta addLinks with the PR, and set_status_update with what the PR does. Tidy stale items while you are there.",
     );
   }
   lines.push(
-    "Work interactively: ask any questions the skill requires (title, base branch, draft vs open, whether to commit/push, Jira mutations) before changing git or GitHub.",
+    "Work interactively: ask any questions the skill requires (title, base branch, whether to commit/push, Jira mutations) before changing git or GitHub.",
+    "Open the PR ready for review: no `--draft` unless John explicitly asks for a draft PR.",
     "Do not silently run `gh pr create` with a guessed title. Uncommitted work is allowed; the skill can refuse or ask what to do.",
   );
   return lines.join("\n");

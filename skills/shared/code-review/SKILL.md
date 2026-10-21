@@ -72,7 +72,12 @@ Match each smell against the diff. What it is, then how to fix it:
 
 ## 4. Run the two passes
 
-Run them in parallel sub-agents so they do not pollute each other. If you cannot spawn sub-agents, do the passes one after the other and do not let the first pass rewrite the second.
+For a small, self-contained diff, the assigned reviewer runs both passes
+separately in the same session and keeps their findings independent. Use
+parallel sub-agents when the user requests them or the change spans substantial
+independent areas, security boundaries or unfamiliar contracts. Give each agent
+only its pass's context below. An independent reviewer does not automatically
+need another pair of reviewers. Never let the first pass rewrite the second.
 
 Standards prompt: the diff command, the commit list, the standards files, and the smell baseline pasted in full. Report, per file or hunk, every documented-standard breach (cite the file and the rule) and any baseline smell (name it and quote the hunk). Hard breaches are the documented ones. Smells stay judgement calls. Under 400 words.
 

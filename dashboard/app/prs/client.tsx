@@ -2,7 +2,6 @@
 
 import { useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import Link from "next/link";
 import type { FormEvent } from "react";
 import { GitPullRequest, RefreshCw, RotateCcw, X } from "lucide-react";
 import { AutoReviewBar } from "./AutoReviewBar";
@@ -31,6 +30,9 @@ import type { TaskProfileOverview } from "@/lib/tasks/profile-types";
 import { actionablePrs, prIdentity } from "@/lib/github/actionable-prs";
 import { OWNED_REPOS_SWR_KEY } from "@/lib/ownership/owned-repos-swr";
 import type { OwnedReposResponse } from "@/lib/ownership/types";
+import { OWNED_PRS_KEY, type OwnedPrsResponse } from "@/lib/github/owned-prs";
+import { profileKey } from "@/lib/tasks/profile-scope";
+import { isGithubPrsListKey } from "@/lib/github/prs-swr";
 
 const EMPTY_PR_ROWS: GithubPrRow[] = [];
 const EMPTY_RECENTLY_REVIEWED: RecentlyReviewedPr[] = [];
@@ -38,8 +40,8 @@ const EMPTY_SKIPPED: SkippedPrRecord[] = [];
 /** Keep the GitHub-wide fallback a hint, not a second inbox. */
 const MAX_REMOTE_RESULTS = 10;
 
-function PrCard({ row, mode }: { row: GithubPrRow; mode: "authored" | "reviews" }) {
-  return <PrRow row={row} kind={mode} density="comfortable" />;
+function PrCard({ row, mode, canSkip = true }: { row: GithubPrRow; mode: "authored" | "reviews"; canSkip?: boolean }) {
+  return <PrRow row={row} kind={mode} density="comfortable" canSkip={canSkip} />;
 }
 
 function RecentlyReviewedCard({ row }: { row: RecentlyReviewedPr }) {
@@ -90,10 +92,12 @@ export default function PrsPage() {
   // A pill can navigate to another PR while this page is already mounted.
   if (search.urlQuery !== urlQuery) setSearch({ urlQuery, query: urlQuery });
   const query = search.urlQuery === urlQuery ? search.query : urlQuery;
-  const setQuery = (query: string) => setSearch({ urlQuery, query });
+  const setQuery = (query: string) => { setSearch({ urlQuery, query }); setGithubQuery(null); };
   const [pinned, setPinned] = useState<GithubPrRow[]>([]);
+  const [githubQuery, setGithubQuery] = useState<string | null>(null);
   const { data, error, isLoading, mutate, isValidating } = useLive<GithubPrsApiPayload>("/api/github/prs");
   const owned = useLive<OwnedReposResponse>(OWNED_REPOS_SWR_KEY);
+  const ownedPrs = useLive<OwnedPrsResponse>(profileKey(OWNED_PRS_KEY, profileId), { keepPreviousData: false, refreshInterval: 120_000 });
   const skippedState = useLive<{ skipped: SkippedPrRecord[] }>("/api/github/prs/skip");
   // Same SWR key as the panel, so the badge and the list share one scan.
   const cleanupState = useLive<WorktreeCleanupResult>(WORKTREE_CLEANUP_KEY, WORKTREE_CLEANUP_OPTS);
@@ -124,7 +128,7 @@ export default function PrsPage() {
       toast.error("Couldn't unskip PR.");
       await skippedState.mutate();
     }
-    void globalMutate("/api/github/prs");
+    void globalMutate(isGithubPrsListKey);
   };
   useMarkPrsSeen();
 
@@ -153,14 +157,13 @@ export default function PrsPage() {
     [skippedRows, trimmed, isFiltering],
   );
 
-  const localMatchCount = prTab === "attention" ? filteredAttention.length :
-    filteredAuthored.length + filteredReviews.length + filteredRecent.length + filteredSkipped.length;
-
-  // Only trawl GitHub when the query is a phrase, not a URL we're about to pin.
-  const remote = useGithubPrSearch(trimmed, isFiltering);
+  const filteredOwned = useMemo(() => filterPrRows(ownedPrs.data?.prs ?? [], isFiltering ? trimmed : ""), [ownedPrs.data, trimmed, isFiltering]);
+  const canSearchGithub = !["owned", "cleanup", "skipped"].includes(prTab);
+  const searchingGithub = isFiltering && canSearchGithub && githubQuery === trimmed;
+  const remote = useGithubPrSearch(trimmed, searchingGithub, 0);
   const knownUrls = useMemo(
-    () => new Set([...authored, ...reviews, ...recentlyReviewed, ...pinned].map((r) => r.url)),
-    [authored, reviews, recentlyReviewed, pinned],
+    () => new Set([...authored, ...reviews, ...recentlyReviewed, ...pinned, ...skippedRows].map((r) => r.url)),
+    [authored, reviews, recentlyReviewed, pinned, skippedRows],
   );
   const remoteResults = useMemo(
     () => remote.results.filter((r) => !knownUrls.has(r.url)).slice(0, MAX_REMOTE_RESULTS),
@@ -180,19 +183,33 @@ export default function PrsPage() {
 
   // A list rather than a ternary per tab: five tabs made the inline chains for
   // label and count unreadable, and the next tab would have been worse.
-  const tabs: { id: PrTab; label: string; count?: number }[] = [
-    { id: "attention", label: "Mine + Owned" },
-    { id: "authored", label: "Mine", count: filteredAuthored.length },
-    { id: "owned", label: "Owned" },
-    { id: "reviews", label: "Review requested" },
-    { id: "recent", label: "Recently reviewed", count: filteredRecent.length },
-    { id: "skipped", label: "Skipped", count: filteredSkipped.length },
-    { id: "cleanup", label: "Worktrees", count: cleanupState.data?.rows.length ?? 0 },
+  const tabs: { id: PrTab; label: string; count: number | string; total: number }[] = [
+    { id: "attention", label: "Mine + Owned", count: actionCountKnown ? filteredAttention.length : "—", total: actionCount },
+    { id: "authored", label: "Mine", count: data ? filteredAuthored.length : "—", total: authored.length },
+    { id: "owned", label: "Owned", count: ownedPrs.data && !ownedPrs.error && !ownedPrs.data.failedRepos.length ? `${filteredOwned.length}${ownedPrs.data.limited ? "+" : ""}` : "—", total: ownedPrs.data?.prs.length ?? 0 },
+    { id: "reviews", label: "Review requested", count: data ? filteredReviews.length : "—", total: reviews.length },
+    { id: "recent", label: "Recently reviewed", count: data ? filteredRecent.length : "—", total: recentlyReviewed.length },
+    { id: "skipped", label: "Skipped", count: skippedState.data ? filteredSkipped.length : "—", total: skipped.length },
+    { id: "cleanup", label: "Worktrees", count: cleanupState.data ? cleanupState.data.rows.length : "—", total: cleanupState.data?.rows.length ?? 0 },
   ];
+  const activeTab = tabs.find((tab) => tab.id === prTab)!;
+  const localMatchCount = prTab === "owned" ? filteredOwned.length : activePrs.length;
+  const totalsUnavailable = !!error
+    || (prTab === "attention" && (!!owned.error || !!owned.data && !actionCountKnown))
+    || (prTab === "owned" && (!!ownedPrs.error || !!ownedPrs.data?.failedRepos.length))
+    || (prTab === "skipped" && !!skippedState.error);
+  const filterHint = activeTab.count === "—"
+    ? totalsUnavailable ? `${activeTab.label} totals are unavailable.` : `Loading ${activeTab.label} totals…`
+    : prTab === "owned" && ownedPrs.data?.limited
+      ? `${localMatchCount} matches among ${activeTab.total} loaded PRs. Owned results are limited.`
+      : `${localMatchCount} of ${activeTab.total} PRs in ${activeTab.label} match.`;
 
   const addPinnedPr = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!prRef) return;
+    if (!prRef) {
+      if (isFiltering && canSearchGithub && trimmed.length >= 2) setGithubQuery(trimmed);
+      return;
+    }
     const url = `https://github.com/${prRef.repo}/pull/${prRef.number}`;
     const existing = [...authored, ...reviews, ...recentlyReviewed].find((row) => row.url === url);
     const row: GithubPrRow = existing ?? {
@@ -231,7 +248,6 @@ export default function PrsPage() {
       <div className="page-header">
         <h1 className="page-title">Pull Requests</h1>
         <div className="flex items-center gap-2">
-          <Link className="btn btn-ghost" href="/integrations?action=pr.create#actions">Create or update PR…</Link>
           {actionCountKnown && actionCount > 0 ? <span className="badge badge-muted" aria-label={`${actionCount} pull requests need you`}>{actionCount}</span> : null}
           <button
             type="button"
@@ -255,12 +271,12 @@ export default function PrsPage() {
       )}
 
       {/* One box: type to filter, paste a PR URL to pin it. */}
-      <div className="mb-4 space-y-2">
+      {prTab !== "cleanup" ? <div className="mb-4 space-y-2">
         <form className="card" style={{ padding: "8px 10px" }} onSubmit={addPinnedPr}>
           <InlineSearch
             id="pr-search"
             label="Search pull requests or paste a PR URL"
-            placeholder="Search by title, repo, author or reviewer — or paste a PR URL"
+            placeholder={`Filter ${activeTab.label} — or paste a PR URL`}
             value={query}
             onChange={setQuery}
             describedBy="pr-search-hint"
@@ -268,6 +284,10 @@ export default function PrsPage() {
               isAddMode ? (
                 <button type="submit" className="btn btn-secondary shrink-0 text-xs">
                   Add PR
+                </button>
+              ) : isFiltering && canSearchGithub ? (
+                <button type="submit" className="btn btn-secondary shrink-0 text-xs" disabled={trimmed.length < 2 || (searchingGithub && remote.loading)}>
+                  Search GitHub
                 </button>
               ) : null
             }
@@ -278,18 +298,16 @@ export default function PrsPage() {
           {isAddMode
             ? `Looks like ${prRef.repo}#${prRef.number} — press Enter to pin it.`
             : isFiltering
-              ? `${localMatchCount} of ${authored.length + reviews.length + recentlyReviewed.length} loaded PRs match${
-                  remote.loading ? " · searching GitHub…" : ""
-                }`
-              : "Paste any GitHub PR URL to pin it, including drafts."}
+              ? filterHint
+              : `Filter ${activeTab.label} as you type, or paste a PR URL to pin it.`}
         </p>
 
         {pinned.length > 0 && (
           <div className="space-y-2">
-            {pinned.map((row) => (
+            {pinned.filter((row) => !skipped.some((entry) => entry.url === row.url)).map((row) => (
               <div key={row.url} className="flex items-start gap-1">
                 <div className="min-w-0 flex-1">
-                  <PrCard row={row} mode="reviews" />
+                  <PrCard row={row} mode="reviews" canSkip={false} />
                 </div>
                 <button
                   type="button"
@@ -304,7 +322,7 @@ export default function PrsPage() {
             ))}
           </div>
         )}
-      </div>
+      </div> : null}
 
       <div className="mb-4 flex flex-wrap gap-1" style={{ borderBottom: "1px solid var(--border-muted)" }}>
         {tabs.map((tab) => (
@@ -322,7 +340,7 @@ export default function PrsPage() {
             }}
             aria-pressed={prTab === tab.id}
           >
-            {tab.label}
+            {tab.label}{" "}
             {tab.count !== undefined ? <span className="ml-1 badge badge-muted" style={{ fontSize: 12 }}>
               {tab.count}
             </span> : null}
@@ -351,7 +369,7 @@ export default function PrsPage() {
                 return (
                   <div key={row.url} className="flex items-start gap-1">
                     <div className="min-w-0 flex-1">
-                      <PrCard row={row} mode={record?.kind ?? "reviews"} />
+                      <PrCard row={row} mode={record?.kind ?? "reviews"} canSkip={false} />
                     </div>
                     <button
                       type="button"
@@ -404,13 +422,11 @@ export default function PrsPage() {
         />
       )}
       {/* GitHub-wide fallback: PRs outside your authored/review buckets. */}
-      {prTab !== "cleanup" && prTab !== "owned" && isFiltering && (remoteResults.length > 0 || remote.loading) && (
+      {searchingGithub && (
         <section className="mt-6" aria-label="Elsewhere on GitHub">
           <div className="mb-2 flex items-baseline gap-2 px-1">
             <h2 className="text-xs font-medium text-text-muted">Elsewhere on GitHub</h2>
-            {remote.ghQuery ? (
-              <code className="text-xs text-text-subtle">{remote.ghQuery}</code>
-            ) : null}
+            <span className="text-xs text-text-subtle" role="status">{remote.loading ? "Searching GitHub…" : remote.error ? "Search unavailable" : `${remoteResults.length} additional PRs${remoteResults.length === MAX_REMOTE_RESULTS ? " · first 10 shown" : ""}`}</span>
           </div>
           {remote.loading && remoteResults.length === 0 ? (
             <SkeletonRows count={3} height={40} variant="list" />
@@ -419,7 +435,7 @@ export default function PrsPage() {
               {remoteResults.map((row) => (
                 <div key={row.url} className="flex items-start gap-2">
                   <div className="min-w-0 flex-1">
-                    <PrCard row={row} mode="reviews" />
+                    <PrCard row={row} mode="reviews" canSkip={false} />
                   </div>
                   <div className="mt-2 flex shrink-0 items-center gap-1">
                     <StateBadge row={row} />
@@ -439,9 +455,9 @@ export default function PrsPage() {
         </section>
       )}
 
-      {remote.error && isFiltering ? (
+      {remote.error && searchingGithub ? (
         <p className="mt-3 px-1 text-xs text-danger" role="alert">
-          Couldn&apos;t search GitHub: {remote.error}
+          Couldn&apos;t search GitHub. <button type="button" className="underline" onClick={remote.retry}>Try again</button>
         </p>
       ) : null}
 

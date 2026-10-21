@@ -35,7 +35,7 @@ function filePath(): string {
 }
 
 function readSkipped(): Record<string, SkippedPrRecord> {
-  const stored = safeReadJSON<SkippedPrsFile>(filePath(), EMPTY).skipped ?? {};
+  const stored = { ...safeReadJSON<SkippedPrsFile>(filePath(), EMPTY).skipped };
   // Tolerate the brief string-valued shape from before records carried metadata.
   for (const [url, v] of Object.entries(stored)) {
     if (typeof v === "string") stored[url] = { url, updatedAt: v, repo: "", number: 0, title: "", skippedAt: "" };

@@ -4,7 +4,7 @@ import { createHash } from "node:crypto";
 import { z } from "zod";
 import { writeAtomic } from "@/lib/atomic-write";
 import { withPluginMutationLock } from "@/lib/plugins/lock";
-import { alertRoot } from "../alert-store";
+import { profileStateDir } from "@/lib/profile-state";
 import type { SlackDelivery } from "./shared";
 import { readStateFile } from "./state-file";
 
@@ -18,7 +18,7 @@ const StateSchema = z.object({
 });
 type State = z.infer<typeof StateSchema>;
 
-export function slackStateRoot(): string { return path.join(alertRoot(), "slack"); }
+export function slackStateRoot(): string { return path.join(profileStateDir(), "workflow-alerts", "slack"); }
 
 export function knownSlackBotThread(key: string, root = slackStateRoot(), now = Date.now()): boolean {
   return read(root).botThreads.some((entry) => entry.key === key && now - entry.at < 30 * MAX_AGE);

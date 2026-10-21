@@ -371,6 +371,7 @@ async function dispatchPlanRun(
       cwd,
       title: `Plan ${task.text}`,
       worktree: isolated,
+      prepareCheckout: launchOptions?.worktree === false,
       depth: 0,
       activity: { source: "interactive", action: "plan", taskId: task.id, taskDate, ...(repoName ? { repoName } : {}) },
     }, { defer: true });
@@ -825,6 +826,11 @@ export function autoDeps(deps: OrchestratorDeps, notesDir: string): AutoDeps {
       return ensurePreview({ taskId: record.taskId, repoName: record.repo?.name, cwd });
     },
     stopPreview: (taskId) => stopPreview(taskId),
+    cleanupWork: async (taskId) => {
+      const { cleanupFinishedAutoWork } = await import("./cleanup-work");
+      try { await cleanupFinishedAutoWork(taskId, notesDir); }
+      catch (error) { console.warn("[storyboard-cleanup] kept checkout; scheduled cleanup will retry", error); }
+    },
     workChanged: async (work) => { const stats = await diffStats(work); return stats ? stats.files > 0 : null; },
     restoreWork: async (work) => {
       const treePath = work.worktree?.path ?? work.cwd;

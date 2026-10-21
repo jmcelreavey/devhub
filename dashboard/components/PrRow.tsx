@@ -77,10 +77,12 @@ export function PrRow({
   row,
   kind,
   density = "compact",
+  canSkip = true,
 }: {
   row: GithubPrRow;
   kind: PrRowKind;
   density?: "compact" | "comfortable";
+  canSkip?: boolean;
 }) {
   const toast = useToast();
   const router = useRouter();
@@ -106,6 +108,7 @@ export function PrRow({
   const groups = buildPrRowMenuGroups({
     row: target,
     kind,
+    canSkip,
     toast,
     openNote: () => openPrRowNote(row, (href) => router.push(href), toast),
     tagsGroup,

@@ -1,7 +1,7 @@
 /**
  * Native screen projections keep existing Jira/PR response shapes while provider
  * selection and capability checks live at the integration boundary.
- * Legacy screens use the default account; the generic screen supports named ones.
+ * Jira and PR views use the default account.
  */
 import { getMyTickets, getTicket, getJiraMeta } from "@/lib/jira/client";
 import { fetchMyGithubPrs, fetchRecentlyReviewedPrs, isRepoArchived, searchIssues } from "@/lib/github/prs";

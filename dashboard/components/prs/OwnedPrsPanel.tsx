@@ -17,7 +17,7 @@ export function OwnedPrsPanel({ profile, query }: { profile?: string; query: str
     <p className="mb-3 text-xs text-text-muted">Open PRs in your <Link className="underline" href="/own">Owned repositories</Link>{data && !unavailable ? ` · ${rows.length}${data.limited ? "+" : ""}` : " · total unavailable"}</p>
     {unavailable ? <FetchError message="GitHub unavailable. Owned PR totals are unavailable." onRetry={() => void mutate()} /> : null}
     {!data && !error ? <SkeletonRows count={3} height={40} variant="list" /> : null}
-    <div className="space-y-2">{rows.map((row) => <PrRow key={row.url} row={row} kind="reviews" density="comfortable" />)}</div>
+    <div className="space-y-2">{rows.map((row) => <PrRow key={row.url} row={row} kind="reviews" density="comfortable" canSkip={false} />)}</div>
     {data && !unavailable && !rows.length ? <p className="text-sm text-text-muted">{query ? "No Owned PRs match this search." : "No open PRs in your Owned repositories."}</p> : null}
   </section>;
 }

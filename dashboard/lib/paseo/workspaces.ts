@@ -84,12 +84,12 @@ async function chatActivityByWorkspace(daemon: DaemonClient): Promise<Map<string
   return byWorkspace;
 }
 
-export async function loadPaseoWorktreeActivity(): Promise<Array<{ path: string; active: boolean; updatedAt: number }>> {
+export async function loadPaseoWorktreeActivity(options: { ignoreIdlePins?: boolean } = {}): Promise<Array<{ path: string; active: boolean; updatedAt: number }>> {
   return withPaseo(async ({ daemon }) => {
     const chats = await chatActivityByWorkspace(daemon);
     return (await fetchAllWorkspaces(daemon)).flatMap((workspace) => workspace.workspaceDirectory ? [{
       path: workspace.workspaceDirectory,
-      active: Boolean(workspace.pinnedAt || workspace.archivingAt || chats.get(workspace.id)?.live ||
+      active: Boolean((!options.ignoreIdlePins && workspace.pinnedAt) || workspace.archivingAt || chats.get(workspace.id)?.live ||
         workspace.scripts.some((script) => script.lifecycle === "running") ||
         (workspace.status !== "done" && workspace.status !== "failed")),
       updatedAt: chats.get(workspace.id)?.lastActiveAt ?? 0,

@@ -1,5 +1,4 @@
 "use client";
-import { integrationFetch } from "@/lib/integrations/client-fetch";
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { mutate as globalMutate } from "swr";
@@ -248,7 +247,7 @@ export function AddToJiraModal({ open, task, date, generateOnOpen = false, onClo
     }
     setCreating(true);
     try {
-      const res = await integrationFetch("/api/jira/issue", {
+      const res = await fetch("/api/jira/issue", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -260,19 +259,17 @@ export function AddToJiraModal({ open, task, date, generateOnOpen = false, onClo
           sprintId: includeSprint ? meta?.sprint?.id ?? null : null,
         }),
       });
-      if (!res) return;
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         throw new Error(body.error || `Create failed (${res.status})`);
       }
-      const created = (await res.json()) as { key: string; url: string; proposal?: { id: string } };
+      const created = (await res.json()) as { key: string; url: string };
       toast.success(`Created ${created.key}`, {
         duration: 12000,
         action: {
           label: "Open in Jira",
           onClick: () => void openInBrowser(created.url),
         },
-        link: created.proposal ? { label: "Details", href: `/integrations#write-${created.proposal.id}` } : undefined,
       });
       onCreated(created.key, created.url);
       // Refresh the "My Tickets" widgets so the new ticket shows up.

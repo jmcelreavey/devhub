@@ -3,8 +3,6 @@ import path from "node:path";
 import { z } from "zod";
 import { profileConfigDir } from "@/lib/profile-state";
 import { readDashboardEnvLocalFile, resolveEnvValue } from "@/lib/dashboard-env-local";
-import { writeAtomic } from "@/lib/atomic-write";
-import { withPluginMutationLock } from "@/lib/plugins/lock";
 import { IntegrationError } from "./types";
 const envRef = z.string().regex(/^[A-Z][A-Z0-9_]{1,127}$/);
 export const AccountSchema = z.object({
@@ -18,16 +16,6 @@ function file(root = profileConfigDir()) { return path.join(root, "integration-a
 export function readAccounts(root?: string): SavedAccount[] {
   try { return FileSchema.parse(JSON.parse(fs.readFileSync(file(root), "utf8"))).accounts; }
   catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return []; throw error; }
-}
-export async function saveAccount(account: SavedAccount, remove = false, root?: string) {
-  const value = AccountSchema.parse(account);
-  return withPluginMutationLock(file(root) + ".lock", async () => {
-    const accounts = readAccounts(root).filter((item) => item.provider !== value.provider || item.id !== value.id);
-    if (!remove) accounts.push(value);
-    if (accounts.length > 30) throw new IntegrationError("invalid", "At most 30 additional accounts are supported.");
-    fs.mkdirSync(path.dirname(file(root)), { recursive: true, mode: 0o700 });
-    await writeAtomic(file(root), JSON.stringify({ version: 1, accounts }, null, 2));
-  });
 }
 export function credential(ref: string): string {
   const value = resolveEnvValue(ref, readDashboardEnvLocalFile().overrides);

@@ -24,6 +24,10 @@ clearly what is still open. You do not write code, create branches or commit.
 
 ## 2. Investigate until you can name the change
 
+Read [the implementation preflight](../devhub-implement-task/preflight.md).
+Use its repository and recovery checks; start services only when reproduction
+or a concrete design question needs them. Reuse the environment in the handoff.
+
 - **A bug or incident:** prove the cause. Read the code in the linked repo
   (read-only), check recent merges and deploys (`git log`, `gh pr list
   --state merged`), and Datadog if it's an alert (`datadog_investigate`). Name
@@ -48,6 +52,10 @@ Read the note first and keep what's there. Add or replace:
 
 ## Acceptance
 - Observable outcomes a reviewer can check.
+
+## Verification
+- Required checks and who owns final UI evidence (implementer or Jev).
+- Add the standalone line Baseline capture: required only when the user wants before/after evidence or a visual reproduction needs it. Otherwise omit it.
 
 ## Open questions
 - [ ] Anything only the user can decide.
@@ -77,10 +85,13 @@ Use short plain-language sentences, without raw logs. This refreshes Summary
 and Status while preserving the plan and personal notes. Reviewers update this
 context too, without changing code or the workflow column.
 
-For UI work, capture the rendered result with available browser tooling and
-attach it with `add_media {localFile: <absolute path>, caption, phase: "after"}`.
-Use `"before"` for a baseline. The latest attachment appears in task details.
-If capture is unavailable, explain why in `currentState`.
+The implementation or QA stage owns UI capture. Reuse existing evidence when
+the code, checkout and scenario still match. Planning, review and PR creation
+capture only a specific uncovered risk or changed behaviour. Attach new evidence
+with `add_media {localFile: <absolute path>, caption, phase: "after"}` and name
+the verified commit or working-tree state, scenario and remaining gaps. Use
+`"before"` only when a baseline is required. If capture is unavailable, explain
+why in `currentState`; keep the manual check explicit.
 
 On Auto, the orchestrator handles “Pause after planning”. Finish the plan and
 summary, then stop; never approve your own plan or start implementation from a

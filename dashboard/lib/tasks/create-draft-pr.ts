@@ -32,7 +32,7 @@ export async function createDraftPrForTask(input: { taskId: string; date: string
       cwd,
       worktree: false,
       ...(run.spec.worktree ? { inherit: { worktree: run.spec.worktree, ...(run.spec.baseSha ? { baseSha: run.spec.baseSha } : {}) } } : {}),
-      title: `Draft PR ${task.text}`,
+      title: `Open PR ${task.text}`,
       depth: 0,
       activity: { source: "interactive", action: "create-pr", taskId: task.id, taskDate: input.date, ...(repoName ? { repoName } : {}) },
     });

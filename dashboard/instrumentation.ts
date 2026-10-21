@@ -36,8 +36,6 @@ export async function register() {
     // Same single-owner rule: it writes the shared task sidecars.
     const { startTaskPrWatcher } = await import("./lib/tasks/task-pr-watch");
     startTaskPrWatcher();
-    const { startAlertWorker } = await import("./lib/integrations/alert-worker");
-    startAlertWorker();
     const { readSlackSettings, slackConfigured } = await import("./lib/integrations/slack/settings");
     if (slackConfigured(readSlackSettings())) {
       const { startSlackBot } = await import("./lib/integrations/slack/runtime");

@@ -42,7 +42,7 @@ describe("TaskNoteVisual", () => {
     ]);
     render(<TaskNoteVisual view={view} sourceMode={false} onToggleSource={() => {}} onOp={() => {}} />);
     const status = document.querySelector('[data-pill="status"]');
-    expect(status?.textContent?.toLowerCase()).toContain("draft");
+    expect(status?.textContent?.toLowerCase()).toContain("pr open");
     expect(screen.getByText("Adds the first vow room.")).toBeTruthy();
     expect(screen.getByText("blocker")).toBeTruthy();
   });

@@ -37,7 +37,7 @@ export interface SlackNeed {
   action: "answer" | "repo" | "retry" | "open" | "approve-plan";
   state?: "plan-ready" | "question" | "failed-run" | "review-ready" | "finished-feedback" | "push-failed";
   plan?: SlackPlan;
-  prRows?: Array<{ title: string; href: string; needed: string }>;
+  prRows?: Array<{ title: string; href: string; needed: string; itemKey?: string }>;
 }
 export interface SlackPlan { runId: string; fingerprint: string; summary: string }
 
@@ -120,7 +120,7 @@ export function slackNeedsFromHome(profile: string, work: readonly HomeWork[], q
   });
   const prs = items.filter((item) => item.entityId.startsWith("pr:"));
   if (!prs.length) return items;
-  const prRows = prs.map(({ title, href, needed }) => ({ title, href, needed }));
+  const prRows = prs.map(({ title, href, needed, itemKey }) => ({ title, href, needed, itemKey }));
   return [...items.filter((item) => !item.entityId.startsWith("pr:")), {
     profile, entityId: "prs:actionable", title: "Pull requests needing you", needed: `${prs.length} PR${prs.length === 1 ? "" : "s"} need attention`,
     href: "/prs", action: "open", prRows, itemKey: fingerprint(prs.map((item) => [item.entityId, item.itemKey])),

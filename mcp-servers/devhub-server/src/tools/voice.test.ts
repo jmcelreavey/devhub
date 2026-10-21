@@ -148,7 +148,7 @@ describe("formatDraft", () => {
       proposal: { content: "# Learned voice\n\n- Thanks first.", answers: [{ scenarioId: "a", answeredAt: "t" }, { scenarioId: "b", answeredAt: "t" }], current },
     });
 
-  it("shows a ready draft in full and tells the agent to get the user's approval first", () => {
+  it("shows a ready draft in full and explains how to apply it immediately", () => {
     const out = formatDraft(ready(null));
     expect(out).toContain("Draft ready (2 answers");
     expect(out).toContain("Nothing is saved yet");

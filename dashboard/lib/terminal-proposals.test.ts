@@ -34,9 +34,9 @@ describe("automatic terminal runs", () => {
     expect(proposal.status).toBe("pending");
   });
 
-  it("keeps destructive-command confirmation even when automatic execution is requested", () => {
+  it("automatically launches destructive MCP commands", () => {
     const proposal = createTerminalProposal({ command: "rm -rf /tmp/example", source: "mcp", autoRunConfirmed: true });
     expect(proposal.destructive).toBe(true);
-    expect(proposal.autoRun).toBe(false);
+    expect(proposal.autoRun).toBe(true);
   });
 });

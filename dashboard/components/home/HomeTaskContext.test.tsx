@@ -99,7 +99,6 @@ describe("Home task context", () => {
     await waitFor(() => expect(screen.getAllByRole("button", { name: "Change status from Done" })).toHaveLength(2));
     expect(writes()).toHaveLength(1);
     expect(new Headers(writes()[0][1].headers).get("x-devhub-task-profile")).toBe("work");
-    expect(new Headers(writes()[0][1].headers).get("x-devhub-intent")).toBe("direct");
     const undo = state.success.mock.calls.find(([message]) => message === "APP-42 moved to Done")![1].action;
     await act(async () => undo.onClick());
     await waitFor(() => expect(screen.getAllByRole("button", { name: "Change status from In Progress" })).toHaveLength(2));

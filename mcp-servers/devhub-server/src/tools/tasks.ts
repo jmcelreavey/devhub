@@ -39,6 +39,23 @@ function taskHistoryLine(task: {
   return `- [${status}] ${task.id} - ${task.text}${task.jiraKey ? ` [${task.jiraKey}]` : ""}`;
 }
 
+type ReadyPrOutcome = { url: string; result: string; detail?: string };
+
+/** Ask the dashboard to mark a completed task's draft PRs ready; one line for the tool reply ("" when there was nothing to do). */
+async function readyLinkedPrsLine(ctx: Context, taskId: string): Promise<string> {
+  try {
+    const { outcomes = [] } = await ctx.dashboard.post<{ outcomes?: ReadyPrOutcome[] }>("/api/tasks/ready-prs", { taskId, reason: "task completed" }, 60_000);
+    const readied = outcomes.filter((o) => o.result === "readied").map((o) => o.url);
+    const failed = outcomes.filter((o) => o.result === "failed");
+    const parts = [];
+    if (readied.length) parts.push(`Marked ready for review: ${readied.join(", ")}.`);
+    if (failed.length) parts.push(`Couldn't mark ready (logged on the task note): ${failed.map((o) => `${o.url} (${o.detail ?? "error"})`).join(", ")}.`);
+    return parts.join(" ");
+  } catch (error) {
+    return `Couldn't check this task's draft PRs (is the dashboard running?): ${error instanceof Error ? error.message : String(error)}. Run \`gh pr ready <url>\` on any draft PR it opened.`;
+  }
+}
+
 export function registerTasksTools(server: McpServer, ctx: Context): void {
   registerTeamTaskTools(server, ctx);
   const { tasksStorage } = ctx;
@@ -212,7 +229,10 @@ export function registerTasksTools(server: McpServer, ctx: Context): void {
       if (!task) {
         return { content: [{ type: "text", text: `Task not found: ${id}` }] };
       }
-      return { content: [{ type: "text", text: `Updated task: ${task.id} — ${task.text} (done=${task.done}, stage=${task.stage ?? "ready"})` }] };
+      const lines = [`Updated task: ${task.id} — ${task.text} (done=${task.done}, stage=${task.stage ?? "ready"})`];
+      // Safety net: completing a task marks its own draft PRs ready for review. Idempotent; the dashboard logs each change on the task note.
+      if (task.done && (status === "complete" || done === true)) lines.push(await readyLinkedPrsLine(ctx, task.id));
+      return { content: [{ type: "text", text: lines.filter(Boolean).join("\n") }] };
     },
   );
 

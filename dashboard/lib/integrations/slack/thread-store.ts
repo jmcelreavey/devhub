@@ -17,7 +17,7 @@ const ItemSchema = z.object({
   plan: z.object({ runId: z.string(), fingerprint: z.string(), summary: z.string() }).optional(),
   planDecision: z.enum(["claimed", "approved", "revised"]).optional(),
   revision: z.object({ token: z.string(), expiresAt: z.number(), mode: z.enum(["modal", "thread"]) }).optional(),
-  prRows: z.array(z.object({ title: z.string(), href: z.string(), needed: z.string() })).optional(),
+  prRows: z.array(z.object({ title: z.string(), href: z.string(), needed: z.string(), itemKey: z.string().optional() })).optional(),
   teamId: z.string(), userId: z.string(), channel: z.string(),
   thread_ts: timestamp.optional(), ts: timestamp.optional(), digestTs: timestamp.optional(),
   postedAt: z.string().datetime(), resolved: z.boolean(), resolution: z.string().optional(),

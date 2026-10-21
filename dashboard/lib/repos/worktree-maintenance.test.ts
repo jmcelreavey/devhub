@@ -4,11 +4,14 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { execExternal } from "@/lib/exec-external";
 import { upsertTerminalSession, removeTerminalSession } from "@/lib/terminal-sessions-registry";
-import { cleanupWorktrees, parseProcessCwds } from "./worktree-maintenance";
+import { cleanupWorktrees, parseProcessCwds, processInspectionComplete } from "./worktree-maintenance";
 import type { WorktreeContext } from "./worktree-inventory";
 
-const mocks = vi.hoisted(() => ({ root: "", paseo: vi.fn(), processes: vi.fn(), tasks: vi.fn(), runs: vi.fn(), taskRuns: vi.fn() }));
+const mocks = vi.hoisted(() => ({ root: "", repos: [] as string[], prs: vi.fn(), xcode: vi.fn(), xcodeBusy: vi.fn(), paseo: vi.fn(), processes: vi.fn(), tasks: vi.fn(), runs: vi.fn(), taskRuns: vi.fn() }));
 vi.mock("@/lib/content/dirs", async (original) => ({ ...await original<typeof import("@/lib/content/dirs")>(), getCheckoutRoot: () => mocks.root }));
+vi.mock("@/lib/repos", () => ({ getReposScanDir: () => mocks.root, listRepoNames: () => mocks.repos, getGithubFullNameForLocalRepo: () => "test/repo" }));
+vi.mock("@/lib/gh-exec", () => ({ execGhJsonArray: mocks.prs }));
+vi.mock("./worktree-xcode-cache", () => ({ worktreeXcodeCaches: mocks.xcode, xcodeBuildActive: mocks.xcodeBusy }));
 vi.mock("@/lib/paseo/workspaces", () => ({ loadPaseoWorktreeActivity: mocks.paseo }));
 vi.mock("@/lib/exec-external", async (original) => {
   const actual = await original<typeof import("@/lib/exec-external")>();
@@ -54,6 +57,10 @@ function taskContext(done = false, status: "done" | "paused" = "done"): void {
 
 beforeEach(async () => {
   vi.clearAllMocks();
+  mocks.repos = [];
+  mocks.xcode.mockResolvedValue([]);
+  mocks.xcodeBusy.mockResolvedValue(false);
+  mocks.prs.mockResolvedValue([]);
   mocks.paseo.mockResolvedValue([]);
   mocks.processes.mockResolvedValue({ stdout: "p1\nfcwd\nn/\n", stderr: "" });
   mocks.tasks.mockReturnValue([]);
@@ -287,6 +294,80 @@ describe("idle worktree maintenance", () => {
     fs.symlinkSync(path.join(root, "moved"), linked);
     expect((await cleanupWorktrees(vi.fn())).removed).toEqual([]);
     expect(fs.readFileSync(path.join(outside, "keep"), "utf8")).toBe("keep\n");
+  });
+  it("covers agent worktrees in the configured repos folder", async () => {
+    const moved = path.join(root, ".devhub-worktrees", path.basename(root), "feature");
+    fs.mkdirSync(path.dirname(moved), { recursive: true });
+    await git(["worktree", "move", linked, moved]);
+    linked = moved;
+    age();
+    expect((await cleanupWorktrees(vi.fn())).removed).toEqual([linked]);
+  });
+  it("uses the remote default branch when it is not main", async () => {
+    await git(["update-ref", "refs/remotes/origin/trunk", "HEAD"]);
+    await git(["symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/trunk"]);
+    await git(["update-ref", "-d", "refs/remotes/origin/main"]);
+    expect((await cleanupWorktrees(vi.fn())).removed).toEqual([linked]);
+  });
+  it("releases a freshly verified PR checkout while preserving its branch", async () => {
+    taskContext(false);
+    fs.writeFileSync(path.join(linked, "source.txt"), "published feature");
+    await commit(linked);
+    mocks.prs.mockResolvedValue([{ headRefOid: await git(["rev-parse", "HEAD"], linked), headRefName: "feature", isCrossRepository: false }]);
+    const result = await cleanupWorktrees(vi.fn(), { release: { repoRoot: root, path: linked, branch: "feature", taskId: "task-1" } });
+    expect(result.errors).toEqual([]);
+    expect(result.removed).toEqual([linked]);
+    expect(await git(["branch", "--list", "feature"])).toContain("feature");
+  });
+  it.each(["no-pr", "unpushed", "fork", "renamed", "active"])("does not release %s work", async (kind) => {
+    const head = await git(["rev-parse", "HEAD"], linked);
+    mocks.prs.mockResolvedValue(kind === "no-pr" ? [] : [{ headRefOid: kind === "unpushed" ? "0".repeat(40) : head, headRefName: "feature", isCrossRepository: kind === "fork" }]);
+    if (kind === "active") mocks.paseo.mockResolvedValue([{ path: linked, active: true, updatedAt: 0 }]);
+    build("node_modules");
+    const result = await cleanupWorktrees(vi.fn(), { release: { repoRoot: root, path: linked, branch: kind === "renamed" ? "old-name" : "feature", taskId: "task-1" } });
+    expect(result.removed).toEqual([]);
+    expect(result.trimmed).toEqual([]);
+  });
+  it("trims recent published builds but keeps source changes and ignored secrets", async () => {
+    mocks.prs.mockResolvedValue([{ headRefOid: await git(["rev-parse", "HEAD"], linked), headRefName: "feature", isCrossRepository: false }]);
+    fs.writeFileSync(path.join(linked, ".env"), "keep");
+    fs.writeFileSync(path.join(linked, "source.txt"), "local work");
+    const modules = build("node_modules");
+    const result = await cleanupWorktrees(vi.fn(), { release: { repoRoot: root, path: linked, branch: "feature", taskId: "task-1" } });
+    expect(result.removed).toEqual([]);
+    expect(result.trimmed).toEqual([modules]);
+    expect(fs.readFileSync(path.join(linked, "source.txt"), "utf8")).toBe("local work");
+    expect(fs.existsSync(path.join(linked, ".env"))).toBe(true);
+  });
+  it("recognises custom Next output and native build caches, preserving native source", async () => {
+    fs.appendFileSync(path.join(linked, ".gitignore"), "\n.next-verify/\nios/\nandroid/\n");
+    fs.mkdirSync(path.join(linked, "ios"));
+    fs.writeFileSync(path.join(linked, "ios/Podfile"), "source");
+    fs.mkdirSync(path.join(linked, "android"));
+    fs.writeFileSync(path.join(linked, "android/gradlew"), "source");
+    fs.writeFileSync(path.join(linked, "android/build.gradle"), "source");
+    const builds = [build("dashboard/.next-verify"), build("ios/Pods"), build("ios/build"), build("android/.gradle"), build("android/build")];
+    age(8);
+    expect((await cleanupWorktrees(vi.fn())).trimmed.sort()).toEqual(builds.sort());
+    expect(fs.readFileSync(path.join(linked, "ios/Podfile"), "utf8")).toBe("source");
+  });
+  it.each(["idle", "busy", "ownership-changed"])("handles %s checkout-owned Xcode caches safely", async (state) => {
+    const cache = path.join(root, "derived-data");
+    fs.mkdirSync(cache);
+    fs.writeFileSync(path.join(cache, "build"), "generated");
+    mocks.xcode.mockResolvedValue([cache]);
+    if (state === "busy") mocks.xcodeBusy.mockResolvedValue(true);
+    if (state === "ownership-changed") mocks.xcode.mockResolvedValueOnce([cache]).mockResolvedValue([]);
+    const result = await cleanupWorktrees(vi.fn());
+    expect(fs.existsSync(cache)).toBe(state !== "idle");
+    expect(result.trimmed).toEqual(state === "idle" ? [cache] : []);
+  });
+  it("only tolerates lsof mount warnings wholly outside the checkout", () => {
+    const warning = (mount: string) => `lsof: WARNING: can't stat() hfs file system ${mount}\n      Output information may be incomplete.\n      assuming "dev=1000022" from mount table\n`;
+    expect(processInspectionComplete(warning("/Volumes/old-image"), "/Users/test/repo")).toBe(true);
+    expect(processInspectionComplete(warning("/Users"), "/Users/test/repo")).toBe(false);
+    expect(processInspectionComplete(warning("/Users/test/repo/mount"), "/Users/test/repo")).toBe(false);
+    expect(processInspectionComplete("permission denied", "/Users/test/repo")).toBe(false);
   });
   it("rejects empty or malformed process cwd output", () => {
     expect(() => parseProcessCwds("")).toThrow();

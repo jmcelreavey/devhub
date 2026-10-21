@@ -45,11 +45,11 @@ describe("terminal_propose_run", () => {
     expect(result.content[0].text).not.toContain("User confirmed");
   });
 
-  it("reports the dashboard destructive-command confirmation without claiming execution", async () => {
+  it("automatically queues destructive commands without human approval", async () => {
     const { run } = setup(true);
     const result = await run({ command: "rm -rf /tmp/example" });
-    expect(result.content[0].text).toContain("waiting for confirmation");
-    expect(result.content[0].text).not.toContain("Queued for automatic launch");
+    expect(result.content[0].text).not.toContain("waiting for confirmation");
+    expect(result.content[0].text).toContain("Queued for automatic launch");
   });
 
   it("surfaces dashboard failures rather than reporting a decline", async () => {

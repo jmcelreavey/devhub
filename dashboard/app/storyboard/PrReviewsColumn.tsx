@@ -5,6 +5,7 @@ import { ChevronRight, ExternalLink } from "lucide-react";
 import { RowMenuKebab, useContextMenu } from "@/components/shell/ContextMenu";
 import { WorkCardPrMenu } from "@/components/storyboard/WorkCardPrMenu";
 import { notesPageHref } from "@/lib/notes/path";
+import { openNoteInPanel, wantsFullPage } from "@/lib/notes/open-in-panel";
 import type { ReviewedPr } from "@/lib/storyboard/reviewed-prs";
 import styles from "./storyboard.module.css";
 
@@ -24,7 +25,12 @@ function PrReviewCard({ pr, note }: ReviewedPr) {
       <a className={styles.title} href={pr.url} target="_blank" rel="noopener noreferrer" title={pr.title}>{pr.title} <ExternalLink size={11} aria-hidden /></a>
       <p className={styles.progress}>{pr.repo} · #{pr.number}{pr.author ? ` · @${pr.author.login}` : ""}{pr.checks ? ` · checks ${pr.checks}` : ""}</p>
       <div className={styles.foot}>
-        <Link className="btn btn-ghost" href={notesPageHref(note.path)}>Open review note</Link>
+        <Link className="btn btn-ghost" href={notesPageHref(note.path)} onClick={(event) => {
+          // Plain click previews in the Notes side panel; ⌘/Ctrl/Shift/middle-click keeps the full page.
+          if (wantsFullPage(event)) return;
+          event.preventDefault();
+          openNoteInPanel(note.path);
+        }}>Open review note</Link>
         <RowMenuKebab label={`Actions for ${pr.title}`} onOpen={(x, y) => menu.openAtPoint(x, y, pr.url)} />
       </div>
       </div>

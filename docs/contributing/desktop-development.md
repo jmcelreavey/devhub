@@ -177,13 +177,7 @@ failures in a bundle that otherwise looked perfect:
 - **It builds against an empty content tree.** Next prerenders static routes
   using the build machine's data, so `/notes` shipped as HTML listing the
   developer's actual notes.
-- **It copies `playwright-core`'s `browsers.json` back in.** The Browser route
-  loads Playwright only when a session starts (`dashboard/lib/browser/runtime.ts`).
-  A static import used to evaluate the package while loading the route; that
-  package `require`s `browsers.json` through a computed path, which Next's file
-  tracer omits, so `/browser` 500'd before auth. `ensureExternalRuntimeFiles`
-  restores it; without it the start action now returns 409 JSON asking you to
-  reinstall. See [Managed browser — Packaged app](../guides/managed-browser.md#packaged-app).
+- **It includes Playwright runtime data used by agent QA.** `ensureExternalRuntimeFiles` restores `browsers.json` when Next’s file tracer omits it.
 
 ## The pre-signing gate
 

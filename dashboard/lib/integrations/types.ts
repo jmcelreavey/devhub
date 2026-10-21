@@ -16,7 +16,6 @@ export interface IntegrationItem {
   draft?: boolean;
   metadata?: Record<string, unknown>;
 }
-export interface IntegrationPage { items: IntegrationItem[]; next?: string }
 export interface IntegrationContext { signal: AbortSignal }
 export interface IntegrationAccount { provider: string; id: string; label: string }
 export interface IntegrationProvider {
@@ -26,9 +25,7 @@ export interface IntegrationProvider {
   capabilities: readonly string[];
   accounts(): IntegrationAccount[];
   get(ref: IntegrationRef, context: IntegrationContext): Promise<IntegrationItem>;
-  search?(account: string, kind: IntegrationRef["kind"], query: string, cursor: string | undefined, context: IntegrationContext): Promise<IntegrationPage>;
   transitions?(ref: IntegrationRef, context: IntegrationContext): Promise<Array<{ id: string; label: string; statusId?: string; statusLabel?: string }>>;
-  checks?(ref: IntegrationRef, context: IntegrationContext, cursor?: string): Promise<IntegrationPage>;
   prepareWrite?(input: import("./write-types").WriteInput, context: IntegrationContext): Promise<import("./write-types").PreparedWrite>;
   executeWrite?(input: import("./write-types").WriteInput, prepared: import("./write-types").PreparedWrite, context: import("./write-types").WriteContext): Promise<import("./write-types").WriteReceipt>;
 }

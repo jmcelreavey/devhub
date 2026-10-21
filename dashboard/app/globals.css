@@ -6690,11 +6690,16 @@ body[data-motion="off"] .context-menu:not([hidden]) {
   background: var(--bg-overlay);
 }
 
-/* Row that owns an open context menu — board-wide via bindRow host attr */
-[data-context-menu-host][data-context-menu="open"],
-[data-context-menu-host][data-context-menu="open"]:hover {
-  background: var(--accent-dim);
-  box-shadow: inset 3px 0 0 var(--accent);
+/* Whatever owns an open context menu (row, card, pill). useContextMenu sets
+   data-context-menu="open" on its host for right-click, long-press, kebab and
+   the ContextMenu / Shift+F10 keys, and clears it on close. The accent tint is
+   layered over the element's own background so cards keep their surface; the
+   ring is a flat outline (no glow) so it reads in every theme. */
+html [data-context-menu="open"][data-context-menu],
+html [data-context-menu="open"][data-context-menu]:hover {
+  background-image: linear-gradient(var(--accent-dim), var(--accent-dim));
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
 }
 @media (prefers-reduced-motion: no-preference) {
   body:not([data-motion="off"]) [data-context-menu-host] {

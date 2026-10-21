@@ -1,6 +1,7 @@
 import { githubScreen } from "@/lib/integrations/screen-data";
 import { readGithubPrsListCache, readStaleGithubPrsListCache, writeGithubPrsListCache, type GithubPrRow, type GithubPrsApiPayload } from "./prs";
 import { sortReviewRequestedPrs } from "./review-requested-sort";
+import { listSkippedPrs } from "./skipped-prs";
 import { isGithubCliAuthenticated, mapGithubCliError } from "@/lib/gh-exec";
 import { getGithubLogin } from "@/lib/standup/github-merged";
 import { reviewNoteActivityByPath } from "@/lib/notes/review-index-server";
@@ -11,10 +12,18 @@ function sortReviews(rows: GithubPrRow[]): GithubPrRow[] {
   return sortReviewRequestedPrs(rows, reviewNoteActivityByPath());
 }
 
+function withoutSkippedPrs(payload: GithubPrsApiPayload): GithubPrsApiPayload {
+  const skipped = new Set(listSkippedPrs().map((pr) => pr.url));
+  return { ...payload, authored: payload.authored.filter((pr) => !skipped.has(pr.url)), reviews: payload.reviews.filter((pr) => !skipped.has(pr.url)) };
+}
+
 export async function loadGithubPrsList(): Promise<GithubPrsApiPayload> {
   if (!await isGithubCliAuthenticated()) return { configured: false, authored: [], reviews: [], recentlyReviewed: [] };
   const cached = readGithubPrsListCache();
-  if (cached) return { ...cached, reviews: sortReviews(cached.reviews), cached: true, configured: true };
+  if (cached) {
+    const visible = withoutSkippedPrs(cached);
+    return { ...visible, reviews: sortReviews(visible.reviews), cached: true, configured: true };
+  }
   try {
     const { authored, reviews, feedbackPrs } = await githubScreen.prs();
     const uniqueRepos = [...new Set([...authored, ...reviews].map((row) => row.repo))];
@@ -36,6 +45,7 @@ export async function loadGithubPrsList(): Promise<GithubPrsApiPayload> {
     const mapped = mapGithubCliError(error);
     const stale = mapped.status >= 500 ? readStaleGithubPrsListCache() : null;
     if (!stale) throw error;
-    return { ...stale, reviews: sortReviews(stale.reviews), cached: true, stale: true, configured: true, warning: mapped.error };
+    const visible = withoutSkippedPrs(stale);
+    return { ...visible, reviews: sortReviews(visible.reviews), cached: true, stale: true, configured: true, warning: mapped.error };
   }
 }

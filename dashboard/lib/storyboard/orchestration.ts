@@ -7,7 +7,7 @@ export const STEP_LABEL: Record<ExecutionStep, string> = {
   plan: "Plan",
   implement: "Implement",
   verify: "Verify",
-  "draft-pr": "Draft PR",
+  "draft-pr": "Open PR",
 };
 
 export const ORCHESTRATION_STATUS_LABEL: Record<OrchestrationStatus, string> = {
@@ -26,7 +26,7 @@ export const AUTO_PHASE_LABEL: Record<AutoPhase, string> = {
   plan: "Plan",
   baseline: "Before video",
   implement: "Implement",
-  "draft-pr": "Draft PR",
+  "draft-pr": "Open PR",
   verify: "Review + Jev",
   fix: "Fix",
   ready: "Ready for review",
@@ -169,7 +169,7 @@ export function orchestrationChip(summary: OrchestrationSummary): { label: strin
     case "paused-manual":
       return { label: "Manual", kind: "paused", detail: summary.lastError ? `${summary.lastError} Switch to Auto to retry.` : `Switched to Manual at ${step}. Switch back to Auto to resume.` };
     case "pr-created":
-      return { label: "PR ready", kind: "ready", detail: "Draft PR opened. Review it before merging." };
+      return { label: "PR ready", kind: "ready", detail: "PR opened for review. Review it before merging." };
     case "ready-for-review":
       return { label: "Ready for review", kind: "ready", detail: "Auto mode finished. Check what review and QA actually covered before relying on it." };
     case "running":

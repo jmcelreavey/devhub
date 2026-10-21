@@ -33,16 +33,6 @@ export function formatJiraTicket(ticket: JiraTicketDetail): string {
   return `${ticket.key} [${status}]${ticket.issuetype ? ` (${ticket.issuetype})` : ""}\n${ticket.summary ?? ""}`.trimEnd();
 }
 
-/** The dashboard answers an agent's write with a proposal that a person confirms; it has not been sent. */
-interface ProposedWrite { confirmationRequired?: boolean; proposal?: { id: string } }
-function proposedNotice(what: string, response: ProposedWrite) {
-  const id = response.proposal?.id;
-  return {
-    content: [{ type: "text" as const, text: `Proposed, not applied: ${what}. A person confirms it in DevHub under Integrations > Recent actions${id ? ` (action ${id})` : ""}. Nothing has changed in Jira yet.` }],
-    structuredContent: { proposed: true, proposalId: id ?? null },
-  };
-}
-
 export function registerWorkTools(server: McpServer, ctx: Context): void {
   const { dashboard } = ctx;
 
@@ -434,7 +424,7 @@ export function registerWorkTools(server: McpServer, ctx: Context): void {
     "jira_ticket_create",
     {
       description:
-        "Propose a Jira ticket through the authenticated dashboard. Requires confirm:true after user approval; the dashboard then records a proposal that a person confirms in DevHub (Integrations > Recent actions) before anything reaches Jira. It chooses Task/Sub-task from the parent and inherits its Team. Each confirmed proposal creates a new issue; check Jira before retrying an uncertain result.",
+        "Create a Jira ticket immediately through the authenticated dashboard when confirm:true. It chooses Task/Sub-task from the parent and inherits its Team. Each call creates a new issue; check Jira before retrying an uncertain result.",
       inputSchema: {
         projectKey: z.string().trim().regex(/^[A-Z][A-Z0-9]+$/).describe("Jira project key, e.g. PTF"),
         summary: z.string().trim().min(1).max(255),
@@ -449,12 +439,12 @@ export function registerWorkTools(server: McpServer, ctx: Context): void {
       withDashboardErrors(async () => {
         if (!confirm) {
           return {
-            content: [{ type: "text", text: `Create a Jira ticket in ${input.projectKey}: ${input.summary}${input.parentKey ? ` (parent ${input.parentKey})` : ""}. Re-run with confirm: true after user approval.` }],
+            content: [{ type: "text", text: `Create a Jira ticket in ${input.projectKey}: ${input.summary}${input.parentKey ? ` (parent ${input.parentKey})` : ""}. Re-run with confirm: true.` }],
             isError: true,
           };
         }
-        const created = await dashboard.post<{ key: string; url: string } & ProposedWrite>("/api/jira/issue", input, 60_000);
-        if (created.confirmationRequired) return proposedNotice(`Create a Jira ticket in ${input.projectKey}: ${input.summary}`, created);
+        const created = await dashboard.post<{ key: string; url: string }>("/api/jira/issue", input, 60_000);
+
         return {
           content: [{ type: "text", text: `Created ${created.key}: ${input.summary}\n${created.url}` }],
           structuredContent: created,
@@ -546,7 +536,7 @@ export function registerWorkTools(server: McpServer, ctx: Context): void {
     "jira_ticket_transition",
     {
       description:
-        "Propose moving a Jira ticket to a new workflow state. Call without transitionId to list the available transitions; then call with a transitionId and confirm:true to propose it. A person confirms in DevHub (Integrations > Recent actions) before Jira changes. Requires the dashboard running.",
+        "Apply a Jira workflow transition immediately with confirm:true. Call without transitionId to list available transitions. Requires the dashboard running.",
       inputSchema: {
         key: z.string().describe("Jira ticket key, e.g. DAD-1234"),
         transitionId: z.string().optional().describe("Transition id (from the listing). Omit to list options."),
@@ -581,12 +571,12 @@ export function registerWorkTools(server: McpServer, ctx: Context): void {
             isError: true,
           };
         }
-        const moved = await dashboard.post<{ key: string; ok: boolean } & ProposedWrite>(
+        const moved = await dashboard.post<{ key: string; ok: boolean; from?: string | null; to?: string | null }>(
           `/api/jira/ticket/${encodeURIComponent(key)}/transition`,
           { transitionId },
         );
-        if (moved.confirmationRequired) return proposedNotice(`Move ${key} with transition ${transitionId}`, moved);
-        return { content: [{ type: "text", text: `Moved ${key} via transition ${transitionId}.` }] };
+        const fromTo = moved.to ? ` (${moved.from ? `${moved.from} → ` : ""}${moved.to})` : "";
+        return { content: [{ type: "text", text: `Moved ${key} via transition ${transitionId}${fromTo}.` }] };
       }),
   );
 }

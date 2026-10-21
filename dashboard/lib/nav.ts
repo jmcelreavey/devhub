@@ -140,8 +140,6 @@ export const LEGACY_NAV_ITEMS: NavItem[] = [
   { href: "/actions", label: "Actions", icon: "actions", group: "system", desktopOnly: true },
   { href: "/logs", label: "Logs", icon: "status", group: "system", desktopOnly: true },
   { href: "/plugins", label: "Plugins", icon: "skills", group: "system" },
-  { href: "/integrations", label: "Integrations", icon: "setup", group: "system" },
-  { href: "/browser", label: "Browser", icon: "setup", group: "system" },
   { href: "/setup", label: "Setup", icon: "setup", group: "system" },
 ];
 
@@ -209,8 +207,6 @@ export const SECTION_TABS: Record<string, SectionTab[]> = {
       { href: "/logs", label: "Logs", desktopOnly: true },
       { href: "/actions", label: "Actions", desktopOnly: true },
       { href: "/plugins", label: "Plugins" },
-      { href: "/integrations", label: "Integrations" },
-      { href: "/browser", label: "Browser" },
       { href: "/setup", label: "Setup" },
     ],
     PLUGIN_SECTION_TABS.system,

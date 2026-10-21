@@ -70,6 +70,36 @@ beforeEach(() => {
 afterEach(() => { vi.useRealTimers(); vi.unstubAllEnvs(); fs.rmSync(root, { recursive: true, force: true }); });
 
 describe("Needs you Slack delivery", () => {
+  it("edits a shrinking PR queue without another ping, then pings for a new request", async () => {
+    const test = setup();
+    const rows = [1, 2].map((number) => ({ title: `PR ${number}`, href: `/?pr=acme/app%23${number}`, needed: "Review requested", itemKey: `head-${number}` }));
+    const group = (prRows: typeof rows): SlackNeed => ({ profile: "work", entityId: "prs:actionable", title: "Pull requests needing you", needed: `${prRows.length} PRs need attention`, action: "open", href: "/prs", prRows, itemKey: JSON.stringify(prRows) });
+    await test.worker.tick();
+    test.sources.work = [group(rows)];
+    await test.worker.tick();
+    expect(test.transport.post).toHaveBeenCalledTimes(1);
+    test.sources.work = [group(rows.slice(1))];
+    await test.worker.tick();
+    await test.worker.tick();
+    expect(test.transport.post).toHaveBeenCalledTimes(1);
+    const current = Object.values(test.store.read().items).filter((item) => !item.resolved);
+    expect(current).toHaveLength(1);
+    expect(current[0].prRows).toEqual(rows.slice(1));
+    expect(test.transport.update).toHaveBeenCalled();
+    const restarted = test.create();
+    await restarted.tick();
+    expect(test.transport.post).toHaveBeenCalledTimes(1);
+    test.sources.work = [group([...rows.slice(1), { title: "PR 3", href: "/?pr=acme/app%233", needed: "Review requested", itemKey: "head-3" }])];
+    await restarted.tick();
+    expect(test.transport.post).toHaveBeenCalledTimes(2);
+    test.sources.work = [group([{ ...rows[1], itemKey: "new-head" }])];
+    await restarted.tick();
+    expect(test.transport.post).toHaveBeenCalledTimes(3);
+    test.sources.work = [];
+    await restarted.tick();
+    expect(Object.values(test.store.read().items).every((item) => item.resolved)).toBe(true);
+  });
+
   it.each(["Keep <all> & retry", "Thanks", "help"])("saves the selected option verbatim once: %s", async (option) => {
     const test = setup();
     await test.worker.tick();

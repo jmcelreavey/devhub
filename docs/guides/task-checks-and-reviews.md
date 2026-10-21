@@ -47,7 +47,7 @@ A proposal isn't the action itself. The executor must claim the approved proposa
 
 Workflow state and its event history are written atomically under `notes/.config/task-workflows/<task-id>.json`. Linked run sidecars and the durable agent-run store restore conversation ownership. Reading a task reconciles that history and rechecks its evidence; missing checkouts can't retain publishable evidence.
 
-The inbox puts unread updates first. **Mark read** saves the seen revision. **Enable desktop alerts** asks for OS notification permission; updates remain in the inbox when DevHub was closed or notifications weren't delivered. Optional [Slack and Telegram workflow alerts](integrations.md#enable-workflow-alerts) have their own consent and durable outbox.
+The inbox puts unread updates first. **Mark read** saves the seen revision. **Enable desktop alerts** asks for OS notification permission; updates remain in the inbox when DevHub was closed or notifications weren't delivered. The separate [Slack integration](integrations.md#slack) sends task notifications.
 
 **Pause workflow** prevents new checks, review recording and decisions, but doesn't stop its assistant. Resume before continuing. Complete and abandoned workflows retain their evidence.
 

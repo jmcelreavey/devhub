@@ -70,16 +70,12 @@ Agents can use `jira_ticket_create` with `projectKey`, `summary`, and a Markdown
 and `sprintId`. The dashboard chooses the issue type from the parent and inherits
 its Team, just as the creation form does.
 
-Creation requires `confirm: true` after user approval. Without it, the tool previews
-the request without contacting Jira. With it, the dashboard records a **proposal**
-and the tool says "Proposed, not applied": a person confirms it under
-**Integrations → Recent actions** before anything reaches Jira. The tool does not
-attach the new key to a DevHub task. It uses the existing authenticated
-dashboard client, so agents do not need to read secrets or supply an Origin header.
+Creation applies immediately with `confirm: true`. Without it, the tool previews
+without contacting Jira. There is no proposal queue or human approval step.
+The tool uses the authenticated dashboard client and does not attach the new key
+to a DevHub task.
 
-Each confirmed proposal creates another issue. If a request times out, check Jira
-before retrying. Restart the MCP connection after updating the server to expose
-the new tool.
+Each call creates another issue. If a request times out, check Jira before retrying.
 
 ## Workflow Transitions
 

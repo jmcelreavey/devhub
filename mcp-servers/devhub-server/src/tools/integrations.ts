@@ -11,7 +11,7 @@ const ref = z.object({
   kind: z.enum(["issue", "pr"]), id: z.string().trim().min(1).max(500),
 }).strict();
 const branch = z.string().trim().min(1).max(255).refine((value) => !/[\x00-\x20~^:?*\[\\]/.test(value) && !value.includes("..") && !value.startsWith("-"), "Use a valid branch name.");
-const proposal = z.discriminatedUnion("action", [
+const actionInput = z.discriminatedUnion("action", [
   z.object({ action: z.literal("issue.create"), provider: z.literal("jira"), account, projectKey: z.string().regex(/^[A-Z][A-Z0-9_]*$/), title, body: body.min(1).max(5000), parentKey: z.string().regex(/^[A-Z][A-Z0-9_]*-[1-9][0-9]*$/).nullable().optional(), taskId: z.string().regex(/^[a-zA-Z0-9_-]{1,200}$/).optional(), assignToMe: z.boolean().optional(), sprintId: z.number().int().positive().nullable().optional() }).strict(),
   z.object({ action: z.literal("issue.transition"), provider: z.literal("jira"), account, ref, transitionId: z.string().regex(/^[0-9]+$/) }).strict(),
   z.object({ action: z.literal("pr.create"), provider: z.literal("github"), account, repo: z.string().regex(/^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/), head: branch, base: branch, title, body, draft: z.boolean().optional() }).strict(),
@@ -53,42 +53,30 @@ export function registerIntegrationTools(server: McpServer, ctx: Context): void 
     content: [{ type: "text", text: JSON.stringify(await ctx.dashboard.get("/api/integrations", taskId ? { taskId } : undefined)) }],
   })));
   server.registerTool("integrations_alert_destinations", {
-    description: "List configured alert destinations and recent deliveries for the active work profile. Includes event kinds (pr-reviewed and pr-ready), the per-destination includePrDetails opt-in, consent revisions and credential variable names, never secret values. PR details and the owner mention require fresh consent in DevHub Integrations. Cannot enable or change consent.",
-  }, async () => withDashboardErrors(async () => ({
-    content: [{ type: "text", text: JSON.stringify(await ctx.dashboard.get("/api/integrations/alerts")) }],
-  })));
+    description: "Legacy alerts were removed. Configure the separate Slack bot in Setup.",
+  }, async () => ({ content: [{ type: "text", text: "Telegram support was removed. Legacy alert destinations are no longer available. Configure Slack in Setup." }] }));
   server.registerTool("integrations_alert_test", {
-    description: "Send one fixed test message to an already enabled Slack or Telegram destination. Requires its current consent revision and a UUID requestId; reuse that requestId after uncertain transport to avoid duplicate sends. Does not enable alerts or approve writes. Check the channel if delivery is unknown; no automatic retry.",
+    description: "Legacy alert tests were removed. Use integrations_slack_test for the separate Slack bot.",
     inputSchema: { id: z.string().uuid(), revision: z.number().int().positive(), requestId: z.string().uuid() },
-  }, async ({ id, revision, requestId }) => withDashboardErrors(async () => ({
-    content: [{ type: "text", text: JSON.stringify(await ctx.dashboard.post("/api/integrations/alerts", { action: "test", id, revision, requestId }, 30_000)) }],
-  })));
+  }, async () => ({ content: [{ type: "text", text: "Telegram support was removed. Use integrations_slack_test to test the Slack bot." }] }));
   server.registerTool("integrations_chat_status", {
-    description: "Read Slack and Telegram chat-command status, active-profile allowlist counts, webhook paths and required variable names. No secrets or message content. Cannot enable commands, change allowlists or confirm provider writes.",
-  }, async () => withDashboardErrors(async () => ({
-    content: [{ type: "text", text: JSON.stringify(await ctx.dashboard.get("/api/integrations/chat/config")) }],
-  })));
+    description: "Legacy chat commands were removed. Use integrations_slack_status for the separate Slack bot.",
+  }, async () => ({ content: [{ type: "text", text: "Telegram support was removed. Use integrations_slack_status for Slack." }] }));
   server.registerTool("integrations_proposals", {
-    description: "List recent integration proposals and their outcomes for the active work profile. Pending proposals have not been sent. Unknown outcomes must be checked at the provider before retrying.",
-  }, async () => withDashboardErrors(async () => ({
-    content: [{ type: "text", text: JSON.stringify(await ctx.dashboard.get("/api/integrations/writes")) }],
-  })));
+    description: "The proposal queue was removed. Write tools apply actions immediately.",
+  }, async () => ({ content: [{ type: "text", text: "The proposal queue was removed. Write tools apply actions immediately." }] }));
   server.registerTool("integrations_propose", {
-    description: "Request a Jira ticket/transition or GitHub PR create/update/publish proposal. Does not write to the provider. Review with integrations_review, then confirm with integrations_confirm once the user has said in chat to go ahead (or they click Confirm in DevHub Integrations).",
-    inputSchema: { input: proposal },
+    description: "Apply a Jira ticket/transition or GitHub PR create/update/publish immediately. The legacy tool name is retained; no proposal or human approval is required. Check the provider before retrying an uncertain outcome.",
+    inputSchema: { input: actionInput },
   }, async ({ input }) => withDashboardErrors(async () => ({
-    content: [{ type: "text", text: JSON.stringify(await ctx.dashboard.post("/api/integrations/writes", { action: "propose", input }, 60_000)) }],
+    content: [{ type: "text", text: JSON.stringify(await ctx.dashboard.post("/api/integrations/actions", input, 60_000)) }],
   })));
   server.registerTool("integrations_confirm", {
-    description: "Execute a reviewed proposal. Use it when the user has told you in chat to go ahead: pass the digest from integrations_review and their own words approving it, which are kept in the audit trail. Never use it without an explicit instruction for this action. The digest must still match the live destination and content, so changed items need another review.",
+    description: "Approval was removed. Actions apply immediately when the write tool is called; this compatibility tool does not repeat them.",
     inputSchema: { id: z.string().uuid(), digest: z.string().regex(/^[a-f0-9]{64}$/), approvedBy: z.string().trim().min(1).max(500).describe("The user's words approving this exact action, quoted or closely paraphrased") },
-  }, async ({ id, digest, approvedBy }) => withDashboardErrors(async () => ({
-    content: [{ type: "text", text: JSON.stringify(await ctx.dashboard.post("/api/integrations/writes", { action: "confirm", id, digest, confirmed: true, via: "chat", quote: approvedBy }, 60_000)) }],
-  })));
+  }, async () => ({ content: [{ type: "text", text: "MCP approval was removed. Actions apply immediately; nothing needs confirmation. This call did not repeat an action." }] }));
   server.registerTool("integrations_review", {
-    description: "Prepare the provider identity, destination and exact content for a requested proposal. Does not execute it. Confirm within 15 minutes, either with integrations_confirm when the user has approved it in chat, or in DevHub; stale previews need another review. No automatic retry of an unknown outcome.",
+    description: "Proposal review was removed. Actions apply immediately when the write tool is called.",
     inputSchema: { id: z.string().uuid() },
-  }, async ({ id }) => withDashboardErrors(async () => ({
-    content: [{ type: "text", text: JSON.stringify(await ctx.dashboard.post("/api/integrations/writes", { action: "review", id }, 60_000)) }],
-  })));
+  }, async () => ({ content: [{ type: "text", text: "MCP approval was removed. There is no proposal to review." }] }));
 }

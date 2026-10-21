@@ -129,7 +129,10 @@ the latest audit as markdown; run new audits from the Repos page **DX Audit** bu
   session — give each repo a distinct `label` so the dock stays readable. The user confirms in the
   dock; poll status, then tail the session. Dock tabs outlive the agent session, so check
   `terminal_list` before proposing — the service may already be up from an earlier one, and a
-  second start just races the first for the port.
+  second start just races the first for the port. Save each command's result and session id,
+  then close its finished task-owned tab, including failed attempts once their useful output
+  is captured. Stop task-owned services when the task no longer needs them; preserve borrowed
+  services and runs the user asked to keep. Check `terminal_list` for leftovers before finishing.
 - **History** (filesystem, no dashboard) — `mcp_history` traces every DevHub MCP call on a day
   (redacted args, duration, outcome, client, dispatching agent run; filter by `tool: "agent_*"`,
   `errorsOnly`, `agentRunId`); `mcp_history_summary` rolls a day up into totals, actions taken and

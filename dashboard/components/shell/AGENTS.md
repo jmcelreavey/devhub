@@ -7,5 +7,5 @@ Every open gets its own tab. There is no reuse, and nothing waits on another ses
 - A second dev server on a taken port is fine. It fails loudly, in a tab the user can see.
 - Give each repo a distinct `label` so the dock stays readable once tabs accumulate.
 - Busy state is for display only — the tab spinner and `terminal_list`. Nothing routes, queues, or blocks on it.
-- Propose → confirm → inject stays. It is the gate on agents writing to a shell, not a reuse mechanism: destructive commands force the modal, everything else gets a chip.
+- MCP terminal commands execute automatically. Other callers keep the dock confirmation controls; never turn dispatch status into another approval gate.
 - Regression coverage: `dashboard/lib/terminal-features.test.ts`.
