@@ -462,7 +462,7 @@ Mutating tools take `confirm: true` and apply immediately. Agent jobs are ready 
 
 `integrations_list` reads providers and account references. `integrations_propose` retains its name and input schema but applies Jira and GitHub actions immediately through `POST /api/integrations/actions`. `jira_ticket_create` and `jira_ticket_transition` apply immediately with `confirm:true`. Validation, account checks and uncertain-outcome handling remain; check the provider before retrying.
 
-The old proposal list, review and confirm tools remain registered and return removal notices. The legacy alert and chat tools return “Telegram support was removed”. The separate `integrations_slack_status`, `integrations_slack_usage` and `integrations_slack_test` tools still work; see [Slack](../guides/integrations.md).
+The old proposal list, review and confirm tools remain registered and return removal notices. The legacy alert and chat tools return “Telegram support was removed”. The separate `integrations_slack_status`, `integrations_slack_usage` and `integrations_slack_test` tools still work; see [Slack](../guides/integrations.md) and [Team Slack gateway](../slack-gateway.md).
 
 ### Discuss an editor selection
 
@@ -545,7 +545,7 @@ plugin MCP packages. See [Plugin System](plugins.md) and
 | `db_connect` still unavailable          | Check Tailscale / AWS profile from Ops. `fix: true` only applies remedies the provider declared.                                 |
 | `agent_dispatch` `503` “Paseo is unavailable” | Open `/agents?view=connection` and run setup or restart. Local dashboard only. |
 | `agent_dispatch` `400` maxTurns         | Paseo has no turn override. Drop `maxTurns` or use the agent's own controls. |
-| `agent_dispatch` `429`                  | Wait, cancel on Activity, or raise `DEVHUB_AGENT_MAX_RUNS` / `DEVHUB_AGENT_MAX_COST_USD`. A limit refusal names the runs holding it (`code: "capacity"`); `GET /api/agent/runs/capacity` lists them and `POST /api/agent/runs/<id>/clear` drops one DevHub can no longer follow. |
+| `agent_dispatch` `429`                  | Wait, cancel on Agents, or raise `DEVHUB_AGENT_MAX_RUNS` / `DEVHUB_AGENT_MAX_COST_USD`. A limit refusal names the runs holding it (`code: "capacity"`); `GET /api/agent/runs/capacity` lists them and `POST /api/agent/runs/<id>/clear` drops one DevHub can no longer follow (it does not stop Paseo). Idle DevHub-started chats are archived after 15 minutes — [Agents (Paseo)](../guides/paseo-agents.md#idle-chats-and-capacity). |
 
 ## Safety Model
 

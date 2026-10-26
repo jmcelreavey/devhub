@@ -84,6 +84,12 @@ DevHub checks the npm stable release when opened and hourly while open. The bann
 
 The primary DevHub process also checks supported agent CLIs daily. It updates native Claude, Cursor and OpenCode installations with their own updater and npm-installed Claude, OpenCode, Copilot and Codex through Safe-Chain. It waits until Paseo chats are idle and retries later if Paseo is unavailable or a chat starts during the pass. Codex from the ChatGPT app follows the app's updates. Updates to other installation methods remain with their package manager. Set `DEVHUB_AGENT_AUTO_UPDATE=0` to disable DevHub's agent CLI updater; results are written to the scheduler log.
 
+## Idle chats and capacity
+
+Paseo keeps every loaded chat alive until it is archived: an idle Codex chat holds its `codex app-server` and every MCP server that process started. DevHub therefore archives chats **it started** once they have sat idle for 15 minutes (`DEVHUB_PASEO_IDLE_RELEASE_MINUTES`; `0` turns this off). Archiving only moves them to Paseo's History; Continue, Reopen or a plan revision unarchives the same conversation. Chats that still need attention, have pending permissions, or belong to an active DevHub run are left loaded.
+
+A start can look like "six agents are running" when two are, if runs ended without DevHub hearing about it (the agent was closed or deleted in Paseo, an idle agent with no result, or a start Paseo never acknowledged). DevHub marks those finished when it reads them — on every check, at startup, and again just before it refuses a start. If a start is still refused, the launch sheet lists which agents are holding the limit (`GET /api/agent/runs/capacity`) and lets you **clear** one DevHub can no longer follow (`POST /api/agent/runs/<id>/clear`). Clearing does not stop anything in Paseo; a live run has to be cancelled.
+
 ## Troubleshooting
 
 | Symptom | Check |
@@ -93,3 +99,4 @@ The primary DevHub process also checks supported agent CLIs daily. It updates na
 | Chats keeps asking for a connection | Use **Direct connection**, host `localhost`, port `6767`, and the Agents password from Setup (`DEVHUB_PASEO_PASSWORD`). Chats only auto-connects when DevHub is opened on this Mac. |
 | A provider is missing or greyed out | The CLI isn't installed or signed in. Fix it in a terminal (`claude`, `codex`, `cursor-agent`, `opencode`), then refresh Connection. |
 | A task run is stuck on "running" | Open the chat from the task chip. Paseo owns the session; DevHub reconciles the record from its timeline. |
+| Launch says the agent limit is full | The sheet lists runs holding `DEVHUB_AGENT_MAX_RUNS`. Clear a `clearable` row (needs-attention or reconnecting) rather than a live chat. |

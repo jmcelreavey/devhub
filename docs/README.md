@@ -47,6 +47,7 @@ Read [Architecture Overview](architecture/overview.md) for the full picture.
 | See everything it can do           | [Feature tour](guides/feature-tour.md)            |
 | Understand how it works            | [Architecture Overview](architecture/overview.md) |
 | Do a specific task                 | [Skills](guides/skills.md) and the other guides   |
+| Talk to DevHub from Slack          | [Slack](guides/integrations.md) and [Team Slack gateway](slack-gateway.md) |
 | Look something up                  | [API Routes](reference/api-routes.md)             |
 | Extend it without forking the core | [Plugin System](architecture/plugins.md)          |
 | Contribute back upstream           | [Fork Workflow](contributing/fork-workflow.md)    |

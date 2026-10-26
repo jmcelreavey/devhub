@@ -1,6 +1,13 @@
 ---
 title: Team Slack gateway
 description: One shared Slack connection, with each member's tools and credentials staying on their laptop.
+order: 5
+icon: Users
+tags: [slack, team]
+related:
+  - guides/integrations
+  - getting-started/setup
+  - reference/environment-variables
 ---
 
 # Team Slack gateway

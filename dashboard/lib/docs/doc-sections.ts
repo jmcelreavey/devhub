@@ -53,7 +53,7 @@ export const DOC_SECTIONS: DocSectionMeta[] = [
   {
     id: "integrations",
     label: "Integrations",
-    description: "Connecting Jira, GitHub, Datadog, Google Calendar and Figma.",
+    description: "Connecting Jira, GitHub, Datadog, Google Calendar, Figma and Slack.",
     icon: "Plug",
     order: 40,
   },

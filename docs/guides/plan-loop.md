@@ -11,6 +11,8 @@ related:
   - guides/skills
   - reference/api-routes
   - architecture/mcp-server
+  - guides/integrations
+  - integrations/jira
 ---
 
 # Plan loop
@@ -84,6 +86,17 @@ The dashboard checks the explicitly linked PR of each task's latest finished run
 **Fix PR with Agent** is a Resume whose prompt starts with the finding; pick the prior CLI to continue its session. Launching it (or dismissing) marks the finding handled — it won't come back until the PR gets a new commit or a different finding. DevHub never completes or abandons a task on its own.
 
 MCP: `tasks_pr_watch` (`check` / `dismiss`); `tasks_agent_resume` includes the finding and clears it.
+
+## Ready for review
+
+New PRs open ready for review. Completing a task (or moving its Jira ticket to a Code Review-like status through DevHub) is a safety net for drafts left behind: DevHub runs `gh pr ready` on the task's own open draft PRs.
+
+- Sources: the task's `kind: "pr"` links, then PRs its **implement** runs recorded. Research/review runs are ignored.
+- Only open drafts authored by the signed-in `gh` user. Someone else's draft, a ready PR, or a merged/closed PR is skipped.
+- Failures never throw: they are appended to the task note's log with the `gh pr ready <url>` command to run by hand.
+- Idempotent. Completing the same task twice does not republish.
+
+Home and Storyboard cards at **ready-for-review** offer **Copy Slack message** (PR and Jira links). Slack progress posts the same request when posting is on. See [Slack](integrations.md#home-tab-and-agent-progress).
 
 ## 6. Status
 

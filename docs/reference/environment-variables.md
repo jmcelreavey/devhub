@@ -20,6 +20,7 @@ Most values live in the dashboard's local environment file and can be edited fro
 | Variable                       | Purpose                                                                                                                                                                                                                                                                                                                                                                               |
 | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `NOTES_DIR`                    | Directory for notes, learnings, and diagrams                                                                                                                                                                                                                                                                                                                                          |
+| `DEVHUB_NOTE_MEDIA_DIR`        | Where images pasted or dropped into notes are stored (default `~/.local/state/devhub/note-media`). Outside the git-tracked vault. See [Notes — Pasted images](../architecture/notes-system.md#pasted-images). |
 | `DOCS_DIR`                     | Optional override for repo docs (default: `REPO_ROOT/docs`)                                                                                                                                                                                                                                                                                                                           |
 | `TASKS_DIR`                    | Optional override for the tasks directory (default: `REPO_ROOT/tasks`). Items live in `<dir>/items/`. Point elsewhere to keep personal data out of the tree |
 | `DEVHUB_TASK_MIGRATION_DIR`    | Where the one-time task import stores its backup and report. Default: `$DEVHUB_CONFIG_DIR/task-migrations` or `~/.config/devhub/task-migrations` |
@@ -85,6 +86,24 @@ Most values live in the dashboard's local environment file and can be edited fro
 See [Datadog integration](../integrations/datadog.md) for on-call behavior and API routes.
 
 `DATADOG_APPLICATION_KEY` is the canonical name; `DD_APPLICATION_KEY` and `DATADOG_APP_KEY` are accepted aliases in code.
+
+## Slack
+
+Prefer **Setup → Slack**: saved tokens are masked and the bot reconnects without a DevHub restart. See [Slack](../guides/integrations.md) and [Team Slack gateway](../slack-gateway.md).
+
+| Variable | Purpose |
+| --- | --- |
+| `SLACK_BOT_TOKEN` | Bot User OAuth Token (`xoxb-…`). Direct mode only; Team Slack keeps this on the gateway. |
+| `SLACK_APP_TOKEN` | App-level token with `connections:write` (`xapp-…`). Direct mode Socket Mode. |
+| `SLACK_CHANNEL_ID` | Allowlisted channel (`C…` / `G…`). Direct mode. |
+| `SLACK_ALLOWED_USER_ID` | Your Slack member ID (`U…` / `W…`). Other users are ignored. |
+| `SLACK_TEAM_ID` | Optional workspace (`T…`). Blank pins the workspace from `auth.test`. |
+| `SLACK_POST_NEEDS_YOU` | `0` turns off new Needs-you posts. Default on. |
+| `SLACK_POST_PROGRESS` | `0` turns off agent-progress posts (plan-ready, PR opened, ready-for-review, failed, needs-input). Default on. |
+| `SLACK_TRANSPORT` | `direct` (default) or `gateway`. Set by Setup when you connect Team Slack. |
+| `SLACK_GATEWAY_URL` | Gateway origin (`https://…`) when `SLACK_TRANSPORT=gateway`. |
+
+Gateway-process variables (`GATEWAY_DATA_DIR`, `SLACK_SIGNING_SECRET`, …) belong on the relay host, not the laptop — listed in [Team Slack gateway](../slack-gateway.md).
 
 ## Infrastructure presence (optional)
 
@@ -273,6 +292,7 @@ DevHub's agent work runs in [Paseo](../guides/paseo-agents.md). The defaults sui
 | `DEVHUB_PASEO_URL`       | `ws://127.0.0.1:6767/ws`    | Paseo daemon WebSocket. Loopback only.                                                                                                   |
 | `DEVHUB_PASEO_PASSWORD`  | —                           | Daemon password, set as **Agents password** in `/setup`. Required by `npm run agents:install`, which stores it hashed; re-run it after changing the password. Falls back to the legacy `OPENCHAMBER_UI_PASSWORD`. |
 | `DEVHUB_PASEO_PORT`      | `6767`                      | Port the LAN proxy publishes for the Paseo web UI when LAN mode is on. |
+| `DEVHUB_PASEO_IDLE_RELEASE_MINUTES` | `15` | Minutes a finished DevHub-started Paseo chat may sit idle before DevHub archives it (frees the provider process and its MCP servers). `0` turns the release off. Continue / Reopen unarchives the same conversation. See [Agents (Paseo) — Idle chats](../guides/paseo-agents.md#idle-chats-and-capacity). |
 | `DEVHUB_AGENT_AUTO_UPDATE` | on                        | The dashboard updates the agent CLIs Paseo uses (Claude Code, Codex and so on) at most once a day, and only while no agent is working. Set `0` to turn that off. Results are in the scheduler log. |
 
 ## 1Password Fallback (Optional)

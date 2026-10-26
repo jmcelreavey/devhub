@@ -28,10 +28,9 @@ The dashboard is the main DevHub interface. It is a local Next.js app with pages
 | Actions      | Safe script runner for maintenance tasks                                                                    |
 | Settings     | Health checks for repo, services, MCP, sync health, merge conflicts, and network access (`/status`)         |
 | Agents       | Paseo workspace: chats, usage, connection (`/agents`)                                                       |
-| Setup        | Environment and integration configuration                                                                   |
+| Setup        | Environment and integration configuration (Calendar, Jira, Datadog, GitHub, Slack). There is no separate Integrations or Browser screen. |
 | Repos        | Sibling git checkout discovery, per-repo **work hub**, GitHub clone/search, Cursor/GitKraken/CLI launch, compose-up, Repo Learning, and owned-repo radar (`?view=owned`) |
 | Databases    | In-app client for PostgreSQL, MongoDB, and SQLite (`/db`) — see [Database client](database-client.md)       |
-| Integrations | Calendar, Jira, Datadog, GitHub and Slack |
 | Editor       | Selection chat beside a diff, plus optional in-app code-server (`/editor`). See [Editor](../guides/editor.md) |
 | Workflows    | Durable checks, reviews and publication proposals (`/workflow`). See [Task checks](../guides/task-checks-and-reviews.md) |
 

@@ -7,11 +7,15 @@ tags: [slack, tasks]
 related:
   - guides/task-checks-and-reviews
   - architecture/mcp-server
+  - slack-gateway
+  - getting-started/setup
 ---
 
 # Slack
 
 The Slack bot posts new **Needs you** items, accepts task answers in threads and answers read-only questions over Socket Mode. It doesn't need a public URL. Retrying auto mode needs a separate **Confirm retry** click; typing `retry` or `start` in the channel doesn't run those commands. The bot has one settings form in [Setup → Slack](/setup#slack).
+
+**Just me (direct)** is the default: this laptop holds the bot tokens and talks to Slack over Socket Mode. **Team Slack** is a shared gateway so each laptop keeps its own tools and credentials — see [Team Slack gateway](../slack-gateway.md). Switching modes doesn't erase saved settings. Don't run direct mode with the shared app's app-level token: Slack distributes events between its connections rather than broadcasting them.
 
 ### Set up your workspace and bot
 
@@ -101,7 +105,7 @@ React with ✅ (`white_check_mark`, `heavy_check_mark` or `ballot_box_with_check
 
 The app's **Home** tab shows live Needs-you counts, task cards, a few PRs and today's tasks. **Refresh** reloads it; Needs-you changes also refresh it after a short debounce while you've opened Home this session. **Plan** and **Implement** post their existing Confirm card in the configured channel or DM, not in Home. Nothing starts until you confirm there. Other users see only “This DevHub is private”.
 
-**Post agent progress to Slack** sits beside the Needs-you toggle in Setup, defaults on and saves on click. It posts plan-ready, PR-opened, run-failed and needs-input milestones in the task's existing thread, or creates a root if there isn't one. It uses the existing Needs-you tick, not another poller, respects quiet hours and remembers milestones across restarts. The first pass records history without posting it; turning progress off records milestones silently rather than replaying them later. Set `SLACK_POST_PROGRESS=0` to turn it off through the managed environment setting.
+**Post agent progress to Slack** sits beside the Needs-you toggle in Setup, defaults on and saves on click. It posts plan-ready, PR-opened, **ready-for-review**, run-failed and needs-input milestones in the task's existing thread, or creates a root if there isn't one. Ready-for-review includes the same review-request text Home copies (**Copy Slack message**), with the PR and Jira as real links, plus **Open PR**. It uses the existing Needs-you tick, not another poller, respects quiet hours and remembers milestones across restarts. The first pass records history without posting it; turning progress off records milestones silently rather than replaying them later. Set `SLACK_POST_PROGRESS=0` to turn it off through the managed environment setting.
 
 ### Plugin tools and attention
 
@@ -123,3 +127,5 @@ The manifest requests `chat:write`, `channels:history`, `groups:history`, `im:hi
 ## MCP tools
 
 `integrations_slack_status` reads connection status and masked settings. `integrations_slack_usage` reads today’s usage. `integrations_slack_test` sends one test message to the saved channel, using a request ID to prevent duplicate delivery.
+
+Env vars for this laptop live in [Environment variables — Slack](../reference/environment-variables.md#slack). Prefer Setup: it masks tokens and reconnects without a DevHub restart.

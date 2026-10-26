@@ -8,6 +8,7 @@ related:
   - reference/environment-variables
   - getting-started/installation
   - integrations/github
+  - guides/integrations
 ---
 
 # Setup
@@ -30,6 +31,7 @@ http://localhost:1337/setup
 | Jira Cloud      | Optional ticket views and standup support                                   |
 | Datadog         | Optional alert summaries and deep links                                     |
 | GitHub          | Pull request and repo-related features via the GitHub CLI — **Sign in with GitHub** on this page, or `gh auth login` in a terminal |
+| Slack           | Optional Socket Mode bot (no public URL) for Needs you, progress posts and read-only questions. [Slack](../guides/integrations.md). Team Slack uses a shared gateway — [Team Slack gateway](../slack-gateway.md) |
 | AI Provider     | Default CLI or HTTP API for in-app generation (`cursor-cli`, `chatgpt-cli`, `antigravity-cli`, `opencode`, `api`); coding runs choose a Paseo assistant separately |
 | Infra           | Optional internal infrastructure helpers, when an infra plugin is installed |
 | Notes AI        | Optional OpenAI-compatible BlockNote AI — **env vars only** (see below)     |

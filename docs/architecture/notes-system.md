@@ -311,9 +311,15 @@ Folder-scoped **master checklists** live under `collections/` at the repo root (
 | Labels     | Renaming a master item updates the canonical label. Linked blocks in other notes may show **drift** until you sync labels (see below).                                                                                                                                                                                                                          |
 | API        | `GET/POST /api/collections`, `GET/PATCH/DELETE /api/collections/[id]` (route name is historical; payloads use master-list shapes).                                                                                                                                                                                                                              |
 | Label sync | `GET /api/collections/[id]/linked-label-drift?itemId=…` counts linked blocks whose text differs from the master; `POST /api/collections/[id]/sync-linked-labels` with `{ itemId, label, excludeNotePath? }` rewrites matching blocks across notes.                                                                                                              |
-| Assets     | Images and `.mp4` video under the notes tree (e.g. `garden/project/assets/photo-1.jpg`) are served at `GET /api/notes-assets/...`. MCP markdown uses notes-relative paths; saved BlockNote JSON stores `/api/notes-assets/...` URLs. Use `notes_write_asset` to upload bytes from agents. Allowed extensions: `.jpg`, `.jpeg`, `.png`, `.gif`, `.webp`, `.mp4`. Images pasted or dropped in the editor are different: they are stored by content hash under `~/.local/state/devhub/note-media` (not in git) and the note keeps a `/api/notes-media/<sha256>.<ext>` URL. |
+| Assets     | Images and `.mp4` video under the notes tree (e.g. `garden/project/assets/photo-1.jpg`) are served at `GET /api/notes-assets/...`. MCP markdown uses notes-relative paths; saved BlockNote JSON stores `/api/notes-assets/...` URLs. Use `notes_write_asset` to upload bytes from agents. Allowed extensions: `.jpg`, `.jpeg`, `.png`, `.gif`, `.webp`, `.mp4`. Pasted/dropped editor images are separate — see [Pasted images](#pasted-images). |
 
 Collection JSON writes are serialized with a repo mutex so rapid checklist edits from multiple tabs do not corrupt files.
+
+## Pasted images
+
+Paste (⌘V of a screenshot or copied image) or drop a PNG, JPEG, GIF or WebP file into the notes editor or the Notes overlay. DevHub sniffs the **bytes**, not the filename or client MIME: anything else gets a toast and no empty block is left behind. Images are capped at 8 MB (`NOTE_MEDIA_MAX_BYTES`).
+
+Blobs live under `~/.local/state/devhub/note-media` as `<sha256>.<ext>` (override with `DEVHUB_NOTE_MEDIA_DIR`). That directory is outside the git-tracked notes vault, so content sync does not commit them. The note stores a `/api/notes-media/<sha256>.<ext>` URL. Identical bytes reuse the existing file (`200` instead of `201`). `GET` serves them with `nosniff`. Images already under `notes/**/assets` still use `GET /api/notes-assets/...`.
 
 ## In-Editor AI (Optional)
 

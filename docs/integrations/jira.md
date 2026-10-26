@@ -6,6 +6,8 @@ icon: SquareKanban
 tags: [integrations]
 related:
   - guides/standup
+  - guides/plan-loop
+  - architecture/mcp-server
 ---
 
 # Jira
@@ -17,7 +19,7 @@ The Jira integration brings assigned tickets into DevHub and improves standup ge
 - Ticket list and status filters.
 - Today widget for assigned work.
 - Links from Jira keys in tasks.
-- Parent ticket keys on Jira and task rows; click a parent key to copy it.
+- Parent ticket keys on Jira and task rows; click a parent key to copy it. Right-click **Open in Jira** uses the ticket's browse URL through the desktop opener (`window.open` is a silent no-op in the webview).
 - Standup content based on recent ticket activity.
 
 ## Setup
@@ -84,9 +86,13 @@ When you complete or abandon a task that includes a Jira key, DevHub can prompt 
 | Route                                    | Purpose                                           |
 | ---------------------------------------- | ------------------------------------------------- |
 | `GET /api/jira/ticket/<key>/transitions` | Lists available transitions for the ticket        |
-| `POST /api/jira/ticket/<key>/transition` | Body: `{ transitionId }` (or `{ toStatusId }` for Undo). A person's click applies it and answers `{ ok, key, from, to, undo, proposal }`; an agent gets a `202` proposal to confirm |
+| `POST /api/jira/ticket/<key>/transition` | Body: `{ transitionId }` (or `{ toStatusId }` for Undo). Applies immediately and answers `{ ok, key, from, to, undo, result }`. Same-origin. |
 
-The prompt is optional — you can dismiss it without changing Jira. Picking a status from a chip, row menu or link moves the ticket at once and shows a toast with **Undo**. Agents can use the MCP tool `jira_ticket_transition`; it proposes the move and a person confirms it in DevHub (see [MCP Server](../architecture/mcp-server.md)).
+The prompt is optional — you can dismiss it without changing Jira. Picking a status from a chip, row menu or link moves the ticket at once and shows a toast with **Undo**. Your click is the approval and still lands in Recent actions. There is no separate approval-queue screen.
+
+Agents use MCP `jira_ticket_transition`. Omit `transitionId` to list options. Pass `confirm: true` with a `transitionId` to apply it immediately through the same route — there is no proposal queue. Without `confirm`, the tool refuses rather than moving the ticket. Check Jira before retrying a timeout. See [MCP Server](../architecture/mcp-server.md#integration-writes).
+
+When the new status name looks like Code Review / In Review / Ready for Review / Peer Review, DevHub also marks that ticket's linked **draft** PRs ready for review (same safety net as completing the task). See [Plan loop — Ready for review](../guides/plan-loop.md#ready-for-review).
 
 ## Ticket list and search
 
