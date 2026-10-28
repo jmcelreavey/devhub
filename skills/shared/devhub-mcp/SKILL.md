@@ -1,6 +1,6 @@
 ---
 name: devhub-mcp
-description: Use DevHub MCP for notes, tasks, diagrams, dashboard operations, and scheduled jobs. Use when working with DevHub notes, tasks, docs, diagrams, scheduled jobs or dashboard MCP tools, or when a DevHub MCP tool errors or seems missing.
+description: DevHub MCP tools for notes, tasks, docs, diagrams, jobs and dashboard actions. Use when working with DevHub notes, tasks or jobs, or when a DevHub tool errors or seems missing.
 ---
 
 DevHub ships a **stdio MCP server** at `mcp-servers/devhub-server`, wired from
@@ -64,7 +64,7 @@ valid fractional-index key (`a0`…`az`, then `b00`), not a counter.
 
 **DX audits** — `dx_audit_list` / `dx_audit_read` over reports the `dx-audit` skill writes
 to `reviews/dx-audit-<repo>-<YYYY-MM-DD>`. `dx_audit_read` with just a repo name returns
-the latest audit as markdown; run new audits from the Repos page **DX Audit** button.
+the latest audit as markdown; run new audits from Repos → **DX Audit**.
 
 ## Dashboard tools
 
@@ -123,9 +123,8 @@ the latest audit as markdown; run new audits from the Repos page **DX Audit** bu
   Actions → Scheduled Jobs.
 - **Terminal** — `terminal_list`, `terminal_propose_run`, `terminal_proposal_status`, `terminal_tail`,
   `terminal_wait_for` (block until output matches a regex instead of polling the tail).
-  Prefer a dock tab over the agent/Cursor shell for anything the user should see: the dock is where
-  they can watch it, keep it, and kill it. Always use it for upstarts, Expo, `npm run dev` and other
-  long-running commands. Every approved proposal opens its own tab, so nothing waits on another
+  Run ordinary commands, tests, builds and git in your own shell. Use the dock only for upstarts,
+  Expo, `npm run dev` and other long-running services the user should watch, keep or kill. Every approved proposal opens its own tab, so nothing waits on another
   session — give each repo a distinct `label` so the dock stays readable. The user confirms in the
   dock; poll status, then tail the session. Dock tabs outlive the agent session, so check
   `terminal_list` before proposing — the service may already be up from an earlier one, and a
