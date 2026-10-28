@@ -1,6 +1,6 @@
 ---
 name: devhub-create-tasks-from
-description: Turn a DevHub planning note into linked Jira sub-tasks and DevHub tasks. Use when the user says "create tasks from this plan", "make Jira sub-tasks from this note", or wants a plan note turned into tracked work.
+description: Split a DevHub planning note into linked Jira sub-tasks and DevHub tasks. Use when asked to create tasks or sub-tasks from a plan or note.
 metadata:
   short-description: Plan note → Jira + DevHub tasks
 ---

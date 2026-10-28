@@ -1,10 +1,6 @@
 ---
 name: improve-codebase-architecture
-description: >-
-  Scan a codebase for shallow modules, present deepening options as an HTML
-  report, then grill the one the user picks. Use when the user asks to
-  improve the architecture, find deepening opportunities, or make a module
-  easier to test and navigate.
+description: Find shallow modules and propose deepening refactors in an HTML report. Use when asked to improve architecture or make a module easier to test.
 metadata:
   short-description: Find shallow modules and deepen one
 disable-model-invocation: true

@@ -1,6 +1,6 @@
 ---
 name: devhub-retro
-description: Review recently finished and abandoned DevHub work and propose concrete edits to skills and rules. Use when the user asks for a retro, a review of recent tasks, or what skills/rules should change based on how work landed.
+description: Review recent finished or abandoned DevHub work and propose skill or rule edits. Use when asked for a retro or what skills or rules should change.
 metadata:
   short-description: Plan retro that improves the skills
 ---

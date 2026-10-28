@@ -1,10 +1,6 @@
 ---
 name: my-voice
-description: >-
-  Use when writing or rewriting any prose on the user's behalf (tasks, Jira tickets,
-  notes, docs, PR descriptions/comments, commit messages, email, Slack, listings),
-  rewriting an AI draft into their voice, or explaining something the simple
-  practical way they prefer. Two modes: full-voice and explain-simply.
+description: Write prose in the user's voice (tickets, notes, docs, PR text, commits, messages). Use when writing or rewriting anything on the user's behalf, or explaining simply.
 ---
 
 # My voice

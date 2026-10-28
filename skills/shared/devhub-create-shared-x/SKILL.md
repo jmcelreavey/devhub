@@ -1,6 +1,6 @@
 ---
 name: devhub-create-shared-x
-description: Create or update shared DevHub skills, personas, agents, MCP configuration, or model configuration. Use when adding or editing a shared skill, agent, persona file, MCP server entry or OpenCode model config in DevHub.
+description: Add or edit shared DevHub skills, agents, persona files, MCP entries or model config. Use when changing skills/, agents/, persona/, mcp/ or OpenCode model config.
 metadata:
   short-description: Create shared DevHub assets
 ---

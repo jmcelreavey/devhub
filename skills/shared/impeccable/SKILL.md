@@ -1,9 +1,9 @@
 ---
 name: impeccable
-description: Use when designing, redesigning, critiquing, auditing or polishing a frontend interface — landing pages, dashboards, product UI, components, forms, onboarding, empty states. Covers visual hierarchy, layout, typography, color, motion, accessibility, theming and design systems, plus making bland UI bolder or loud UI quieter. Not for backend or non-UI work.
+description: Design, critique or polish frontend UI (layout, type, color, motion, accessibility, design systems). Use when frontend interface work needs design or polish, not backend work.
 metadata:
   version: 4.3.1
-  # Description trimmed locally from upstream 4.3.1 (908 -> 341 chars) to cut the
+  # Description trimmed locally from upstream 4.3.1 (908 -> 160 chars) to cut the
   # per-session listing cost. Re-apply if this skill is ever re-vendored.
 ---
 

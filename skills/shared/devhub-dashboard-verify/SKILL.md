@@ -1,6 +1,6 @@
 ---
 name: devhub-dashboard-verify
-description: Verify DevHub dashboard UI changes with the correct local server and browser tooling. Use when you have changed DevHub dashboard UI or are asked to check a dashboard page in the browser — localhost:1337 is the packaged app, not the checkout.
+description: Check DevHub dashboard UI changes in a browser against the checkout's dev server, never the installed app on 1337. Use when dashboard UI changed or you are asked to check a page.
 metadata:
   short-description: Don't test dashboard UI on :1337
 ---

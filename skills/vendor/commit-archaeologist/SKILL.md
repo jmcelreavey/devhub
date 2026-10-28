@@ -1,11 +1,6 @@
 ---
 name: commit-archaeologist
-description: >-
-  Reconstructs why code exists from local git history, including the introducing
-  commit, later changes, current authors, repeated companion files, and likely
-  intent. Use when the user asks "why does this code exist", "who wrote this
-  function and why", or to "explain the history of this function" before a
-  rewrite, refactor, or risky edit. Runs entirely locally.
+description: Explain why code exists from local git history. Use when asked why code exists, who wrote it and why, or for its history before a risky edit.
 license: Apache-2.0
 metadata:
   author: "Matt Van Horn"
