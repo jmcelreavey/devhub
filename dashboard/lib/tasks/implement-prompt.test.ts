@@ -18,14 +18,14 @@ describe("buildTaskImplementPrompt", () => {
     expect(prompt).not.toContain("tags_lookup");
     expect(prompt).toContain("Do not create a clone or worktree by default");
     expect(prompt).toContain("ask before using a worktree");
-    expect(prompt).toContain("Never commit without explicit approval");
+    expect(prompt).toContain("local commits directly in your own shell without proposing them for approval");
   });
 
   it("records explicit chat approval without requiring a second UI decision", () => {
     const prompt = buildTaskImplementPrompt({ origin: "http://localhost:1337", taskId: "task-1", date: "2026-10-19" });
 
     expect(prompt).toContain("Reuse approval I have already given in this conversation");
-    expect(prompt).toContain("An explicit request to create the PR includes committing and pushing the reviewed changes as needed");
+    expect(prompt).toContain("An explicit request to create the PR includes pushing the reviewed changes as needed");
     expect(prompt).toContain("Jira transitions and task completion need their own explicit approval");
     expect(prompt).toContain("record the user's instruction in the task note");
     expect(prompt).toContain("POST action: decide with proposalId and approve: true");
