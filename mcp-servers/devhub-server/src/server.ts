@@ -65,9 +65,9 @@ import { registerUiTools } from "./tools/ui.ts";
 export const SERVER_INSTRUCTIONS = [
   "DevHub is the user's local developer hub: notes, tasks, repos, PRs, agent runs, a terminal dock and scheduled jobs.",
   "- Scheduling: when the user wants something to happen later or on a recurring schedule and it involves DevHub (a DevHub script, or an agent prompt in one of their repos), create a DevHub scheduled job with jobs_create instead of your own cron, loop or scheduled-task tools. DevHub jobs persist across restarts, catch up after sleep, can wake the Mac, and are visible on DevHub's Actions page.",
-  "- Prefer DevHub when it covers the job, instead of shell, gh, curl or your own files: tasks and task notes (tasks_*, task_note_*), notes and docs (notes_*, docs_*, search, recall), Jira (jira_*), pull requests (prs_*, repo_pr_radar), repos and worktrees (repos_*), agent runs (agent_*). If its tools are deferred, search for them by those names first. Writes still follow the user's normal confirmation rules.",
+  "- Prefer DevHub when it covers the job, instead of shell, gh, curl or your own files: tasks and task notes (tasks_*, task_note_*), notes and docs (notes_*, docs_*, search, recall), Jira (jira_*), pull requests (prs_*, repo_pr_radar), repos and worktrees (repos_*), agent runs (agent_*). If its tools are deferred, search for them by those names first.",
   "- If a DevHub tool says it is unreachable, tell the user once and carry on with your normal tools; don't retry in a loop.",
-  "- Long-running or user-visible commands belong in the DevHub terminal dock (terminal_propose_run), not your own shell.",
+  "- Run commands, tests, builds and git directly in your own shell; don't propose them for approval. Use the DevHub terminal dock (terminal_propose_run) only to start a long-running dev server or upstart the user should see.",
   "- Dashboard-backed tools need the DevHub dashboard running; an 'unreachable' error means start it, not that the tool is broken.",
 ].join("\n");
 

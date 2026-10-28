@@ -12,9 +12,10 @@ metadata:
 Take one DevHub task from "text in a list" to "implemented, verified, and
 handed back to the human". Five rules govern everything:
 
-1. **Ask before remote/workflow state changes.** Code changes are yours to
-   make; commits, pushes, PRs, later Jira transitions, and task completion are
-   not. One exception: if the linked Jira ticket is still in a not-started
+1. **Ask before remote/workflow state changes.** Code changes, commands,
+   tests and local commits are yours to make: run them directly in your own
+   shell without proposing them for approval. Pushes, PRs, later Jira
+   transitions, and task completion are not. One exception: if the linked Jira ticket is still in a not-started
    status (**New**, **To Do**, or **Open**), move it to **In Progress** when
    implementation starts (launching implement is the consent). Idempotent
    DevHub metadata updates (links, note context) are normal bookkeeping
@@ -25,7 +26,7 @@ handed back to the human". Five rules govern everything:
 4. **Review before handoff.** Verification proves the checks pass; a structured
    local-diff review — persisted as a real note linked to the repo, not just a
    line in the task note — proves the change is understandable, scoped, and
-   actually fits the task before asking to commit it. The user can assign
+   actually fits the task before you commit it. The user can assign
    another assistant to do that review (§4.5).
 5. **Findings are notes, code is the repo.** Everything you learn on the way —
    contracts, evidence, decisions — lands in the vault. The repo gets code and
@@ -292,13 +293,13 @@ owns the independent review. Finish verification and the authorised commit,
 then stop. DevHub opens
 the draft PR and launches the chosen reviewer; it owns subsequent fix rounds.
 Do not invoke `tasks_implement_review`, launch a nested reviewer, write a second
-self-review note or open Cursor for a commit approval in that mode. Keep the PR
+self-review note or open Cursor for the review in that mode. Keep the PR
 a draft. The interactive workflow below still requires its pre-commit review.
 
-Before offering commit/push, invoke the `pr-explain-review` skill in local-diff
+Before you commit, invoke the `pr-explain-review` skill in local-diff
 mode against the exact implementation branch and intended remote base. This is
 mandatory even when no GitHub PR exists yet, and it runs **before** step 5.1 —
-the review has to exist before you ask permission to commit, not after.
+the review has to exist before the commit, not after.
 
 The review must be shown to the user and **written as a real note** — see
 `pr-explain-review`'s local pre-PR mode: path `pr-reviews/<repo>-<branch>`,
@@ -319,7 +320,7 @@ review either way. Include:
 - `## Standards` and `## Spec` from the `code-review` skill, on this same
   diff. The spec is the task note and the Jira ticket. Leave those two
   sections separate from the findings above. Fix must-fix items from both
-  axes before you offer commit/push.
+  axes before you commit.
 
 Fix every must-fix finding, rerun the relevant checks, and refresh the note
 before offering post-implementation actions. Once a PR exists (step 5.2),
@@ -329,7 +330,7 @@ change.
 
 **Assigned reviewer.** The plan payload's `reviewer` is `null` (you review your
 own diff, as above) or `{ provider, model }`: an assistant the user chose to
-review before you ask to commit. When it is set, that assistant writes the
+review before you commit. When it is set, that assistant writes the
 review and you act on it:
 
 1. Choose the note path `pr-reviews/<repo>-<branch>`, as above.
@@ -357,9 +358,8 @@ quietly.
 `notes_cursor_open` with that note path and the local repo name (the same
 "Open with Cursor" action the dashboard's note rows use). It puts a Markdown
 working copy of the review in Cursor next to the checkout, so the review and
-the diff are readable together — which is the point of asking for a commit
-decision at all. Do this **before** the step 5.1 question, not after, and
-mention it in one short line when you ask.
+the diff are readable together. Do this **before** step 5.1, not after, and
+mention it in one short line in your summary.
 
 **If you worked in a worktree, say so.** `notes_cursor_open` opens the repo's
 main checkout unless you pass `worktree`. An agent run works on its own branch
@@ -377,13 +377,12 @@ brings their edits back into the note.
 ## 5. Post-implementation checklist
 
 Summarize first: what changed (files + approach) and how it's tested. Then
-walk this list, **asking the user before each step** and respecting their
-answer:
+walk this list. Commit locally without asking; ask the user before each
+remote step (push, PR, Jira, task completion) and respect their answer:
 
-1. **Commit & push?** Only after the pre-commit review gate passes and its note
-   is open in Cursor (§4.5), propose a conventional-commit message
-   (`feat:`/`fix:`/...), confirm branch naming, then commit and push. Never
-   commit without an explicit yes.
+1. **Commit, then ask to push.** Once the pre-commit review gate passes and
+   its note is open in Cursor (§4.5), commit with a conventional-commit
+   message (`feat:`/`fix:`/...) on the agreed branch. Ask before pushing.
 2. **Create a PR?** Open it ready for review, never as a draft unless the user
    explicitly asks for one (no `--draft`). Use the `create-pr` skill; keep the
    PR body factual and free of AI attribution. Pass this task's exact `id`,
