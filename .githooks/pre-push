@@ -146,6 +146,17 @@ while IFS= read -r key; do
     unset "$key"
 done < <(env | awk -F= '/^__NEXT_PRIVATE_/ { print $1 }')
 
+# Verify checks this checkout, not the plugins installed on this machine: their
+# materialised copies can import code this checkout lacks (a private plugin on a
+# public checkout). Sync an empty plugin set for the checks, then put this
+# machine's plugins back so a running dev server keeps them.
+restore_installed_plugins() {
+    (cd "$DASHBOARD_DIR" && env -u DEVHUB_VERIFY_CORE_ONLY ./node_modules/.bin/tsx scripts/run-action.ts sync_plugins >/dev/null 2>&1) \
+        || echo "[pre-push] WARNING: could not re-sync installed plugins. Run 'npx tsx scripts/run-action.ts sync_plugins' in dashboard/."
+}
+export DEVHUB_VERIFY_CORE_ONLY=1
+trap restore_installed_plugins EXIT
+
 echo "[pre-push] Running dashboard verify…"
 cd "$DASHBOARD_DIR"
 if ! npm run --silent verify; then
