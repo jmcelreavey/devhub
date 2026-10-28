@@ -1,6 +1,6 @@
 ---
 name: datadog-investigation
-description: Investigate a Datadog alert, its owner, recent changes, and next mitigations. Use when the user pastes a Datadog alert or monitor link, asks why a monitor fired, or clicks Investigate on the DevHub Datadog page.
+description: Investigate a Datadog alert or monitor and suggest mitigations. Use when the user pastes a Datadog alert or monitor link, or asks why a monitor fired.
 ---
 
 # Datadog Investigation
