@@ -255,6 +255,25 @@ describe("syncMcpServers", () => {
     expect(fs.readFileSync(configPath, "utf-8")).toBe(synced);
   });
 
+  it("applies the catalog's Codex tool policy only to Codex", async () => {
+    const { repo, home, lines } = makeTempRepo();
+    writeJson(path.join(repo, "mcp", "shared", "ctx.json"), {
+      command: "/bin/ctx",
+      codex: { approvedTools: ["ctx_compose", "bad name"], disabledTools: ["ctx_shell"] },
+    });
+
+    await syncMcpServers({ emit: (line) => lines.push(line), repoRoot: repo, tool: "codex" });
+    await syncMcpServers({ emit: (line) => lines.push(line), repoRoot: repo, tool: "claude" });
+
+    const codex = readCodexMcpServers(path.join(home, ".codex/config.toml"));
+    expect(codex.ctx).toMatchObject({
+      disabled_tools: ["ctx_shell"],
+      "tools.ctx_compose": { approval_mode: "approve" },
+    });
+    expect(Object.keys(codex.ctx as object).filter((key) => key.startsWith("tools."))).toEqual(["tools.ctx_compose"]);
+    expect(fs.readFileSync(path.join(home, ".claude.json"), "utf-8")).not.toMatch(/ctx_shell|ctx_compose|codex/);
+  });
+
   it("writes Codex remote headers with Codex's http_headers table", async () => {
     const { repo, home, lines } = makeTempRepo();
     writeJson(path.join(repo, "mcp", "shared", "remote.json"), {

@@ -51,7 +51,7 @@ graph LR
 
 Only `model`, `small_model`, `provider`, and `theme` are merged. MCP entries, schema, and agent metadata that OpenCode maintains locally are preserved. Provider credentials use `{env:VAR}` in the repo; sync resolves them from the environment (including 1Password-backed vars) into the local file.
 
-Codex MCP sync edits only the matching `[mcp_servers.*]` tables in `~/.codex/config.toml`; unrelated settings, ordering, and comments remain untouched. Canonical `startupTimeoutSec` and `toolTimeoutSec` values are emitted as Codex's `startup_timeout_sec` and `tool_timeout_sec` fields.
+Codex MCP sync edits only the matching `[mcp_servers.*]` tables in `~/.codex/config.toml`; unrelated settings, ordering, and comments remain untouched. Canonical `startupTimeoutSec` and `toolTimeoutSec` values are emitted as Codex's `startup_timeout_sec` and `tool_timeout_sec` fields. An optional Codex-only `"codex": { "approvedTools": [...], "disabledTools": [...] }` becomes `[mcp_servers.<name>.tools.<tool>] approval_mode = "approve"` and `disabled_tools`. Approve only read-only tools the server leaves unannotated, never tools that run commands or edit files; disable tools that duplicate Codex's own shell or editor. Approvals Codex saves itself ("Always allow") survive each sync.
 
 DevHub `skills/shared/` is the source of truth for personal and dotfiles skills. Optional upstream/shared team skills can stay canonical in an **ai-tools** checkout; DevHub reads a local clone (default `~/Developer/ai-tools`) and merges it at sync time. DevHub wins when the same skill name exists in both trees.
 
