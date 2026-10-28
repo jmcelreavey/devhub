@@ -25,6 +25,8 @@ import { materializePluginNav } from "../lib/plugins/nav-materialize";
 import { materializePluginDbProviders } from "../lib/plugins/db-materialize";
 
 import { materializeIntegrationProviders } from "../lib/plugins/integration-materialize";
+import { isolatePluginsForVerify } from "../lib/plugins/verify-isolation";
+import fs from "node:fs";
 
 const ACTIONS = ["validate", "sync", "sync_plugins", "update_and_sync", "worktree_cleanup"] as const;
 type Action = (typeof ACTIONS)[number];
@@ -90,6 +92,11 @@ async function main(): Promise<void> {
   } else if (action === "sync") {
     code = await runSync(repoRoot, dryRun);
   } else if (action === "sync_plugins") {
+    const isolated = isolatePluginsForVerify();
+    if (isolated) {
+      emit("Verify: syncing an empty plugin set (installed plugins stay out of the checks).");
+      process.on("exit", () => fs.rmSync(isolated, { recursive: true, force: true }));
+    }
     code = materializePlugins({ emit, repoRoot, dryRun });
     code = materializeBranding({ emit, repoRoot, dryRun }) || code;
     code = materializePluginNav({ emit, repoRoot, dryRun }) || code;
