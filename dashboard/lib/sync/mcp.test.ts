@@ -218,6 +218,43 @@ describe("syncMcpServers", () => {
     expect(readCodexMcpServers(configPath)).toMatchObject({ notes: { command: `${repo}/new-notes` } });
   });
 
+  it("keeps Codex tool approvals on DevHub-managed MCP servers across syncs", async () => {
+    const { repo, home, lines } = makeTempRepo();
+    writeJson(path.join(repo, "mcp", "shared", "notes.json"), { command: "REPO_ROOT/bin/notes" });
+    const configPath = path.join(home, ".codex/config.toml");
+    await syncMcpServers({ emit: (line) => lines.push(line), repoRoot: repo, tool: "codex" });
+    fs.appendFileSync(
+      configPath,
+      [
+        "",
+        "[mcp_servers.notes.tools.notes_read]",
+        'approval_mode = "approve"',
+        "",
+      ].join("\n"),
+      "utf-8",
+    );
+    fs.writeFileSync(
+      configPath,
+      fs
+        .readFileSync(configPath, "utf-8")
+        .replace(`command = "${repo}/bin/notes"`, `command = "${repo}/bin/notes"\ndefault_tools_approval_mode = "writes"`),
+      "utf-8",
+    );
+
+    await syncMcpServers({ emit: (line) => lines.push(line), repoRoot: repo, tool: "codex" });
+
+    expect(readCodexMcpServers(configPath)).toMatchObject({
+      notes: {
+        command: `${repo}/bin/notes`,
+        default_tools_approval_mode: "writes",
+        "tools.notes_read": { approval_mode: "approve" },
+      },
+    });
+    const synced = fs.readFileSync(configPath, "utf-8");
+    await syncMcpServers({ emit: (line) => lines.push(line), repoRoot: repo, tool: "codex" });
+    expect(fs.readFileSync(configPath, "utf-8")).toBe(synced);
+  });
+
   it("writes Codex remote headers with Codex's http_headers table", async () => {
     const { repo, home, lines } = makeTempRepo();
     writeJson(path.join(repo, "mcp", "shared", "remote.json"), {
