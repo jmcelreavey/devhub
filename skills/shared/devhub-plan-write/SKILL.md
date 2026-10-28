@@ -1,6 +1,6 @@
 ---
 name: devhub-plan-write
-description: Turn a draft DevHub task into a plan an agent can implement without design questions. Use when turning a draft DevHub task into an implementation plan, or when a task prompt includes a plan URL to fill in.
+description: Turn a draft DevHub task into an implementation-ready plan. Use when asked to plan a draft task, or the prompt includes a plan URL to fill in.
 metadata:
   short-description: Write the plan for a draft task
 ---
@@ -79,20 +79,10 @@ the task is now ready.
 ## Task milestone updates
 
 For a linked DevHub task, call `task_note_update op: "set_status_update"` with
-`statusUpdate: {summary, whatChanged, currentState, nextStep}` at plan ready,
-implementation done, review done, failure, PR opened and after follow-ups.
-Use short plain-language sentences, without raw logs. This refreshes Summary
-and Status while preserving the plan and personal notes. Reviewers update this
-context too, without changing code or the workflow column.
+`statusUpdate: {summary, whatChanged, currentState, nextStep}` at each milestone
+(plan ready, failure), in short plain sentences without logs.
+Capture new UI evidence only for an uncovered risk or changed behaviour
+(`add_media {localFile, caption, phase: "after"}`); otherwise reuse what exists.
 
-The implementation or QA stage owns UI capture. Reuse existing evidence when
-the code, checkout and scenario still match. Planning, review and PR creation
-capture only a specific uncovered risk or changed behaviour. Attach new evidence
-with `add_media {localFile: <absolute path>, caption, phase: "after"}` and name
-the verified commit or working-tree state, scenario and remaining gaps. Use
-`"before"` only when a baseline is required. If capture is unavailable, explain
-why in `currentState`; keep the manual check explicit.
-
-On Auto, the orchestrator handles “Pause after planning”. Finish the plan and
-summary, then stop; never approve your own plan or start implementation from a
-planning run. Revision requests re-plan and stop again.
+On Auto, a planning run finishes the plan and summary, then stops; never
+approve your own plan or start implementing. Revision requests re-plan and stop.

@@ -1,6 +1,6 @@
 ---
 name: devhub-implement-task
-description: Implement a DevHub task from its context through verification and requested handoff steps. Use when the user asks to implement, pick up or work on a DevHub task, or a prompt contains a DevHub task id/context.
+description: Implement a DevHub task end to end. Use when asked to implement or pick up a DevHub task, or the prompt contains a DevHub task id or context.
 metadata:
   short-description: Implement a DevHub task end-to-end
 ---
@@ -66,57 +66,16 @@ user which repo to work in **before** writing any code.
 
 ## 0.5 Task↔run link and durable handoff
 
-Every implement session must leave a resume-ready trail on the task:
+- On start, link the run: `tasks_agent_runs {taskId, runId, provider, status: "running"}`.
+- Resuming: use `tasks_agent_resume`, or `tasks_agent_handoff_get` before coding; the handoff
+  and any `prior Agent Activity notes` are the source of truth. Don't re-ask settled questions.
+- Interactive dock runs: post short `agent_interactive_note`s at check-in, decisions and
+  after commit/push/PR; call `agent_interactive_finish {runId, ok, sessionId, resultText}` when done.
+- Pausing or abandoning: `tasks_agent_handoff_set`, then set the run `paused`/`abandoned`.
+- A prompt starting `FIX THE PULL REQUEST FIRST` is a PR-watch finding: read
+  `gh pr checks` / `gh pr view --comments`, fix on the same branch, ask before pushing.
 
-**Storage / MCP contract**
-
-| Concern | MCP | HTTP |
-| --- | --- | --- |
-| List / upsert linked runs | `tasks_agent_runs` | `GET/POST /api/tasks/agent-runs` |
-| Read handoff | `tasks_agent_handoff_get` | `GET /api/tasks/agent-runs/handoff?taskId=` |
-| Write handoff | `tasks_agent_handoff_set` | `PUT /api/tasks/agent-runs/handoff` |
-| Resume (follow-up or new) | `tasks_agent_resume` | `POST /api/tasks/agent-runs/resume` |
-
-Sidecar files live at `notes/.config/task-agent-runs/<taskId>.json` (plus `_index.json` for runId→taskId). Run `status` values: `queued` \| `running` \| `paused` \| `done` \| `failed` \| `abandoned`.
-
-**On start (and after any `agent_dispatch` / dock run id is known)**
-
-1. `tasks_agent_runs` with `taskId` + `runId` (+ `provider`, `status: "running"`).
-2. If resuming, prefer `tasks_agent_resume` (or UI **Resume with Agent…**), which injects handoff + plan URL. Otherwise call `tasks_agent_handoff_get` **before** coding and treat the markdown as the source of truth for prior progress, branch/PR, blockers, and next steps.
-
-**Interactive CLI (Implement / Resume / Continue in the terminal dock)**
-
-When the prompt includes a DevHub Agent Activity run id (injected by the UI):
-
-Post a separate `agent_interactive_note` for **each** milestone — do not batch into one end-of-run dump:
-
-1. **Check-in** (before any code): goal, assumptions, questions (or "no questions").
-2. **After I answer** (or you proceed with no questions): what we decided.
-3. **Tooling / verify / review**: when you finish a review note, open Cursor or another tool, start or finish tests/CI, or change the plan.
-4. **My instruction**: when I ask you to commit, push, open a PR, pause, or stop — note that before you act.
-5. **After commit / push / PR**: branch, SHA or PR URL, verify status.
-
-When the implement goal is done (or I tell you to stop), call `agent_interactive_finish` with `runId`, `ok`, your CLI `sessionId`, and a short `resultText` (or `error`) — **even if the terminal stays open**. Closing the tab only auto-closes the run as a backup and does not record the session id.
-
-On **Resume / Continue**, the prompt includes those Activity notes under `prior Agent Activity notes` — treat them as the source of truth for what already happened (check-ins, decisions, commits) and continue from there; do not re-ask settled questions.
-
-**Before pause, end-of-day, or abandon**
-
-1. Write/update handoff via `tasks_agent_handoff_set` (use `mode: "append"` only for additive checkpoints; prefer a full replace that stays current).
-2. Include at least: what changed, branch/PR/session if any, verify status, open questions, and the exact next action.
-3. Point at notes, the plan, the Jira ticket, commits, and diffs by path or URL. Do not paste them again.
-4. Name the skills the next session should load.
-5. If you know what that session is for, write the handoff for that job, not a diary of this one.
-6. Redact secrets, tokens, and customer data.
-7. Set the linked run to `paused` (EOD/pause) or `abandoned` (giving up) via `tasks_agent_runs`.
-
-Points 3 to 6 are adapted from Matt Pocock's `handoff` skill (MIT).
-
-Do not rely on chat scrollback alone — the handoff is what the next session reads first.
-
-When any linked run ends, DevHub appends a `### Run <runId>` snapshot to the handoff (branch, last commit, changes vs base, uncommitted files, session). Write your own notes above it; don't repeat what the snapshot already says.
-
-**After the PR exists** DevHub watches it (`tasks_pr_watch`, every 10 minutes): failing CI, requested changes or new comments show on the task as **Fix PR with Agent**, and a merge offers **Complete task**. When you are resumed for a PR finding, the prompt starts with `FIX THE PULL REQUEST FIRST` — read the full failure with `gh pr checks` / `gh pr view --comments`, fix it on the same branch, and ask before pushing.
+Read [handoff.md](handoff.md) only when you need the HTTP routes, handoff contents or run statuses.
 
 ## 1. Gather context (DevHub MCP)
 
@@ -128,8 +87,9 @@ With the plan in hand, pull the surrounding context via the notes MCP:
 
 - `notes_read` the task note at `notePath` (if it exists) - it may hold a
   plan, decisions, or prior attempts.
-- Read every `note` in `related` — a linked implementation-plan note is
-  required reading, and a PR link means review its state first.
+- Read the notes in `related` that bear on the change — a linked
+  implementation-plan note is required reading, and a PR link means check its
+  state first. Use `notes_read` with a heading or search before whole notes.
 - Skim `context` for anything that changes the approach: a prerequisite task's
   PR state, a related ticket's plan note. Read the ones that do; ignore the
   rest. The plan already walked this graph — don't re-walk it.
@@ -156,8 +116,8 @@ notes.
 
 **Then check in before you write code.** Post two or three lines: the goal as
 you understand it, the assumptions you are making, and anything that would
-change the approach if answered differently — then wait. If the plan and notes
-already settle it, say "no questions" and start. The launch dialog has a box
+change the approach if answered differently. Wait only when an answer would
+change the approach; otherwise say "no questions" and start in the same turn. The launch dialog has a box
 for extra context; when the user filled it in, it arrives under
 `## Extra context from me` and overrides your assumptions.
 
@@ -328,51 +288,12 @@ update this same note in place with the PR link and GitHub conversation
 context — see step 5.4. Never create a second review note for the same
 change.
 
-**Assigned reviewer.** The plan payload's `reviewer` is `null` (you review your
-own diff, as above) or `{ provider, model }`: an assistant the user chose to
-review before you commit. When it is set, that assistant writes the
-review and you act on it:
-
-1. Choose the note path `pr-reviews/<repo>-<branch>`, as above.
-2. Call `tasks_implement_review` with the task `id` and `date`, `cwd` (this
-   checkout or worktree, `pwd` is enough), `notePath`, `branch` and `base`. It
-   starts the reviewer read-only. Don't use `agent_dispatch` for this: the
-   nesting guard refuses it.
-3. Note `git status --short` first, then `agent_wait` on the returned run id and
-   `notes_read` the note. If the run failed or the note is missing,
-   `agent_output` shows why.
-4. The reviewer must not have touched the tree. If `git status --short` changed,
-   stop and tell the user what moved; don't carry on.
-5. Fix every must-fix finding and rerun the relevant checks. Then update that
-   same note in place with a `## Resolution` section: what you changed for each
-   finding, and anything you disagreed with and why. Never write a second note.
-6. Post an `agent_interactive_note` that names the reviewer, for example
-   "Reviewed by codex / gpt-6-astra: 2 must-fix, both addressed."
-
-If `tasks_implement_review` errors (provider not ready, Paseo down, no reviewer
-assigned any more), say so in one line, review the diff yourself as above, and
-write in the note that the assigned reviewer didn't run. Never skip the review
-quietly.
-
-**Then open the review beside the code.** Once the note is final, call
-`notes_cursor_open` with that note path and the local repo name (the same
-"Open with Cursor" action the dashboard's note rows use). It puts a Markdown
-working copy of the review in Cursor next to the checkout, so the review and
-the diff are readable together. Do this **before** step 5.1, not after, and
-mention it in one short line in your summary.
-
-**If you worked in a worktree, say so.** `notes_cursor_open` opens the repo's
-main checkout unless you pass `worktree`. An agent run works on its own branch
-under the repo's git dir, so without it Cursor shows the review next to code
-that does not contain the change — the one thing this step exists to prevent.
-Pass the worktree's branch or absolute path (`pwd` is enough; `agent_runs`
-reports it too). Say which folder opened, not just that Cursor opened.
-
-Use `notes_cursor_open`, not `prs_open_in_cursor`, at this stage: the branch is
-already checked out with uncommitted work, and `prs_open_in_cursor` stashes and
-re-checks-out. It is the right call only later, when reviewing an existing PR
-from a clean tree. If the user edits the working copy, `notes_cursor_apply`
-brings their edits back into the note.
+**Assigned reviewer.** If the plan payload's `reviewer` is set, that assistant
+writes the review through `tasks_implement_review` (never `agent_dispatch`); you
+fix its must-fix findings and add a `## Resolution` section to the same note.
+If it can't run, say so in one line and review it yourself. Then open the
+review beside the code with `notes_cursor_open` (pass `worktree` when you
+worked in one). Follow [review-gate.md](review-gate.md) for both steps.
 
 ## 5. Post-implementation checklist
 
@@ -430,20 +351,8 @@ ambiguous requirements):
 ## Task milestone updates
 
 For a linked DevHub task, call `task_note_update op: "set_status_update"` with
-`statusUpdate: {summary, whatChanged, currentState, nextStep}` at plan ready,
-implementation done, review done, failure, PR opened and after follow-ups.
-Use short plain-language sentences, without raw logs. This refreshes Summary
-and Status while preserving the plan and personal notes. Reviewers update this
-context too, without changing code or the workflow column.
-
-The implementation or QA stage owns UI capture. Reuse existing evidence when
-the code, checkout and scenario still match. Planning, review and PR creation
-capture only a specific uncovered risk or changed behaviour. Attach new evidence
-with `add_media {localFile: <absolute path>, caption, phase: "after"}` and name
-the verified commit or working-tree state, scenario and remaining gaps. Use
-`"before"` only when a baseline is required. If capture is unavailable, explain
-why in `currentState`; keep the manual check explicit.
-
-On Auto, the orchestrator handles “Pause after planning”. Finish the plan and
-summary, then stop; never approve your own plan or start implementation from a
-planning run. Revision requests re-plan and stop again.
+`statusUpdate: {summary, whatChanged, currentState, nextStep}` at each milestone
+(implementation done, failure, follow-ups), in short plain sentences without logs.
+Implementation/QA owns UI evidence: reuse evidence that still matches, else
+attach `add_media {localFile, caption, phase: "after"}` naming the commit,
+scenario and gaps. If capture is unavailable, say why in `currentState`.
