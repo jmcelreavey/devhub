@@ -45,6 +45,30 @@ export interface SharedMcpServer {
   headers?: Record<string, string>;
   startupTimeoutSec?: number;
   toolTimeoutSec?: number;
+  /** Codex-only tool policy. */
+  codex?: CodexToolPolicy;
+}
+
+export interface CodexToolPolicy {
+  /** Run without an approval prompt. Only read-only tools the server leaves unannotated. */
+  approvedTools?: string[];
+  /** Hide from Codex, e.g. tools that duplicate Codex's own shell or editor and would prompt. */
+  disabledTools?: string[];
+}
+
+function toolNames(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const names = value.filter((x: unknown): x is string => typeof x === "string" && /^[A-Za-z0-9_-]+$/.test(x));
+  return names.length ? names : undefined;
+}
+
+function parseCodexToolPolicy(value: unknown): CodexToolPolicy | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const raw = value as Record<string, unknown>;
+  const approvedTools = toolNames(raw.approvedTools);
+  const disabledTools = toolNames(raw.disabledTools);
+  if (!approvedTools && !disabledTools) return undefined;
+  return { ...(approvedTools ? { approvedTools } : {}), ...(disabledTools ? { disabledTools } : {}) };
 }
 
 export interface McpToolTarget {
@@ -251,6 +275,10 @@ function codexToTool(server: SharedMcpServer): Json {
     ...codexEntry,
     ...(server.startupTimeoutSec ? { startup_timeout_sec: server.startupTimeoutSec } : {}),
     ...(server.toolTimeoutSec ? { tool_timeout_sec: server.toolTimeoutSec } : {}),
+    ...(server.codex?.disabledTools ? { disabled_tools: server.codex.disabledTools } : {}),
+    ...Object.fromEntries(
+      (server.codex?.approvedTools ?? []).map((tool) => [`tools.${tool}`, { approval_mode: "approve" }]),
+    ),
   };
 }
 
@@ -547,6 +575,7 @@ export function parseSharedMcpServerFile(file: string): SharedMcpServer | null {
       headers: raw.headers && typeof raw.headers === "object" && !Array.isArray(raw.headers) ? raw.headers : undefined,
       startupTimeoutSec: positiveInteger(raw.startupTimeoutSec),
       toolTimeoutSec: positiveInteger(raw.toolTimeoutSec),
+      codex: parseCodexToolPolicy(raw.codex),
     };
   } catch {
     return null;
@@ -765,6 +794,7 @@ export async function syncMcpServers(opts: SyncMcpServersOptions): Promise<numbe
         headers: substituted.headers,
         startupTimeoutSec: substituted.startupTimeoutSec,
         toolTimeoutSec: substituted.toolTimeoutSec,
+        codex: server.codex,
       });
 
       if (opts.dryRun) {
