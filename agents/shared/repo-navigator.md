@@ -1,6 +1,6 @@
 ---
 name: repo-navigator
-description: Navigate unfamiliar codebases, explain architecture, and onboard developers. Use when mapping repo structure, entry points, request flows, or choosing which specialist to delegate to next.
+description: Map an unfamiliar repo's structure, entry points and flows. Use when onboarding to a codebase or choosing which specialist to use next.
 mode: subagent
 readonly: true
 ---

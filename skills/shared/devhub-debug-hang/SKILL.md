@@ -1,6 +1,6 @@
 ---
 name: devhub-debug-hang
-description: Diagnose a slow, hanging, or unresponsive DevHub dashboard or route. Use when DevHub is slow, a page never loads, API routes time out, or the whole dashboard looks dead.
+description: Diagnose a slow or hanging DevHub dashboard. Use when pages never load, API routes time out, or the dashboard looks dead.
 ---
 
 # Debugging a hanging or slow DevHub

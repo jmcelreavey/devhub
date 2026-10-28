@@ -1,6 +1,6 @@
 ---
 name: devhub-db
-description: Use DevHub's guarded PostgreSQL, MongoDB, or SQLite client for database work. Use when the user wants to query, inspect or change a PostgreSQL, MongoDB or SQLite database, or asks about DB connections or access.
+description: Query or change PostgreSQL, MongoDB or SQLite through DevHub's guarded client. Use when a task needs a database query, inspection, change or connection check.
 metadata:
   short-description: Query and mutate databases safely through DevHub
 ---

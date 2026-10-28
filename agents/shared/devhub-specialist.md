@@ -1,6 +1,6 @@
 ---
 name: devhub-specialist
-description: Expert on the DevHub repo — dashboard, Paseo-backed Agents, skills/agents/persona catalog, sync engine, notes MCP, EntityRef linking, Jira, share_publish, auto-PR review, and plugin Ops UI. Use when working in devhub or devhub-private, debugging sync/validate/collect flows, Agents/MCP, or extending shared skills, agents, persona, or OpenCode config.
+description: DevHub repo expert (dashboard, sync engine, skills and agents catalog, MCP, plugins). Use when working in devhub or devhub-private, or extending its skills, agents or config.
 mode: subagent
 readonly: false
 ---

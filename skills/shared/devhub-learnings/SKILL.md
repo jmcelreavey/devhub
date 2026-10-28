@@ -1,6 +1,6 @@
 ---
 name: devhub-learnings
-description: Create or update concise, beginner-friendly DevHub learning notes. Use when the user asks to capture, write or update a learning note, gotcha, mental model or 5Ws explanation.
+description: Write or update a short DevHub learning note. Use when asked to capture a learning, gotcha, mental model or 5Ws explanation.
 metadata:
   short-description: Create DevHub learning notes
 ---

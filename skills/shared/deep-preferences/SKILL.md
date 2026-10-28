@@ -1,6 +1,6 @@
 ---
 name: deep-preferences
-description: Load one DevHub L2 persona mode. Use when the task is teaching or explaining a concept, reviewing code or a PR, scaffolding a new project, deploy/infra/CI work, or choosing tooling (package manager, editor, Python/JS setup).
+description: Load one DevHub persona mode. Use when teaching or explaining, reviewing code or PRs, scaffolding a project, doing deploy, infra or CI work, or choosing tooling.
 metadata:
   short-description: Load one L2 persona mode file
 ---

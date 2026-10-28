@@ -1,10 +1,6 @@
 ---
 name: grill-with-docs
-description: >-
-  Interview the user about a plan or design until nothing is silently assumed,
-  and write resolved terms and hard-to-reverse decisions down as you go. Use
-  when the user says "grill", "grill this", or wants a plan stress-tested
-  before anyone builds it.
+description: Interview the user until a plan has no silent assumptions, recording decisions as you go. Use when the user says grill or wants a plan stress-tested.
 metadata:
   short-description: Grill a plan and write the docs
 disable-model-invocation: true

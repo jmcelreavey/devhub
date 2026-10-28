@@ -1,6 +1,6 @@
 ---
 name: devhub-repo-ownership
-description: Triage an owned repository, its changes, ownership, and next work. Use when the user asks to catch up on a repo they own, what needs review, who owns a path, or what to learn next in an owned repo.
+description: Catch up on a repo the user owns. Use when asked what needs review, who owns a path, or what to work on next in an owned repo.
 metadata:
   short-description: Triage an owned repo
 ---

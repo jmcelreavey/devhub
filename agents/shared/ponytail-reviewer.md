@@ -1,6 +1,6 @@
 ---
 name: ponytail-reviewer
-description: Reviews code and plans for over-engineering, unnecessary abstractions, avoidable dependencies, and YAGNI violations. Use when the user asks for Ponytail-style review, simplest-solution review, bloat reduction, or a delete-list before implementation.
+description: Review code or plans for over-engineering and YAGNI. Use when asked for a simplest-solution review, a bloat cut or a delete-list.
 mode: subagent
 readonly: true
 ---

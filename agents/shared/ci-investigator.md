@@ -1,6 +1,6 @@
 ---
 name: ci-investigator
-description: Investigate a single failing PR CI check and return a short root-cause summary. Use when the user asks to summarize, explain, diagnose, or investigate a specific failed GitHub Actions or CI check on a pull request.
+description: Investigate one failing PR CI check and return a short root cause. Use when asked why a specific GitHub Actions or CI check failed.
 mode: subagent
 readonly: true
 ---

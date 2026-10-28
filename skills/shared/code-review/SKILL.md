@@ -1,10 +1,6 @@
 ---
 name: code-review
-description: >-
-  Review a diff on two axes: Standards (repo conventions and a small smell
-  baseline) and Spec (the Jira ticket, DevHub task, or spec). Use when the
-  user wants a branch, PR, or local implementation reviewed, or asks to
-  review since a commit, branch, or tag.
+description: Review a diff against repo standards and its spec (Jira ticket or DevHub task). Use when asked to review a branch, PR, local changes, or changes since a commit.
 metadata:
   short-description: Two-axis standards and spec review
 ---

@@ -1,6 +1,6 @@
 ---
 name: devhub-draft-jira-ticket
-description: Draft a Jira ticket from a task and its linked reference material in the developer's writing voice, ready for editing before creation. Use for Generate Jira ticket or a request to draft one ticket; use devhub-create-tasks-from for splitting a planning note into several tickets.
+description: Draft one Jira ticket from a task and its references in the user's voice. Use when asked to generate or draft a single Jira ticket.
 metadata:
   short-description: Task and references → editable Jira draft
 ---

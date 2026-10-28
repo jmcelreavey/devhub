@@ -1,10 +1,6 @@
 ---
 name: diagnosing-bugs
-description: >-
-  Build a tight failing loop before theorising, then reproduce, minimise,
-  test a few hypotheses, and lock the fix with a regression test. Use when
-  the user says diagnose or debug, or reports something broken, throwing,
-  failing, or slow.
+description: Debug with a tight repro loop, a few hypotheses and a regression test. Use when asked to diagnose or debug, or something is broken, throwing, failing or slow.
 metadata:
   short-description: Diagnose a bug from a failing loop
 ---

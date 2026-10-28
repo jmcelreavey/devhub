@@ -1,6 +1,6 @@
 ---
 name: devhub-sync
-description: Sync DevHub public, private, and plugin repositories safely. Use when syncing devhub, devhub-private and team-tools, pulling upstream DevHub changes, or when sync leaves repos diverged.
+description: Sync devhub, devhub-private and plugin repos safely. Use when pulling upstream DevHub changes or the repos have diverged.
 metadata:
   short-description: Sync DevHub public/private/plugin repos
 ---
