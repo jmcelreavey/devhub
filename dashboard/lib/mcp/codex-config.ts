@@ -271,6 +271,11 @@ function renderServer(name: string, entry: Json): string {
     "enabled",
     "startup_timeout_sec",
     "tool_timeout_sec",
+    // Tool approvals belong to Codex and the user ("Always allow" writes them).
+    // Dropping them on every sync made approved MCP tools prompt again.
+    "default_tools_approval_mode",
+    "enabled_tools",
+    "disabled_tools",
   ];
   const lines = [`# Managed by DevHub MCP sync: ${name}`, `[${serverPath}]`];
   for (const field of scalarOrder) {
@@ -283,6 +288,13 @@ function renderServer(name: string, entry: Json): string {
     ["oauth", "oauth"],
   ] as const) {
     const rendered = renderMap(`${serverPath}.${suffix}`, server[field]);
+    if (rendered.length > 0) lines.push("", ...rendered);
+  }
+  const toolTables = Object.keys(server)
+    .filter((field) => field.startsWith("tools.") && field.length > "tools.".length)
+    .sort((left, right) => left.localeCompare(right));
+  for (const field of toolTables) {
+    const rendered = renderMap(`${serverPath}.tools.${key(field.slice("tools.".length))}`, server[field]);
     if (rendered.length > 0) lines.push("", ...rendered);
   }
   return lines.join("\n");
