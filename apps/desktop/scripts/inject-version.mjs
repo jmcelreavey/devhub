@@ -37,6 +37,7 @@ if (!/^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/.test(version)) {
 
 const confPath = path.join(tauriDir, "tauri.conf.json");
 const conf = JSON.parse(fs.readFileSync(confPath, "utf8"));
+const confNeedsUpdate = conf.version !== version;
 conf.version = version;
 
 const cargoPath = path.join(tauriDir, "Cargo.toml");
@@ -47,7 +48,7 @@ if (!versionLine.test(cargo)) {
   process.exit(1);
 }
 const patched = cargo.replace(versionLine, `version = "${version}"`);
-fs.writeFileSync(confPath, `${JSON.stringify(conf, null, 2)}\n`);
-fs.writeFileSync(cargoPath, patched);
+if (confNeedsUpdate) fs.writeFileSync(confPath, `${JSON.stringify(conf, null, 2)}\n`);
+if (patched !== cargo) fs.writeFileSync(cargoPath, patched);
 
 process.stdout.write(`[version] set tauri.conf.json and Cargo.toml to ${version}\n`);

@@ -84,7 +84,7 @@ jobs:
           # bare string "failed to run linuxdeploy" and swallows linuxdeploy's own
           # stderr. Without it a failure there is undiagnosable from the log.
           ALL='[
-            {"os": "macos-14", "label": "macOS (Apple Silicon)", "target": "aarch64-apple-darwin", "args": "--target aarch64-apple-darwin"},
+            {"os": "macos-15", "label": "macOS (Apple Silicon)", "target": "aarch64-apple-darwin", "args": "--target aarch64-apple-darwin"},
             {"os": "macos-15-intel", "label": "macOS (Intel)", "target": "x86_64-apple-darwin", "args": "--verbose --target x86_64-apple-darwin"},
             {"os": "ubuntu-22.04", "label": "Linux (x64)", "target": "x86_64-unknown-linux-gnu", "args": "--verbose"}
           ]'

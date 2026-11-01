@@ -30,10 +30,14 @@ beforeEach(() => {
 afterEach(() => fs.rmSync(root, { recursive: true, force: true }));
 
 test("rebuilding the current release version succeeds repeatedly", () => {
+  const originalConf = fs.readFileSync(conf, "utf8");
+  const originalCargo = fs.readFileSync(cargo, "utf8");
   for (let attempt = 0; attempt < 2; attempt += 1) {
     const result = spawnSync(process.execPath, [script, "2.0.0"], { encoding: "utf8" });
     assert.equal(result.status, 0, result.stderr);
   }
+  assert.equal(fs.readFileSync(conf, "utf8"), originalConf);
+  assert.equal(fs.readFileSync(cargo, "utf8"), originalCargo);
   assert.equal(JSON.parse(fs.readFileSync(conf, "utf8")).version, "2.0.0");
 });
 
