@@ -190,6 +190,7 @@ jobs:
       # One version source, written into Tauri and Cargo. The About dialog and
       # /api/desktop/health read it at runtime, so they cannot drift.
       - name: Inject version
+        if: github.event_name != 'workflow_dispatch'
         run: node apps/desktop/scripts/inject-version.mjs "${{ steps.version.outputs.version }}"
 
       # Cheap, and it runs on every platform in the matrix — the staging rules
@@ -207,6 +208,15 @@ jobs:
       # The gate. Runs before signing, because a signed leak cannot be recalled.
       - name: Verify staged payload provenance
         run: node apps/desktop/scripts/verify-staging.mjs
+
+      # Stage committed inputs before a dry run changes the installer version.
+      # Tags still inject before staging, so a tag/source mismatch fails provenance.
+      # The shell supplies DEVHUB_VERSION at runtime, including to the WSL payload.
+      - name: Inject dry-run version
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: node apps/desktop/scripts/inject-version.mjs "$VERSION"
 
       - name: Rust checks
         working-directory: apps/desktop/src-tauri

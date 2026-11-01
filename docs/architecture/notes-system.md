@@ -322,7 +322,7 @@ The notes **BlockNote** editor can call an OpenAI-compatible provider through Bl
 - Select text → **AI** (stars) on the formatting toolbar.
 - Type **`/ai`** in the slash menu.
 
-Configuration is env-only - see [Environment Variables](../reference/environment-variables.md#notes-repo-learning-and-briefing-ai-optional) (`AI_API_KEY`, `AI_BASE_URL`, `AI_MODEL`; any OpenAI-compatible provider, z.ai by default). Example placeholders are in `apps/ui/.env.example`. Do not commit real API keys.
+Configuration is env-only - see [Environment Variables](../reference/environment-variables.md#notes-and-repo-learning-ai-optional) (`AI_API_KEY`, `AI_BASE_URL`, `AI_MODEL`; any OpenAI-compatible provider, z.ai by default). Example placeholders are in `apps/ui/.env.example`. Do not commit real API keys.
 
 **Notes work fully without these variables.** When `AI_API_KEY` is unset, the editor omits AI toolbar, `/ai`, and related UI. `GET /api/notes/ai/status` reports `{ configured: false }`.
 
@@ -330,7 +330,7 @@ Backend route: `POST /api/notes/ai/chat` (Vercel AI SDK + BlockNote server helpe
 
 ## Content vaults
 
-The dashboard treats rooted file trees as **vaults** with shared storage, API, and UI. Filesystem primitives (`VaultStorage`, codecs, path helpers) live in [`shared/vault/`](../../shared/vault/README.md) and are extended by the dashboard (assets, BlockNote search) and MCP server (workspace-scoped note search).
+The dashboard treats rooted file trees as **vaults** with shared storage, API, and UI. Filesystem primitives (`VaultStorage`, codecs, path helpers) live in [`packages/shared/vault/`](../../packages/shared/vault/README.md) and are extended by the dashboard (assets, BlockNote search) and MCP server (workspace-scoped note search).
 
 | Vault | Path (default)                              | Format                   | Routes                     |
 | ----- | ------------------------------------------- | ------------------------ | -------------------------- |
