@@ -19,10 +19,12 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
+source "$REPO_ROOT/scripts/lib/git-lock.sh"
 
 log()  { echo "[devhub-ship] $*"; }
 fail() { echo "[devhub-ship] SHIP FAILED: $*" >&2; exit 1; }
-trap '[[ $? -ne 0 ]] && echo "[devhub-ship] SHIP FAILED (see above)" >&2' EXIT
+trap 'status=$?; cleanup_git_lock; [[ $status -ne 0 ]] && echo "[devhub-ship] SHIP FAILED (see above)" >&2; exit $status' EXIT
+setup_git_lock
 
 MSG="chore: ship local work"
 DRY=0
@@ -44,7 +46,7 @@ UPSTREAM_REF=""
 UPSTREAM_SHA=""
 prepare_upstream() {
   git remote get-url upstream >/dev/null 2>&1 || fail "No 'upstream' remote. Add the public core or use --no-upstream."
-  git fetch --quiet upstream
+  git_write fetch --quiet upstream
   UPSTREAM_BRANCH="$(git rev-parse --abbrev-ref upstream/HEAD 2>/dev/null | sed 's@^upstream/@@' || true)"
   [[ -n "$UPSTREAM_BRANCH" ]] || UPSTREAM_BRANCH="main"
   UPSTREAM_REF="upstream/${UPSTREAM_BRANCH}"
@@ -57,7 +59,7 @@ upstream_is_synced() {
 
 preview_public_patch() {
   local source_ref="$1"
-  bash scripts/devhub-backport.sh "$source_ref" --base "$UPSTREAM_REF" --patch-only --require-synced
+  bash scripts/devhub-backport.sh "$source_ref" --snapshot --patch-only --require-synced
 }
 
 if [[ "$NO_UPSTREAM" == "0" ]]; then
@@ -73,12 +75,11 @@ if [[ "$DRY" == "1" ]]; then
     upstream_is_synced || fail "Public core has newer changes. Run scripts/devhub-update.sh before previewing the outbound patch."
     PREVIEW_INDEX="$(mktemp "${TMPDIR:-/tmp}/devhub-ship-index.XXXXXX")"
     rm -f "$PREVIEW_INDEX"
-    trap 'status=$?; rm -f "${PREVIEW_INDEX:-}"; [[ $status -ne 0 ]] && echo "[devhub-ship] SHIP FAILED (see above)" >&2; exit $status' EXIT
-    # Preserve skip-worktree bits so materialised plugin overlays are not mistaken for
-    # public changes. Starting from HEAD would drop those bits and leak local overlays.
+    trap 'status=$?; rm -f "${PREVIEW_INDEX:-}"; cleanup_git_lock; [[ $status -ne 0 ]] && echo "[devhub-ship] SHIP FAILED (see above)" >&2; exit $status' EXIT
+    # Preserve skip-worktree bits when preparing the preview index.
     cp "$(git rev-parse --git-path index)" "$PREVIEW_INDEX"
-    GIT_INDEX_FILE="$PREVIEW_INDEX" git add -A
-    PREVIEW_TREE="$(GIT_INDEX_FILE="$PREVIEW_INDEX" git write-tree)"
+    GIT_INDEX_FILE="$PREVIEW_INDEX" git_write add -A
+    PREVIEW_TREE="$(GIT_INDEX_FILE="$PREVIEW_INDEX" git_write write-tree)"
     log "Actual public patch, including committed and uncommitted divergence:"
     if preview_public_patch "$PREVIEW_TREE"; then
       :
@@ -92,16 +93,16 @@ if [[ "$DRY" == "1" ]]; then
 fi
 
 # 1. Personal data commit (private only; backport drops these paths anyway).
-git add notes tasks collections upstarts diagrams 2>/dev/null || true
+git_write add notes tasks collections upstarts diagrams 2>/dev/null || true
 if ! git diff --cached --quiet; then
-  git commit --quiet -m "chore: sync personal data"
+  git_write commit --quiet -m "chore: sync personal data"
   log "Committed personal data (notes/tasks/collections/upstarts)."
 fi
 
 # 2. Everything else.
-git add -A
+git_write add -A
 if ! git diff --cached --quiet; then
-  git commit --quiet -m "$MSG"
+  git_write commit --quiet -m "$MSG"
   log "Committed: $MSG"
 fi
 
@@ -117,11 +118,11 @@ fi
 # 3. Private mirror.
 if [[ -n "$(git rev-list @{u}..HEAD 2>/dev/null || echo x)" ]]; then
   log "Pushing origin $BRANCH (pre-push verify runs — this takes a few minutes)..."
-  git push origin "$BRANCH"
+  git_write push origin "$BRANCH"
 fi
 
 # 4. Public core — straight to main, no PR. The backport script handles the
-# skip-worktree overlay dance, excludes personal paths, and leak-scans added lines.
+# personal-data exclusions and leak scan for added lines.
 if [[ "$NO_UPSTREAM" == "0" ]]; then
   PUBLIC_PATCH=1
   if preview_public_patch "$BRANCH"; then
@@ -138,9 +139,9 @@ if [[ "$NO_UPSTREAM" == "0" ]]; then
     log "Public core already has everything — skipping upstream push."
   else
     log "Porting content diff onto upstream/${UPSTREAM_BRANCH}..."
-    bash scripts/devhub-backport.sh "$BRANCH" --base "$UPSTREAM_REF" --require-synced --title "$MSG"
+    bash scripts/devhub-backport.sh "$BRANCH" --snapshot --require-synced --title "$MSG"
     log "Pushing upstream ${UPSTREAM_BRANCH} directly (no PR)..."
-    git push upstream "backport/${BRANCH}:${UPSTREAM_BRANCH}"
+    git_write push upstream "backport/${BRANCH}:${UPSTREAM_BRANCH}"
     bash scripts/devhub-update.sh --mark-synced
   fi
 fi
@@ -164,14 +165,14 @@ for plugin_path in $PLUGIN_PATHS; do
   (
     cd "$plugin_path"
     pbranch="$(git branch --show-current)"
-    git add -A
+    git_write add -A
     if ! git diff --cached --quiet; then
-      git commit --quiet -m "$MSG"
+      git_write commit --quiet -m "$MSG"
       log "[$name] committed: $MSG"
     fi
     if [[ -n "$(git rev-list "origin/${pbranch}..HEAD" 2>/dev/null)" ]]; then
       log "[$name] pushing origin $pbranch..."
-      git push origin "$pbranch"
+      git_write push origin "$pbranch"
     else
       log "[$name] up to date."
     fi
@@ -181,7 +182,7 @@ done
 log "SHIP DONE"
 log ""
 # Keep these two menu paths in step with
-# dashboard/lib/desktop/packaged-checkout-copy.ts (bash cannot import it).
+# apps/ui/lib/desktop/packaged-checkout-copy.ts (bash cannot import it).
 log "If you use the installed DevHub.app, it still serves the bundled dashboard until you refresh it:"
 log "  View → Rebuild Dashboard…     (copy this checkout into the .app)"
 log "  View → Attach to Dev Server…   (hot reload via npm run dev in the checkout)"

@@ -1,13 +1,6 @@
 ---
 title: Team Slack gateway
 description: One shared Slack connection, with each member's tools and credentials staying on their laptop.
-order: 5
-icon: Users
-tags: [slack, team]
-related:
-  - guides/integrations
-  - getting-started/setup
-  - reference/environment-variables
 ---
 
 # Team Slack gateway
@@ -30,7 +23,7 @@ Message text and tool results pass through the gateway in memory. It can see tha
 
 ## Create the Slack app
 
-1. In Slack's app dashboard, choose **Create New App → From a manifest** and paste `gateway/manifest.json` from this checkout. Select the company workspace.
+1. In Slack's app dashboard, choose **Create New App → From a manifest** and paste `gateway/manifest.json` from the Team plugin checkout. Select the company workspace.
 2. Install the app. Give the gateway its **Bot User OAuth Token** as `SLACK_BOT_TOKEN`.
 3. Under **Basic Information → App-Level Tokens**, generate a token with `connections:write`. Supply it as `SLACK_APP_TOKEN`.
 4. Keep Socket Mode enabled. The manifest includes `/devhub`, interactivity, DMs, mentions, Home and reactions. Invite the bot to any channels where people will use it.
@@ -41,7 +34,7 @@ Only this gateway holds the shared Slack credentials. Never distribute them to d
 
 ## Run locally
 
-Node **24 or newer** is required for the gateway's native TypeScript support. The dashboard keeps its own supported Node range. There's no build step or native dependency.
+Run these commands from the Team plugin checkout. Node **24 or newer** is required for the gateway's native TypeScript support. The dashboard keeps its own supported Node range. There's no build step or native dependency.
 
 ```sh
 npm ci --prefix gateway --ignore-scripts
@@ -59,7 +52,7 @@ The registry is one small JSON file with atomic, private-permission writes. Run 
 
 ## Docker
 
-Build from the repository root:
+Build from the Team plugin repository root:
 
 ```sh
 docker build -f gateway/Dockerfile -t devhub-slack-gateway .
@@ -77,7 +70,7 @@ These are examples only. Nothing in this phase creates or deploys cloud resource
 
 ### Fly.io
 
-Use the repository root as the Docker context, `gateway/Dockerfile`, one machine, and a persistent volume mounted at `/data`. A starting `fly.toml` would look like:
+Use the Team plugin repository root as the Docker context, `gateway/Dockerfile`, one machine, and a persistent volume mounted at `/data`. A starting `fly.toml` would look like:
 
 ```toml
 app = "your-devhub-slack-gateway"
@@ -113,7 +106,7 @@ Set the two Slack tokens through Fly's secret manager. Keep the machine on: the 
 
 ### Render
 
-Use a paid, always-on **Web Service**, one instance, with a persistent disk at `/data`. Keep the repository root as the service root so the shared protocol is available. Use `npm ci --prefix gateway --ignore-scripts` as the build command and `npm start --prefix gateway` as the start command. Select Node 24, set `GATEWAY_DATA_DIR=/data`, and set the health check to `/healthz`. Render supplies `PORT` and TLS/WebSocket termination. Put tokens in Render's secret environment settings. An ephemeral/free sleeping instance isn't suitable for the registry or Slack connection.
+Use a paid, always-on **Web Service**, one instance, with a persistent disk at `/data`. Keep the Team plugin repository root as the service root so the shared protocol is available. Use `npm ci --prefix gateway --ignore-scripts` as the build command and `npm start --prefix gateway` as the start command. Select Node 24, set `GATEWAY_DATA_DIR=/data`, and set the health check to `/healthz`. Render supplies `PORT` and TLS/WebSocket termination. Put tokens in Render's secret environment settings. An ephemeral/free sleeping instance isn't suitable for the registry or Slack connection.
 
 ## Environment
 
@@ -206,9 +199,8 @@ Devices opt in during authentication with `capabilities: ["ask", "handoff"]`. Ea
 ## Checks
 
 ```sh
-npm run typecheck --prefix gateway
-npm test --prefix gateway
-cd dashboard && npx vitest run lib/integrations/slack/gateway-client.test.ts lib/integrations/slack/gateway-security.test.ts lib/integrations/slack/gateway-integration.test.ts
+npm run verify --prefix gateway
+DEVHUB_TEST_CORE=/path/to/devhub-core /path/to/devhub-core/apps/ui/node_modules/.bin/vitest run --config vitest.config.mjs
 ```
 
-Root `npm run verify` and CI include gateway typechecking/tests. The dashboard's Slack integration test starts a gateway on a random localhost port with a fake Slack layer and two real outbound device transports. It covers pairing, per-member routing, rejected cross-user/channel operations, Confirm/replay rejection, offline/no-queue behaviour, revocation and different plugin catalogues on each laptop. Tests don't contact Slack or start agents.
+Run these from the Team plugin checkout. Its gateway and plugin tests use fake Slack; they don't contact Slack or start agents.

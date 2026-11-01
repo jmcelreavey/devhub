@@ -13,7 +13,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$ROOT/scripts/lib/public-paths.sh"
 
 # Internal service codenames that must never appear in public/shared content.
-DENY='sigyn|gefjon|bifrost|fenrir|svapi|heimdall|forseti|skadi'
+DENY='sigy[n]|gefjo[n]|bifros[t]|fenri[r]|svap[i]|heimdal[l]|forset[i]|skad[i]'
 # Employer names and branding that belong in plugins or personal data, never core.
 # Bracketed letters keep this line from matching itself when a diff adding it is scanned.
 DENY="${DENY}|busines[s] ?insider|garnet[t]|@inside[r][.]com"
@@ -32,18 +32,31 @@ case "$mode" in
   tree)
     # Tracked files, excluding this scanner, the strategy doc, internal review docs,
     # personal data, and the backport script (all legitimately reference the denylist).
-    # Generated plugin files are skip-worktree and hold the local plugin's output on disk;
-    # their committed content is covered by the backport's added-line scan instead.
     hits="$(cd "$ROOT" && git ls-files -- \
               "${PUBLIC_PATHS[@]}" \
               ':!scripts/scan-leaks.sh' ':!scripts/devhub-backport.sh' ':!scripts/make-public-seed.sh' \
-              ':(exclude,glob)dashboard/**/*.generated.*' \
+              ':(exclude,glob)apps/ui/**/*.generated.*' \
               ':(exclude,glob)docs/codebase-review-*.md' \
             | tr '\n' '\0' \
             | xargs -0 grep -nEiI "$PATTERN" 2>/dev/null || true)"
     ;;
+  seed)
+    for source in worktree index; do
+      scan_args=()
+      [[ "$source" != index ]] || scan_args+=(--cached)
+      set +e
+      scan_output="$(cd "$ROOT" && git grep ${scan_args[@]+"${scan_args[@]}"} --text -nEi "$PATTERN" -- . 2>&1)"
+      scan_status=$?
+      set -e
+      if [[ "$scan_status" -gt 1 ]]; then
+        echo "Leak scan could not inspect the seed $source: $scan_output" >&2
+        exit "$scan_status"
+      fi
+      [[ -z "$scan_output" ]] || hits="${hits}${scan_output}"$'\n'
+    done
+    ;;
   *)
-    echo "usage: scan-leaks.sh [tree|stdin]" >&2
+    echo "usage: scan-leaks.sh [tree|stdin|seed]" >&2
     exit 2
     ;;
 esac

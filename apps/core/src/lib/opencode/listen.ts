@@ -1,0 +1,218 @@
+import { localOps, type ProcessHandle } from "../../local/ops/index";
+import { execExternal } from "../exec-external";
+import { getOpenCodeEnv, resolveOpenCodeBinary } from "./command";
+import {
+  canConnect,
+  reserveEphemeralPort,
+  waitForPortListening,
+} from "../port-probe";
+
+/** Ports other OpenCode clients treat as a "configured" external server. Never bind these. */
+export const PINNED_OPENCODE_PORTS = [1338, 4096] as const;
+
+/** Inherited env that would pin our serve to a port or server we do not own. */
+const OPENCODE_EXTERNAL_KEYS = ["OPENCODE_PORT", "OPENCODE_HOST", "OPENCODE_SKIP_START"] as const;
+
+const BIND_HOST = "127.0.0.1";
+const OWNED_ENV = "DEVHUB_OPENCODE_OWNED";
+const PINNED_PORT_SET = new Set<number>(PINNED_OPENCODE_PORTS);
+const SPAWN_WAIT_MS = 15_000;
+/**
+ * `opencode serve` ignores SIGTERM, so the polite kill left every restart's
+ * server running for weeks. Its session store is SQLite (crash-safe) — KILL.
+ */
+const SERVE_KILL_SIGNAL: NodeJS.Signals = "SIGKILL";
+
+let child: ProcessHandle | null = null;
+let port: number | null = null;
+let starting: Promise<number> | null = null;
+
+/** Exact argv DevHub uses: `opencode serve --port N --hostname 127.0.0.1`. */
+const DEVHUB_SERVE_ARGV = /(?:^|\s|\/)opencode serve --port (\d+) --hostname 127\.0\.0\.1(?:\s|$)/;
+
+export function getDevHubOpenCodePort(): number | null {
+  return port;
+}
+
+export function isDevHubOpenCodeCommand(cmd: string): boolean {
+  return DEVHUB_SERVE_ARGV.test(cmd.trim());
+}
+
+export function opencodeSpawnEnv(): NodeJS.ProcessEnv {
+  const env = getOpenCodeEnv();
+  for (const key of OPENCODE_EXTERNAL_KEYS) delete env[key];
+  // Basic auth here makes the iframe 401 — the tab cannot send it, and this
+  // instance is loopback-only. Recap/agent callers still send the header; a
+  // password-less server ignores it.
+  delete env.OPENCODE_SERVER_PASSWORD;
+  delete env.OPENCODE_SERVER_USERNAME;
+  env[OWNED_ENV] = "1";
+  return env;
+}
+
+interface ServeProcess {
+  pid: number;
+  ppid: number;
+  cmd: string;
+  port: number;
+}
+
+async function listDevHubOpenCodeServes(): Promise<ServeProcess[]> {
+  if (process.platform === "win32") return [];
+  let stdout: string;
+  try {
+    ({ stdout } = await execExternal("ps", ["-ax", "-o", "pid=,ppid=,command="], {
+      timeoutMs: 4_000,
+      label: "opencode:orphan-scan",
+    }));
+  } catch {
+    return [];
+  }
+  const found: ServeProcess[] = [];
+  for (const line of stdout.split(/\r?\n/)) {
+    const match = line.trim().match(/^(\d+)\s+(\d+)\s+(.*)$/);
+    if (!match) continue;
+    const cmd = match[3];
+    const argv = cmd.match(DEVHUB_SERVE_ARGV);
+    if (!argv) continue;
+    const servePort = Number.parseInt(argv[1], 10);
+    if (!Number.isFinite(servePort)) continue;
+    found.push({
+      pid: Number.parseInt(match[1], 10),
+      ppid: Number.parseInt(match[2], 10),
+      cmd,
+      port: servePort,
+    });
+  }
+  return found;
+}
+
+/**
+ * Kill leaked DevHub `opencode serve` processes.
+ *
+ * Dashboard restarts drop the in-memory child handle (ppid 1). Webpack HMR
+ * drops the handle while next-server is still the parent (`process.pid`).
+ * Anyone else's OpenCode is neither.
+ */
+export async function reapOrphanOpenCodeServers(
+  log: (msg: string) => void = () => undefined,
+  keepPort?: number | null,
+): Promise<number[]> {
+  const killed: number[] = [];
+  for (const proc of await listDevHubOpenCodeServes()) {
+    if (keepPort != null && proc.port === keepPort) continue;
+    if (child?.pid === proc.pid) continue;
+    if (PINNED_PORT_SET.has(proc.port)) continue;
+    if (proc.ppid !== 1 && proc.ppid !== process.pid) continue;
+    try {
+      process.kill(proc.pid, SERVE_KILL_SIGNAL);
+      killed.push(proc.pid);
+    } catch {
+      /* already gone */
+    }
+  }
+  if (killed.length > 0) {
+    log(`reaped orphan OpenCode (pids ${killed.join(",")})`);
+  }
+  return killed;
+}
+
+export function stopDevHubOpenCode(): void {
+  if (child?.pid) {
+    try {
+      child.kill(SERVE_KILL_SIGNAL);
+    } catch {
+      /* already gone */
+    }
+  }
+  child = null;
+  port = null;
+}
+
+let exitCleanupRegistered = false;
+
+/** Take our server down with the dashboard instead of orphaning it to launchd. */
+function registerExitCleanup(): void {
+  if (exitCleanupRegistered) return;
+  exitCleanupRegistered = true;
+  // `exit` handlers must be synchronous — process.kill is.
+  process.once("exit", stopDevHubOpenCode);
+}
+
+/**
+ * Start (or reuse) DevHub's own OpenCode for session recap. Always an ephemeral
+ * loopback port — never 1338/4096, never exported as OPENCODE_PORT.
+ */
+export async function ensureDevHubOpenCode(log: (msg: string) => void = () => undefined): Promise<number> {
+  if (port != null && (await canConnect(port, BIND_HOST))) {
+    return port;
+  }
+  // Two tabs hitting /api/opencode/listen at once must not spawn two servers,
+  // one of which nobody ever holds a handle to.
+  starting ??= startOpenCode(log).finally(() => {
+    starting = null;
+  });
+  return starting;
+}
+
+async function startOpenCode(log: (msg: string) => void): Promise<number> {
+  stopDevHubOpenCode();
+  await reapOrphanOpenCodeServers(log);
+
+  const binary = resolveOpenCodeBinary();
+  const nextPort = await reserveEphemeralPort(BIND_HOST);
+  log(`starting OpenCode on ephemeral port ${nextPort}`);
+
+  const spawned = localOps.spawn(binary, ["serve", "--port", String(nextPort), "--hostname", BIND_HOST], {
+    stdio: "ignore",
+    env: opencodeSpawnEnv(),
+  });
+
+  const started = await new Promise<boolean>((resolve) => {
+    let settled = false;
+    const finish = (value: boolean): void => {
+      if (settled) return;
+      settled = true;
+      resolve(value);
+    };
+    // spawn() itself can hang (lock contention from leaked serves) without
+    // ever emitting spawn/error/close — that used to wedge `starting` forever
+    // and leave the tab on "Starting OpenCode…".
+    const watchdog = setTimeout(() => {
+      log(`opencode spawn timed out on port ${nextPort}`);
+      finish(false);
+    }, SPAWN_WAIT_MS);
+    const done = (value: boolean): void => {
+      clearTimeout(watchdog);
+      finish(value);
+    };
+    spawned.once("error", (err) => {
+      log(`opencode spawn error: ${err.message}`);
+      done(false);
+    });
+    spawned.once("spawn", () => {
+      void waitForPortListening(nextPort, SPAWN_WAIT_MS, BIND_HOST).then(done);
+    });
+    spawned.once("close", () => done(false));
+  });
+
+  if (!started && !(await canConnect(nextPort, BIND_HOST))) {
+    try {
+      spawned.kill(SERVE_KILL_SIGNAL);
+    } catch {
+      /* already gone */
+    }
+    throw new Error(`OpenCode did not start on ephemeral port ${nextPort}`);
+  }
+
+  child = spawned;
+  port = nextPort;
+  registerExitCleanup();
+  spawned.once("exit", () => {
+    if (port === nextPort) {
+      child = null;
+      port = null;
+    }
+  });
+  return nextPort;
+}

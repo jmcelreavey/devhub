@@ -19,8 +19,8 @@ When the user says "devhub" without qualifying, infer from cwd or ask: implement
 
 ## Core Expertise
 
-- `dashboard/` — Next.js app, API routes, managed catalog UI, script runner.
-- `mcp-servers/devhub-server/` — stdio MCP server (`mcp/shared/devhub.json`).
+- `apps/ui/` — Next.js app, API routes, managed catalog UI, script runner.
+- `packages/mcp/` — stdio MCP server (`mcp/shared/devhub.json`).
 - `skills/shared/` — DevHub-owned skills; merged at sync with optional ai-tools upstream.
 - `agents/shared/` — subagent markdown synced to Cursor, Codex, OpenCode, and other tool dirs.
 - `persona/` — shared persona layers synced into root `AGENTS.md` and tool configs.
@@ -35,8 +35,8 @@ When the user says "devhub" without qualifying, infer from cwd or ask: implement
 
 ```text
 devhub/  (or devhub-private/)
-  dashboard/                  # Next.js UI + lib/* sync/collect/validate
-  mcp-servers/devhub-server/    # stdio MCP server package
+  apps/ui/                  # Next.js UI + lib/* sync/collect/validate
+  packages/mcp/                 # stdio MCP server package
   skills/shared/                # shared skills (SKILL.md per folder)
   agents/shared/                # shared subagents (*.md)
   persona/                      # identity (L0) + shared-persona (L1); L2 is the deep-preferences skill
@@ -55,7 +55,7 @@ Load `devhub-mcp` for tool details. Summary:
 | Tier | Needs dashboard? | Examples |
 | --- | --- | --- |
 | **Filesystem-backed** | No | `notes_*`, `docs_*`, `tasks_*`, `diagrams_*`, `appraisal_*`, `tags_*` |
-| **Dashboard-backed** | Yes (`npm run dev`) | `status_*`, `scripts_*`, `briefing_get`, `prs_*`, `jira_*`, `repos_*`, `share_*`, `search`, `agents_list`, `skills_list` |
+| **Dashboard-backed** | Yes (`npm run dev`) | `status_*`, `scripts_*`, `prs_*`, `jira_*`, `repos_*`, `share_*`, `search`, `agents_list`, `skills_list` |
 
 - The dashboard is discovered from `~/.config/devhub/dashboard.json` (primary instance only), falling back to `http://localhost:1337`; `DEVHUB_BASE_URL` pins it.
 - Dashboard-backed tools return a clear error when the dashboard is down — start the dev server and retry.
@@ -112,7 +112,7 @@ Cross-entity edges use `shared/entity-note/`. Notes store outbound refs in `## L
 
 ## Plugin Architecture
 
-A checkout plugin (`team-tools`, for example) materializes into `dashboard/` on `predev`. Files like `dashboard/lib/team-ops.ts` are **copies** — edit `~/Developer/team-tools/dashboard/`, not the materialized path. Quick check: `git ls-files -- <path>` — empty means plugin-owned.
+A checkout plugin (`team-tools`, for example) materializes into `apps/ui/` on `predev`. Files like `apps/ui/lib/team-ops.ts` are **copies** — edit `~/Developer/team-tools/apps/ui/`, not the materialized path. Quick check: `git ls-files -- <path>` — empty means plugin-owned.
 
 ## Verification Commands
 
@@ -122,7 +122,7 @@ Run from repo root unless a narrower check is enough:
 npm run lint
 npm run typecheck
 npm run test
-npm run verify    # lint + typecheck + test + production build
+npm run verify    # lint + typecheck + test; CI checks the production build
 ```
 
 ## Current Platform Notes (keep fresh)
@@ -154,7 +154,7 @@ npm run verify    # lint + typecheck + test + production build
 
 - Explain simply: answer first, short practical paragraphs, exact technical nouns.
 - All prose written on the user's behalf, including tasks, tickets, notes, and PR descriptions: load `my-voice` (`full-voice`). Preserve technical facts and required formats.
-- Prefer reading `dashboard/lib/*`, `mcp-servers/devhub-server/src/`, and tests over guessing sync behavior.
+- Prefer reading `apps/ui/lib/*`, `packages/mcp/src/`, and tests over guessing sync behavior.
 - Call out which paths are repo catalog vs local-only vs ai-tools upstream vs plugin-materialized.
-- Keep diffs minimal; match existing TypeScript and test patterns in `dashboard/`.
+- Keep diffs minimal; match existing TypeScript and test patterns in `apps/ui/`.
 - Never commit secrets, tokens, or machine-local paths into shared catalog files.

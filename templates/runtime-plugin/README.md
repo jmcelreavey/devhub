@@ -2,6 +2,12 @@
 
 Copy this directory into its own GitHub repository. Paste that repository's URL into Plugins → Add from GitHub, review the commit and permissions, then choose **Trust and enable**. Open its page from the plugin details. New DevHub-managed agent sessions receive its MCP endpoint.
 
+To try a local bundle, run `npm run plugins -- add-runtime /path/to/plugin` from
+DevHub. Review the permissions and hashes, then repeat the command with the printed
+`--trust <plan-digest>`. This installs an approved snapshot and registers it immediately;
+there is no dashboard rebuild. Disable or remove it from Plugins. An existing
+registration with the same name is kept and the install refuses to replace it.
+
 `worker.mjs` is a portable, dependency-free prebuilt bundle. DevHub starts it with the bundled Node, writes a single JSON request to stdin and expects one JSON value on stdout. Pages return an HTML string, APIs return JSON, and MCP requests return a JSON-RPC response (or `null` for notifications). The process must exit within 30 seconds. Do not log to stdout.
 
 The page runs in a sandboxed frame. It can call only declared plugin APIs by sending `{ type: "devhub:api", id, path, method, body? }` to its parent. Replies have `{ type: "devhub:result", id, result?, error? }`. Validate `event.source === parent`. Core APIs and Tauri commands are not exposed.

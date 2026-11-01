@@ -1,0 +1,47 @@
+"use client";
+
+import Link from "@/lib/navigation";
+import { TrendingUp } from "lucide-react";
+import { useLive } from "@/lib/hooks/use-fetch";
+import { buildEvolutionHeadline } from "../../../../packages/shared/ui-lib/capability/headline";
+import type { CapabilityDiff } from "../../../../packages/shared/ui-lib/capability/types";
+
+interface RadarPayload {
+  diff: CapabilityDiff | null;
+}
+
+/**
+ * Compact one-line "engineering evolution" banner for the top of /repos.
+ * Reads the latest Capability Radar diff and, when something changed since the
+ * previous scan, links through to the Radar tab. Renders nothing when there's no
+ * snapshot yet or no changes — it should never add noise to a steady week.
+ */
+export function EvolutionStrip() {
+  const { data } = useLive<RadarPayload>("/api/capability/radar", {
+    refreshInterval: 0,
+    revalidateOnFocus: false,
+  });
+  const diff = data?.diff ?? null;
+  if (!diff || !diff.fromId) return null;
+  if (diff.added.length === 0 && diff.spread.length === 0) return null;
+
+  // Same summary the weekly digest uses, so the strip and /radar never drift.
+  const headline = buildEvolutionHeadline(diff);
+
+  return (
+    <Link
+      href="/repos?view=radar"
+      className="card card-body mb-3 flex items-center gap-3 no-underline evolution-strip"
+      style={{ textDecoration: "none" }}
+    >
+      <TrendingUp size={15} className="shrink-0 text-accent" aria-hidden />
+      <div className="flex-1 min-w-0 text-sm truncate text-text">
+        <span className="text-text-subtle">This week: </span>
+        {headline}
+      </div>
+      <span className="text-xs shrink-0 text-accent">
+        Open Radar <span className="evolution-arrow">→</span>
+      </span>
+    </Link>
+  );
+}

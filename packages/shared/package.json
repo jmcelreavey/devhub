@@ -1,0 +1,19 @@
+{
+  "name": "@devhub/shared-actions",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@blocknote/core": "^0.50.0",
+    "@devhub/qa": "0.1.5",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "esbuild": "^0.28.2",
+    "typescript": "^5",
+    "vitest": "^4.1.5"
+  }
+}

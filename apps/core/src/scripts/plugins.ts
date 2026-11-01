@@ -1,0 +1,204 @@
+#!/usr/bin/env tsx
+import os from "node:os";
+import path from "node:path";
+import { pathToFileURL } from "node:url";
+import {
+  cancelOperation,
+  pluginContext,
+  startPrepare,
+  waitForOperation,
+  type PluginContext,
+} from "../lib/plugins/operations";
+import { registerPlugin, setPluginEnabled } from "../lib/plugins/registry-write";
+import { expandHome } from "../lib/plugins/registry";
+import { aliasHome } from "../lib/plugins/runtime";
+import { renderPluginTemplate, writePluginTemplate, type TemplateOptions } from "../lib/plugins/templates";
+import { describeRegistrations } from "../lib/plugins/views";
+import { reviewLocalRuntime } from "../lib/plugins/local-runtime";
+
+const usage = [
+  "Usage:",
+  "  npm run plugins -- add <path>",
+  "  npm run plugins -- add-runtime <path> [--trust <plan-digest>]",
+  "  npm run plugins -- enable <name>",
+  "  npm run plugins -- disable <name>",
+  "  npm run plugins -- list [--all] [--json]",
+  "  npm run plugins -- new <name> --out <path> [--dry-run] [--description <text>]",
+  "  npm run plugins -- add-from-url <https://github.com/owner/repo>",
+].join("\n");
+
+export interface CliIo {
+  stdout: (chunk: string) => void;
+  stderr: (chunk: string) => void;
+}
+
+/** `npm --prefix` changes the working directory; paths still mean where the person ran the command. */
+function callerPath(value: string, env: NodeJS.ProcessEnv): string {
+  return path.resolve(env.INIT_CWD ?? process.cwd(), value);
+}
+
+export async function runPluginsCli(argv: string[], io: CliIo, env: NodeJS.ProcessEnv = process.env): Promise<number> {
+  const [command, ...rest] = argv;
+  try {
+    if (command === "list") return listCommand(rest, io, env);
+    if (command === "new") return await newCommand(rest, io, env);
+    if (command === "add-from-url") return await urlCommand(rest, io, env);
+    if (command === "add-runtime") return await runtimeReviewCommand(rest, io, env);
+    if (command === "add" || command === "enable" || command === "disable") {
+      if (rest.length !== 1 || !rest[0]) throw new Error(usage);
+      return await mutate(command, rest[0], io, env);
+    }
+    throw new Error(usage);
+  } catch (err) {
+    io.stderr(`${err instanceof Error ? err.message : String(err)}\n`);
+    return 1;
+  }
+}
+
+/** Local runtime installs use the same reviewed snapshot and receipt as GitHub installs. */
+async function runtimeReviewCommand(rest: string[], io: CliIo, env: NodeJS.ProcessEnv): Promise<number> {
+  if (!rest[0] || !(rest.length === 1 || rest.length === 3 && rest[1] === "--trust" && /^[a-f0-9]{64}$/.test(rest[2]))) throw new Error(usage);
+  const ctx = pluginContext({ env });
+  const localPath = rest[0] === "~" || rest[0].startsWith("~/")
+    ? expandHome(rest[0], ctx.home) : callerPath(rest[0], env);
+  const result = await reviewLocalRuntime(ctx, localPath, rest[2], (preview) => {
+    io.stdout(`Review ${preview.plugin?.name} ${preview.plugin?.version}\nHigh risk: runtime code runs with your user account. Only trust code you have reviewed.\n`);
+    if (preview.replacement) {
+      const replacement = preview.replacement;
+      io.stdout(`\nReplace ${replacement.managed ? "managed snapshot" : "legacy source registration"}\n  Keep plugin ID: ${replacement.id}\n  Keep state: ${replacement.enabled ? "enabled" : "disabled"}\n  Keep previous source: ${replacement.path}\n  Version: ${replacement.previousVersion} → ${preview.plugin?.version}\n  Previous approved tree SHA-256: ${replacement.previousTreeHash ?? "No approved runtime snapshot"}\n  Candidate tree SHA-256: ${replacement.nextTreeHash}\n  Data and config paths stay with the same plugin ID.\n\nRuntime changes\n`);
+      for (const change of replacement.changes) io.stdout(`  ${change}\n`);
+      if (!replacement.changes.length) io.stdout("  No runtime manifest changes. Review the tree hash for other changed files.\n");
+    }
+    for (const group of preview.inventory) {
+      io.stdout(`\n${group.kind}\n`);
+      for (const entry of group.entries) io.stdout(`  ${entry}\n`);
+      if (group.note) io.stdout(`  ${group.note}\n`);
+      if (group.more) io.stdout(`  ${group.more} more entries\n`);
+    }
+    if (!rest[2]) {
+      io.stdout(`\nNothing was enabled. To trust these inputs, repeat this command with:\n  --trust ${preview.planDigest}\nChanged inputs or registry settings require another review. Skills and agents are not published by this command.\n`);
+      return;
+    }
+  });
+  if (rest[2]) io.stdout(`\n${result.message}. Open it in Plugins; no dashboard rebuild is needed.\n`);
+  return 0;
+}
+
+async function mutate(command: "add" | "enable" | "disable", value: string, io: CliIo, env: NodeJS.ProcessEnv): Promise<number> {
+  const home = os.homedir();
+  if (command === "add") {
+    const localPath = value === "~" || value.startsWith("~/") ? value : callerPath(value, env);
+    const plugin = await registerPlugin(localPath, home, env);
+    io.stdout(`Enabled ${plugin.name}: ${plugin.path}\n`);
+  } else {
+    const plugin = await setPluginEnabled(value, command === "enable", home, env);
+    io.stdout(`${plugin.enabled ? "Enabled" : "Disabled"} ${plugin.name}: ${plugin.path}\n`);
+  }
+  const immediate = command === "disable" ? "Guarded operations can stop immediately after disabling.\n" : "";
+  io.stdout(`Saved ${pluginContext({ env }).paths.registryPath}\n${immediate}Restart the dashboard to apply remaining changes. Use Skills → Sync to publish the plugin's skills, agents and MCP definitions to your AI tools.\n`);
+  return 0;
+}
+
+function listCommand(rest: string[], io: CliIo, env: NodeJS.ProcessEnv): number {
+  const flags = new Set(rest);
+  if ([...flags].some((flag) => flag !== "--all" && flag !== "--json")) throw new Error(usage);
+  const all = flags.has("--all");
+  const ctx = pluginContext({ env });
+  const { facts, problem } = describeRegistrations(ctx);
+  if (problem) io.stderr(`${problem}\n`);
+  // Without --all this is the list it has always been: enabled plugins that load.
+  const shown = facts.filter(({ item }) => all || item.state === "enabled" || item.state === "local");
+
+  if (flags.has("--json")) {
+    const rows = shown.map(({ item, row, abs, version }) => ({
+      name: item.name,
+      version,
+      state: item.state,
+      enabled: row.enabled,
+      managed: item.managed,
+      attention: item.attention,
+      // Never the full home path, and never credentials: a source is a public GitHub address or a folder alias.
+      path: aliasHome(abs, ctx.home),
+      source: row.url,
+    }));
+    io.stdout(`${JSON.stringify(rows, null, 2)}\n`);
+    return 0;
+  }
+  if (!shown.length) io.stdout(all ? "No plugins.\n" : "No enabled plugins.\n");
+  for (const { item, abs, version } of shown) {
+    io.stdout(all
+      ? `${item.name}  ${item.stateLabel.toLowerCase()}${item.attention ? ` (${item.attention})` : ""}  ${abs}\n`
+      : `${item.name}  ${version ?? "unknown"}  ${abs}\n`);
+  }
+  return 0;
+}
+
+async function newCommand(rest: string[], io: CliIo, env: NodeJS.ProcessEnv): Promise<number> {
+  const name = rest[0];
+  if (!name || name.startsWith("--")) throw new Error(usage);
+  const out = flagValue(rest, "--out");
+  if (!out) throw new Error("new requires --out <path>");
+  for (let i = 1; i < rest.length; i++) {
+    if (rest[i] === "--dry-run") continue;
+    if (rest[i] === "--out" || rest[i] === "--description") { i++; continue; }
+    throw new Error(usage);
+  }
+  const dest = callerPath(out, env);
+  const opts: TemplateOptions = {
+    name,
+    description: flagValue(rest, "--description"),
+  };
+  if (rest.includes("--dry-run")) {
+    const files = renderPluginTemplate(opts);
+    io.stdout(`Would create ${files.length} files in ${dest}\n`);
+    for (const file of files) io.stdout(`${file.path}\n`);
+    return 0;
+  }
+  const written = await writePluginTemplate(dest, opts);
+  io.stdout(`Created ${dest}\n`);
+  for (const file of written) io.stdout(`${file}\n`);
+  io.stdout("Nothing was registered or published. To try it here: npm run plugins -- add-runtime " + dest + "\n");
+  return 0;
+}
+
+/** Reviews a repository the way the Plugins page does, and stops there: confirming is an in-app step. */
+async function urlCommand(rest: string[], io: CliIo, env: NodeJS.ProcessEnv): Promise<number> {
+  const url = rest[0];
+  if (!url || rest.length !== 1) throw new Error(usage);
+  const ctx: PluginContext = pluginContext({ env });
+  const started = await startPrepare(ctx, url);
+  const view = await waitForOperation(ctx, started.id, 120_000);
+  try {
+    if (view.message) io.stdout(`${view.message}\n`);
+    if (view.preview?.body) io.stdout(`${view.preview.body}\n`);
+    for (const issue of view.issues) io.stdout(`  ${issue.file}${issue.field ? ` ${issue.field}` : ""}: ${issue.message}\n`);
+    if (view.state === "ready" && view.preview?.canApply) {
+      const { skills, agents } = view.preview.contributions;
+      io.stdout(`Review ready for ${view.preview.plugin?.name ?? "plugin"}: ${skills.length} skills, ${agents.length} agents. Nothing was enabled.\n`);
+      return 0;
+    }
+    io.stdout("Nothing was registered.\n");
+    return 1;
+  } finally {
+    // A review belongs to this process; leave nothing downloaded behind.
+    await cancelOperation(ctx, view.id).catch(() => undefined);
+  }
+}
+
+function flagValue(argv: string[], flag: string): string | undefined {
+  const index = argv.indexOf(flag);
+  if (index < 0) return undefined;
+  const value = argv[index + 1];
+  if (!value || value.startsWith("--")) throw new Error(`${flag} needs a value`);
+  return value;
+}
+
+const invokedDirectly = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
+if (invokedDirectly) {
+  runPluginsCli(process.argv.slice(2), {
+    stdout: (chunk) => process.stdout.write(chunk),
+    stderr: (chunk) => process.stderr.write(chunk),
+  }).then((code) => {
+    process.exitCode = code;
+  });
+}

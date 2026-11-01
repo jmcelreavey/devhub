@@ -50,13 +50,13 @@ Only start an environment when implementation or verification needs it.
    `terminal_propose_run` with `kind: "upstart"` and a useful label. Inspect
    `terminal_proposal_status` and `terminal_tail` until the app is ready.
    Preserve other running services; choose a free port when needed.
-4. For browser QA, check that the task preview URL serves this checkout, or
-   configure `upstarts/<repo>/preview.json` using DevHub's existing preview
-   schema and a command that invokes the stored upstart. Start preparation
-   must respect the assigned preview port: pass `{port}` through an explicit,
-   validated upstart argument such as `--port`, rather than relying on inherited
-   `PORT` (upstarts clear DevHub's inherited port). Do not invent preview configuration
-   keys or treat a Metro endpoint as a browser-rendered native app.
+4. For automatic browser QA, build an isolated static site inside the selected
+   checkout, then configure `upstarts/<repo>/preview.json` with
+   `{"autoStart":true,"kind":"static","directory":"dist","path":"/"}`.
+   Check that the directory contains the build and no real data or credentials.
+   DevHub holds the listener for QA. Command-based `dev` and `expo-web`
+   previews, task URLs and Metro endpoints aren't automatic QA targets.
+   Run those manually only against a known safe preview.
 5. Save the checkout, branch/base SHA, upstart path, terminal session, URL/port
    and readiness check in the task handoff. Subsequent stages validate and
    reuse this environment. Keep the server in the dock while the task needs it.

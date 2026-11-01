@@ -64,6 +64,23 @@ Read the note first and keep what's there. Add or replace:
 Write with `notes_write` (full note) — never drop existing sections. Keep it
 short: the implementer reads this cold.
 
+For a UI task, use `task_note_update` with `op: "set_qa_scenario"` to declare
+up to five specific, non-sensitive text or visibility assertions for the
+preview's initial page. Pass `qaScenario: {goals: [{description, assertion,
+selector, expected}]}`; omit `expected` for `visible`. The scoped planning
+peer accepts the same `qaScenario` via `task_plan_update`. Set
+`baselineRequired: true` during planning only when before evidence is needed.
+Do not supply URLs, actions or credentials; preserve any named QA scenario.
+Only declare one for a known non-production preview with test data and no real
+submissions or destructive writes. Loading a page can change data; a selector
+isn't a safety boundary. Auto QA uses an opt-in DevHub-managed preview, not a
+task URL; that provenance does not isolate page scripts or network requests.
+Model-assisted QA may send the page URL, text and screenshots;
+keep private data and credentials out of the preview and scenario. If safety is
+unknown, leave QA unset and record the safety gap and manual check. If no
+initial-page assertion is justified, record the manual check instead of
+inventing one. A pass covers only those assertions.
+
 ## 4. Ready, or not
 
 - If `## Open questions` has unchecked items, **stop**: leave the task as a

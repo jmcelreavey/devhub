@@ -43,8 +43,6 @@ permissions:
   contents: read
 
 env:
-  # verify runs tsc before build; skip Next's duplicate TS pass (see next.config.ts).
-  DEVHUB_SKIP_NEXT_TYPECHECK: "true"
 
 jobs:
   # The build matrix lives here, not in `build`, because a job-level `if:` cannot
@@ -63,7 +61,7 @@ jobs:
           RELEASE_VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.version || github.ref_name }}
           DRY_RUN: ${{ github.event_name == 'workflow_dispatch' }}
         run: |
-          if ! node desktop/scripts/extract-release-notes.mjs "${RELEASE_VERSION#v}"; then
+          if ! node apps/desktop/scripts/extract-release-notes.mjs "${RELEASE_VERSION#v}"; then
             if [ "$DRY_RUN" = "true" ]; then
               echo "::warning::No changelog entry for this dry-run version. Update CHANGELOG before a tagged release."
             else
@@ -131,15 +129,15 @@ jobs:
         with:
           node-version-file: .nvmrc
           cache: npm
-          cache-dependency-path: dashboard/package-lock.json
+          cache-dependency-path: package-lock.json
 
       - name: Setup safe-chain
         run: |
           npm i -g @aikidosec/safe-chain@1.1.10
           safe-chain setup-ci
 
-      - name: Install dashboard dependencies
-        run: npm ci --prefix dashboard
+      - name: Install workspace dependencies
+        run: npm ci
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -151,12 +149,12 @@ jobs:
       - name: Cache Rust
         uses: swatinem/rust-cache@v2
         with:
-          workspaces: desktop/src-tauri -> target
+          workspaces: apps/desktop/src-tauri -> target
           cache-on-failure: true
           key: ${{ matrix.target }}
 
       # This list is not guesswork — it is what the Ubuntu 22.04 container in
-      # desktop/docker/linux-builder.Dockerfile actually needed to produce a
+      # apps/desktop/docker/linux-builder.Dockerfile actually needed to produce a
       # working AppImage. `libayatana-appindicator3-dev` rather than the old
       # `libappindicator3-dev`, which is a transitional package on 22.04.
       - name: Install Linux build dependencies
@@ -194,7 +192,7 @@ jobs:
       # One version source, written into Tauri and Cargo. The About dialog and
       # /api/desktop/health read it at runtime, so they cannot drift.
       - name: Inject version
-        run: node desktop/scripts/inject-version.mjs "${{ steps.version.outputs.version }}"
+        run: node apps/desktop/scripts/inject-version.mjs "${{ steps.version.outputs.version }}"
 
       # Cheap, and it runs on every platform in the matrix — the staging rules
       # these cover are platform-dependent, so a pass on macOS says nothing
@@ -202,18 +200,18 @@ jobs:
       - name: Test desktop scripts
         run: npm run desktop:test
 
-      - name: Stage bundle
-        run: node desktop/scripts/stage-all.mjs
+      - name: Stage core server and Vite assets
+        run: node apps/desktop/scripts/stage-all.mjs
         env:
           NODE_OPTIONS: --max-old-space-size=4096
           DEVHUB_SOURCE_COMMIT: ${{ inputs.source_commit }}
 
       # The gate. Runs before signing, because a signed leak cannot be recalled.
-      - name: Verify staged bundle
-        run: node desktop/scripts/verify-staging.mjs
+      - name: Verify staged payload provenance
+        run: node apps/desktop/scripts/verify-staging.mjs
 
       - name: Rust checks
-        working-directory: desktop/src-tauri
+        working-directory: apps/desktop/src-tauri
         run: |
           cargo fmt --check
           cargo clippy --all-targets -- -D warnings
@@ -279,14 +277,14 @@ jobs:
       # build, so it cannot be patched; but it finds `hdiutil` through PATH. This
       # puts a wrapper first on PATH that retries the detach with escalation
       # (mitigate, diskutil eject, detach -force) and logs timings. See
-      # desktop/scripts/hdiutil-resilient.sh. Apple Silicon keeps the stock tool.
+      # apps/desktop/scripts/hdiutil-resilient.sh. Apple Silicon keeps the stock tool.
       - name: Install resilient hdiutil (Intel DMG)
         if: matrix.target == 'x86_64-apple-darwin'
         shell: bash
         run: |
           shim_dir="$RUNNER_TEMP/devhub-hdiutil-shim"
           mkdir -p "$shim_dir"
-          install -m 0755 desktop/scripts/hdiutil-resilient.sh "$shim_dir/hdiutil"
+          install -m 0755 apps/desktop/scripts/hdiutil-resilient.sh "$shim_dir/hdiutil"
           echo "$shim_dir" >> "$GITHUB_PATH"
           echo "DEVHUB_DMG_LOG=$shim_dir/hdiutil-shim.log" >> "$GITHUB_ENV"
           echo "DEVHUB_HDIUTIL_SHIM=$shim_dir/hdiutil" >> "$GITHUB_ENV"
@@ -344,7 +342,7 @@ jobs:
           APPIMAGE_EXTRACT_AND_RUN: "1"
           NO_STRIP: "true"
         with:
-          projectPath: desktop
+          projectPath: apps/desktop
           configPath: src-tauri/tauri.conf.json
           args: ${{ matrix.args }}
           # No releaseId here: the publish job below does it once, after every
@@ -368,9 +366,9 @@ jobs:
             [ -d "$vol" ] || continue
             hdiutil detach "$vol" -force || true
           done
-          find desktop/src-tauri/target -type d -path '*release/bundle/dmg' -exec rm -rf {} + 2>/dev/null || true
+          find apps/desktop/src-tauri/target -type d -path '*release/bundle/dmg' -exec rm -rf {} + 2>/dev/null || true
           # create-dmg's scratch image, left beside the .app when it dies mid-way.
-          find desktop/src-tauri/target -path '*release/bundle/macos/rw.*.dmg' -delete 2>/dev/null || true
+          find apps/desktop/src-tauri/target -path '*release/bundle/macos/rw.*.dmg' -delete 2>/dev/null || true
 
       - name: Build, sign, and bundle (retry)
         id: build_retry
@@ -398,7 +396,7 @@ jobs:
           APPIMAGE_EXTRACT_AND_RUN: "1"
           NO_STRIP: "true"
         with:
-          projectPath: desktop
+          projectPath: apps/desktop
           configPath: src-tauri/tauri.conf.json
           args: ${{ matrix.args }}
           # No releaseId here: the publish job below does it once, after every
@@ -416,13 +414,13 @@ jobs:
 
       # Proves the thing that was just built actually runs, on the machine that
       # built it, against a temporary data directory. This is the check that
-      # catches a missing native module or a broken standalone trace *before*
+      # catches a missing native module or a broken core/Vite payload *before*
       # anyone downloads it. Cross-compiled artifacts skip it honestly rather
       # than pretending to test on the wrong architecture.
       - name: Self-test the built app
         if: matrix.target != 'x86_64-apple-darwin' || runner.arch == 'X64'
         shell: bash
-        run: node desktop/scripts/selftest.mjs --target "${{ matrix.target }}"
+        run: node apps/desktop/scripts/selftest.mjs --target "${{ matrix.target }}"
 
       # Ad-hoc builds need an intact bundle seal too. Gatekeeper acceptance
       # additionally needs a verified publisher and notarisation.
@@ -430,7 +428,7 @@ jobs:
         if: runner.os == 'macOS'
         shell: bash
         run: |
-          APP=$(find desktop/src-tauri/target -name "DevHub.app" -maxdepth 5 | head -1)
+          APP=$(find apps/desktop/src-tauri/target -name "DevHub.app" -maxdepth 5 | head -1)
           echo "Verifying $APP"
           # --deep because the bundle nests a Node runtime and a native .node
           # binding; an unsigned nested binary is a Gatekeeper failure that only
@@ -447,7 +445,7 @@ jobs:
         if: matrix.target == 'x86_64-apple-darwin'
         shell: bash
         run: |
-          dmgs=$(find desktop/src-tauri/target -path '*release/bundle/dmg/*.dmg')
+          dmgs=$(find apps/desktop/src-tauri/target -path '*release/bundle/dmg/*.dmg')
           [ -n "$dmgs" ] || { echo "::error::no DMG was produced"; exit 1; }
           echo "$dmgs" | while IFS= read -r dmg; do
             echo "Verifying $dmg"
@@ -471,12 +469,12 @@ jobs:
           name: devhub-${{ matrix.target }}
           if-no-files-found: error
           path: |
-            desktop/src-tauri/target/**/release/bundle/dmg/*.dmg
-            desktop/src-tauri/target/**/release/bundle/macos/*.app.tar.gz
-            desktop/src-tauri/target/**/release/bundle/macos/*.app.tar.gz.sig
-            desktop/src-tauri/target/**/release/bundle/appimage/*.AppImage
-            desktop/src-tauri/target/**/release/bundle/appimage/*.AppImage.sig
-            desktop/src-tauri/target/**/release/bundle/deb/*.deb
+            apps/desktop/src-tauri/target/**/release/bundle/dmg/*.dmg
+            apps/desktop/src-tauri/target/**/release/bundle/macos/*.app.tar.gz
+            apps/desktop/src-tauri/target/**/release/bundle/macos/*.app.tar.gz.sig
+            apps/desktop/src-tauri/target/**/release/bundle/appimage/*.AppImage
+            apps/desktop/src-tauri/target/**/release/bundle/appimage/*.AppImage.sig
+            apps/desktop/src-tauri/target/**/release/bundle/deb/*.deb
 
   # Windows is a native window in front of a server that runs inside WSL2
   # (docs/architecture/desktop-windows-wsl.md). The server half is Linux, so it
@@ -498,20 +496,20 @@ jobs:
         with:
           node-version-file: .nvmrc
           cache: npm
-          cache-dependency-path: dashboard/package-lock.json
+          cache-dependency-path: package-lock.json
 
       - name: Setup safe-chain
         run: |
           npm i -g @aikidosec/safe-chain@1.1.10
           safe-chain setup-ci
 
-      - name: Install dashboard dependencies
-        run: npm ci --prefix dashboard
+      - name: Install workspace dependencies
+        run: npm ci
 
       # Runs verify-staging internally, so the leak gate applies to this
       # payload exactly as it does to the other platforms' bundles.
       - name: Build WSL payload
-        run: node desktop/scripts/stage-wsl-payload.mjs
+        run: node apps/desktop/scripts/stage-wsl-payload.mjs
         env:
           NODE_OPTIONS: --max-old-space-size=4096
           DEVHUB_SOURCE_COMMIT: ${{ inputs.source_commit }}
@@ -519,7 +517,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: wsl-payload
-          path: desktop/staging/wsl/
+          path: apps/desktop/staging/wsl/
           if-no-files-found: error
 
   windows:
@@ -538,14 +536,14 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: wsl-payload
-          path: desktop/staging/wsl
+          path: apps/desktop/staging/wsl
 
       - uses: dtolnay/rust-toolchain@stable
 
       - name: Cache Rust
         uses: swatinem/rust-cache@v2
         with:
-          workspaces: desktop/src-tauri -> target
+          workspaces: apps/desktop/src-tauri -> target
           cache-on-failure: true
           key: x86_64-pc-windows-msvc
 
@@ -567,18 +565,18 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Inject version
-        run: node desktop/scripts/inject-version.mjs "${{ steps.version.outputs.version }}"
+        run: node apps/desktop/scripts/inject-version.mjs "${{ steps.version.outputs.version }}"
 
       # tauri.conf.json names icons and resource dirs the Windows overlay drops
       # from the bundle; tauri-build still wants the icons on disk.
       - name: Stage icons
         shell: bash
         run: |
-          node -e 'import("./desktop/scripts/stage-icons.mjs").then(m=>m.stageIcons())'
-          mkdir -p desktop/staging/server desktop/staging/services desktop/staging/resources desktop/src-tauri/binaries
+          node -e 'import("./apps/desktop/scripts/stage-icons.mjs").then(m=>m.stageIcons())'
+          mkdir -p apps/desktop/staging/server apps/desktop/staging/services apps/desktop/staging/resources apps/desktop/src-tauri/binaries
 
       - name: Rust checks
-        working-directory: desktop/src-tauri
+        working-directory: apps/desktop/src-tauri
         run: |
           cargo fmt --check
           node ../scripts/test-windows.mjs
@@ -599,17 +597,17 @@ jobs:
           if [ -n "$KEY" ]; then
             printf 'TAURI_SIGNING_PRIVATE_KEY<<__DEVHUB_EOF__\n%s\n__DEVHUB_EOF__\n' "$KEY" >> "$GITHUB_ENV"
             [ -n "$KEY_PASSWORD" ] && printf 'TAURI_SIGNING_PRIVATE_KEY_PASSWORD<<__DEVHUB_EOF__\n%s\n__DEVHUB_EOF__\n' "$KEY_PASSWORD" >> "$GITHUB_ENV"
-            echo '{"bundle":{"createUpdaterArtifacts":true}}' > desktop/src-tauri/updater-config.json
+            echo '{"bundle":{"createUpdaterArtifacts":true}}' > apps/desktop/src-tauri/updater-config.json
             echo "Updater signing enabled."
           else
-            echo '{}' > desktop/src-tauri/updater-config.json
+            echo '{}' > apps/desktop/src-tauri/updater-config.json
             echo "::warning::No TAURI_SIGNING_PRIVATE_KEY - building an installer with no updater artifacts."
           fi
 
       - name: Build and bundle
         uses: tauri-apps/tauri-action@v0
         with:
-          projectPath: desktop
+          projectPath: apps/desktop
           configPath: src-tauri/tauri.conf.json
           # tauri.windows.conf.json defaults updater artifacts off; the file
           # written above turns them on when there is a key to sign with.
@@ -621,12 +619,12 @@ jobs:
           name: devhub-x86_64-pc-windows-msvc
           if-no-files-found: error
           path: |
-            desktop/src-tauri/target/**/release/bundle/nsis/*-setup.exe
-            desktop/src-tauri/target/**/release/bundle/nsis/*-setup.exe.sig
+            apps/desktop/src-tauri/target/**/release/bundle/nsis/*-setup.exe
+            apps/desktop/src-tauri/target/**/release/bundle/nsis/*-setup.exe.sig
 
   # Installs the installer the `windows` job just built - the same artifact that
   # `publish` ships, not a second build - into a throwaway directory and starts
-  # it once. See desktop/scripts/windows-install-smoke.ps1 for the checks and
+  # it once. See apps/desktop/scripts/windows-install-smoke.ps1 for the checks and
   # docs/architecture/desktop-windows-wsl.md for what this does and does not cover.
   #
   # Cheap on purpose: no Rust, no Node, no payload build, no dependency install,
@@ -641,7 +639,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          sparse-checkout: desktop/scripts/windows-install-smoke.ps1
+          sparse-checkout: apps/desktop/scripts/windows-install-smoke.ps1
           sparse-checkout-cone-mode: false
 
       - uses: actions/download-artifact@v4
@@ -655,7 +653,7 @@ jobs:
           EXPECTED_VERSION: ${{ needs.windows.outputs.version }}
           SMOKE_WORK_DIR: ${{ runner.temp }}\devhub-smoke
         run: >
-          ./desktop/scripts/windows-install-smoke.ps1
+          ./apps/desktop/scripts/windows-install-smoke.ps1
           -Installer installer
           -ExpectedVersion $env:EXPECTED_VERSION
           -WorkDir $env:SMOKE_WORK_DIR
@@ -694,17 +692,17 @@ jobs:
       # both Macs ship an arch-less DevHub.app.tar.gz that would overwrite each
       # other. Flatten into dist/ and give the tarballs their arch.
       - name: Collect release assets
-        run: node desktop/scripts/collect-release-assets.mjs artifacts dist "${GITHUB_REF_NAME#v}"
+        run: node apps/desktop/scripts/collect-release-assets.mjs artifacts dist "${GITHUB_REF_NAME#v}"
 
       # latest.json is what installed clients poll. It is generated here rather
       # than by hand because a hand-written one with a wrong signature or URL
       # silently breaks updates for everyone already on the previous version —
       # and they have no way to tell you.
       - name: Build updater manifest
-        run: node desktop/scripts/build-updater-manifest.mjs dist "${GITHUB_REF_NAME#v}"
+        run: node apps/desktop/scripts/build-updater-manifest.mjs dist "${GITHUB_REF_NAME#v}"
 
       - name: Extract release body
-        run: node desktop/scripts/extract-release-notes.mjs "${GITHUB_REF_NAME#v}" CHANGELOG.md dist/release-notes.md
+        run: node apps/desktop/scripts/extract-release-notes.mjs "${GITHUB_REF_NAME#v}" CHANGELOG.md dist/release-notes.md
 
       - name: Publish
         uses: softprops/action-gh-release@v2

@@ -80,12 +80,17 @@ notes/
 tasks/
 reps/
 collections/
+upstarts/
+diagrams/
+private/
 .devhub/
-dashboard/.env.local
+apps/ui/.env.local
 persona/identity.txt
 skills/shared/my-voice/writing-style.md
 skills/shared/my-voice/learned-voice.md
 TEMPLATE_AND_PLUGIN_PLAN.md
+MCP_PARITY_AUDIT.md
+ONE_TIME_SHARE_PLAN.md
 scripts/make-public-seed.sh
 ```
 
@@ -115,7 +120,7 @@ git diff --binary upstream/main main -- "${PUBLIC_PATHS[@]}" | git apply --index
 git diff --cached -U0 | grep -E '^\+' | grep -vE '^\+\+\+' | bash scripts/scan-leaks.sh stdin
 git commit -m "chore: sync public catalog from private"
 # Prefer pushing via private's upstream remote (avoids dirty public local checkout):
-rm -rf dashboard/.next dashboard/.next-verify   # stale Next types break pre-push typecheck
+rm -rf apps/ui/.next apps/ui/.next-verify   # stale Next types break pre-push typecheck
 DEVHUB_SKIP_VERIFY=1 git push upstream HEAD:main   # leak scan already passed; public GHA verifies
 git checkout main
 bash scripts/devhub-backport-status.sh --set-watermark
@@ -149,8 +154,8 @@ bash ~/Developer/devhub-private/scripts/devhub-backport-status.sh --set-watermar
 ## Verification
 
 - Leak-scan public-safe added lines before any public push (`scripts/scan-leaks.sh`).
-- Private pre-push runs full dashboard verify on every `git push`, including pushes to `upstream`. Stale `dashboard/.next*` from private main will fail typecheck on a catch-up branch; clear those caches or set `DEVHUB_SKIP_VERIFY=1` only after leak scan passed, and rely on public GitHub Actions Verify.
-- For plugin changes, verify from a DevHub checkout after `sync_plugins`; the plugin repo does not build standalone.
+- Private pre-push runs full dashboard verify on every `git push`, including pushes to `upstream`. Stale `apps/ui/.next*` from private main will fail typecheck on a catch-up branch; clear those caches or set `DEVHUB_SKIP_VERIFY=1` only after leak scan passed, and rely on public GitHub Actions Verify.
+- For plugin changes, run the plugin repo's own checks, then review the new snapshot with `npm run plugins -- add-runtime <dir>` and verify through the host after trust.
 
 ## Rules
 

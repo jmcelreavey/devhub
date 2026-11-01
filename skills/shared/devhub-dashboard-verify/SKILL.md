@@ -27,7 +27,7 @@ appear there. Testing a UI fix against 1337 is testing production.
    ```bash
    lsof -nP -iTCP:1337 -sTCP:LISTEN
    # packaged: cwd is /Applications/DevHub.app/Contents/Resources/server
-   # webpack: cwd is this checkout's dashboard/, argv includes run-next-with-env.ts dev
+   # webpack: cwd is this checkout's apps/ui/, argv includes run-next-with-env.ts dev
    ```
 
 3. Start webpack on a **free** port (1337 is usually taken). Example:

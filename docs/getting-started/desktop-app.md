@@ -238,7 +238,7 @@ nothing unexpected appears in your `git status`.
 ## When something goes wrong
 
 **"Port 1337 is held by a leftover DevHub development server…"** A `npm run dev`
-or `next start` from your linked checkout is still listening. DevHub can stop
+or `npm run start` from your linked checkout is still listening. DevHub can stop
 *only* that verified listener and continue, or you can attach to it from
 **View → Attach to Dev Server…** instead.
 

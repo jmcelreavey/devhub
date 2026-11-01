@@ -6,8 +6,6 @@ icon: SquareKanban
 tags: [integrations]
 related:
   - guides/standup
-  - guides/plan-loop
-  - architecture/mcp-server
 ---
 
 # Jira
@@ -19,7 +17,7 @@ The Jira integration brings assigned tickets into DevHub and improves standup ge
 - Ticket list and status filters.
 - Today widget for assigned work.
 - Links from Jira keys in tasks.
-- Parent ticket keys on Jira and task rows; click a parent key to copy it. Right-click **Open in Jira** uses the ticket's browse URL through the desktop opener (`window.open` is a silent no-op in the webview).
+- Parent ticket keys on Jira and task rows; click a parent key to copy it.
 - Standup content based on recent ticket activity.
 
 ## Setup
@@ -34,7 +32,7 @@ Configure Jira from `/setup`.
 
 ## Jira Keys In Tasks
 
-When a task contains a key such as `DAD-1234`, DevHub can treat it as a Jira reference.
+When a task contains a key such as `XYZ-1234`, DevHub can treat it as a Jira reference.
 
 This helps with linking and standup generation.
 
@@ -54,7 +52,7 @@ The daily task list also offers **Add to Jira manually…**. The creation form:
 
 - Seeds the summary from task text (strips an existing linked key if present).
 - Lets you pick a parent: the linked ticket's parent when it has one, another key, or none.
-- Resolves the project from the selected key prefix, falling back to `PTF`.
+- Resolves the project from the selected key prefix, falling back to `ABC`.
 - Shows board, active sprint, assignee, and inherited **Team** from `GET /api/jira/meta` (pass `reference=<parentKey>` to inherit Team from the parent).
 - Optionally adds the issue to the active sprint.
 - Creates a **Task** or **Sub-task** (when a parent is set) via `POST /api/jira/issue`, assigns to you by default, and rewrites the task text with the new key.
@@ -86,21 +84,17 @@ When you complete or abandon a task that includes a Jira key, DevHub can prompt 
 | Route                                    | Purpose                                           |
 | ---------------------------------------- | ------------------------------------------------- |
 | `GET /api/jira/ticket/<key>/transitions` | Lists available transitions for the ticket        |
-| `POST /api/jira/ticket/<key>/transition` | Body: `{ transitionId }` (or `{ toStatusId }` for Undo). Applies immediately and answers `{ ok, key, from, to, undo, result }`. Same-origin. |
+| `POST /api/jira/ticket/<key>/transition` | Body: `{ transitionId }` (or `{ toStatusId }` for Undo). A person's click applies it and answers `{ ok, key, from, to, undo, proposal }`; an agent gets a `202` proposal to confirm |
 
-The prompt is optional — you can dismiss it without changing Jira. Picking a status from a chip, row menu or link moves the ticket at once and shows a toast with **Undo**. Your click is the approval and still lands in Recent actions. There is no separate approval-queue screen.
-
-Agents use MCP `jira_ticket_transition`. Omit `transitionId` to list options. Pass `confirm: true` with a `transitionId` to apply it immediately through the same route — there is no proposal queue. Without `confirm`, the tool refuses rather than moving the ticket. Check Jira before retrying a timeout. See [MCP Server](../architecture/mcp-server.md#integration-writes).
-
-When the new status name looks like Code Review / In Review / Ready for Review / Peer Review, DevHub also marks that ticket's linked **draft** PRs ready for review (same safety net as completing the task). See [Plan loop — Ready for review](../guides/plan-loop.md#ready-for-review).
+The prompt is optional — you can dismiss it without changing Jira. Picking a status from a chip, row menu or link moves the ticket at once and shows a toast with **Undo**. Agents can use the MCP tools `jira_ticket_transition` (moves the ticket with `confirm: true`) and `jira_ticket_assign` (assigns it, to you by default) (see [MCP Server](../architecture/mcp-server.md)).
 
 ## Ticket list and search
 
-Assigned tickets appear on **Work → Jira** (`/work`) and the legacy **`/tickets`** route (palette-only; same data). Both read `GET /api/jira/tickets` and sort by `updatedAt` descending.
+Assigned tickets appear on **Work → Jira** (`/work`). It reads `GET /api/jira/tickets` and sort by `updatedAt` descending.
 
 | Surface | Filters |
 | ------- | ------- |
-| `/tickets` | Status tabs: All, To Do, In Progress, In Review, Done — plus an `InlineSearch` row |
+| Work → Jira | Status tabs: All, To Do, In Progress, In Review, Done — plus an `InlineSearch` row |
 | Work → Jira | Same status grouping inside the Work shell; shares the Work search row |
 
 Search matches key, summary, status, priority, type, project, and assignee. Whitespace-separated terms are AND-ed (`PROJ auth` narrows). The search hint shows `{filtered} of {total}` while typing.

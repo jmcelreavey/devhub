@@ -12,9 +12,9 @@ Status: **shipped** (2026-08-11). Sibling of [Notes and learnings](../plans/note
 
 Archived after shipping the ownership workspace.
 
-Trigger: taking ownership of Payments. The problem is general — "I am accountable
+Trigger: taking ownership of a service. The problem is general — "I am accountable
 for a repo I did not write, that several teams change without telling me" — and
-this ships as a general surface. Payments is the first repo marked owned, not a
+this ships as a general surface. The service is the first repo marked owned, not a
 special case in the code.
 
 ---
@@ -299,7 +299,7 @@ Then:
 | 5     | `digest.ts` + Panel 4, then `gap-ledger.ts` + Panel 3                              | Digest is the easy AI win; the ledger needs familiarity tracking |
 | 6     | MCP tools, `repo-owner` agent, `repo-ownership` skill, scheduled brief             | Data model must be stable first                                  |
 
-Mark Payments owned at the end of phase 1 and use it as the test repo throughout.
+Mark a service owned at the end of phase 1 and use it as the test repo throughout.
 Mark a second repo owned before phase 3 ships — multi-repo assumptions rot fast
 when only one row exists.
 

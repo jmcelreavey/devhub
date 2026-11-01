@@ -44,7 +44,7 @@ point rather than against "whatever `main` was that day".
 
 Each `SKILL.md` retains its upstream `license`, `metadata.author`,
 `metadata.version` and `metadata.source` frontmatter. The provenance validator
-(`dashboard/lib/skills/provenance.ts`) requires those fields on every skill in
+(`apps/ui/lib/skills/provenance.ts`) requires those fields on every skill in
 this tree and fails the sync if they are missing.
 
 ## Security review

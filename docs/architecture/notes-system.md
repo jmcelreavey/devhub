@@ -43,7 +43,7 @@ graph TD
 
 ## Main Note Areas
 
-Top-level folders under `notes/` are **areas** with curated labels and landing cards (`dashboard/lib/notes/note-areas.ts`). The **Library → Notes** landing page (`/notes`) groups recent files by area; `/notes/area/<id>` shows one area's index. Areas sort busiest first (secondary areas such as Archive last), so the ones you write to lead. Unknown folders still appear with a title-cased label.
+Top-level folders under `notes/` are **areas** with curated labels and landing cards (`apps/ui/lib/notes/note-areas.ts`). The **Library → Notes** landing page (`/notes`) groups recent files by area; `/notes/area/<id>` shows one area's index. Areas sort busiest first (secondary areas such as Archive last), so the ones you write to lead. Unknown folders still appear with a title-cased label.
 
 | Area       | Purpose                                                        |
 | ---------- | -------------------------------------------------------------- |
@@ -134,7 +134,7 @@ Do not create duplicates for items already linked in `## Links` — call `entity
 
 ## Cross-entity linking
 
-Tasks, calendar events, pull requests, and notes share one **EntityRef** contract so you can hop between related work without hunting paths. The shape lives in `shared/entity-note/` and is re-exported from `dashboard/lib/entity-note.ts` for dashboard consumers.
+Tasks, calendar events, pull requests, and notes share one **EntityRef** contract so you can hop between related work without hunting paths. The shape lives in `shared/entity-note/` and is re-exported from `apps/ui/lib/entity-note.ts` for dashboard consumers.
 
 | Field    | Meaning                                                                                  |
 | -------- | ---------------------------------------------------------------------------------------- |
@@ -152,7 +152,7 @@ Tasks, calendar events, pull requests, and notes share one **EntityRef** contrac
 | `Task.links`            | Hop-around edges that do not require a note (task↔PR, task↔calendar, …)         |
 | Stable note paths       | Entity→note edge via deterministic paths (open-or-create from UI/MCP)           |
 
-Reverse lookups combine those three sources: `dashboard/lib/entity-links/resolve.ts` scans stable paths, parses `## Links`, and reads `Task.links`.
+Reverse lookups combine those three sources: `apps/ui/lib/entity-links/resolve.ts` scans stable paths, parses `## Links`, and reads `Task.links`.
 
 ### Stable note paths
 
@@ -169,7 +169,7 @@ Scaffolds are built by `shared/task-note/`, `shared/meeting-note/`, and `shared/
 Notes carry outbound refs in a `## Links` markdown section. Each line is either:
 
 - A labelled link: `**PR:** [owner/repo#123](https://github.com/…/pull/123)`
-- Plain text: `**Jira:** DAD-1234`
+- Plain text: `**Jira:** XYZ-1234`
 - A task marker: `::task-ref <taskId> <YYYY-MM-DD> <label>`
 
 `parseEntityLinksFromMarkdown` and `buildEntityLinksSection` in `shared/entity-note/` are the canonical parse/write helpers. Do not invent per-feature link formats.
@@ -185,7 +185,7 @@ Notes carry outbound refs in a `## Links` markdown section. Each line is either:
 
 ### Link dialog (`EntityLinkDialog`)
 
-Task rows and the note editor footer share one modal (`dashboard/components/EntityLinkDialog.tsx`) for adding hop-around refs. It portals via `ModalShell` so it is not tied to hover shelves.
+Task rows and the note editor footer share one modal (`apps/ui/components/EntityLinkDialog.tsx`) for adding hop-around refs. It portals via `ModalShell` so it is not tied to hover shelves.
 
 | Kind     | Picker source                                             | Paste fallback                                       |
 | -------- | --------------------------------------------------------- | ---------------------------------------------------- |
@@ -196,7 +196,7 @@ Task rows and the note editor footer share one modal (`dashboard/components/Enti
 | Jira     | Tickets from `GET /api/jira/tickets`                      | Issue key (e.g. `PROJ-1234`)                          |
 | Task     | Last 14 days from `GET /api/tasks/history?includeTasks=1` | Task UUID                                            |
 
-Pickers load once per kind when the dialog opens; filtering is in-memory (no per-keystroke remote search). Selecting a row or pasting a valid value calls `buildEntityRefFromInput` (`dashboard/lib/entity-links/build-ref.ts`) and appends the ref to the task's `links` array or the note's `## Links` section. Duplicate refs are ignored.
+Pickers load once per kind when the dialog opens; filtering is in-memory (no per-keystroke remote search). Selecting a row or pasting a valid value calls `buildEntityRefFromInput` (`apps/ui/lib/entity-links/build-ref.ts`) and appends the ref to the task's `links` array or the note's `## Links` section. Duplicate refs are ignored.
 
 `canonicalizeEntityRef` collapses aliases so one logical hop is one chip. Calendar is the easy miss: a `## Links` line often stores the Google event URL (`eid=`), while the task **Link** picker stores `<calendarId>::<eventId>`. Those two ids used to render as two Event chips; they now share a key. The same helper drops unusable task hops (`id=/work?tab=tasks` from BlockNote round-trips).
 
@@ -216,16 +216,16 @@ Notes that link to a local repo (`kind: "repo"` in `## Links`) can open in **Cur
 
 ### When it is writable
 
-On open, DevHub converts the note to Markdown and compares the result to the source blocks (`dashboard/lib/notes/cursor-draft.ts`). When conversion is **lossless**, the working copy is editable and **Apply Cursor changes** is available. Rich blocks that cannot round-trip (custom embeds, linked checklists, etc.) still open as **read-only** projections for review — DevHub refuses `PATCH` apply with `409`.
+On open, DevHub converts the note to Markdown and compares the result to the source blocks (`apps/core/src/lib/notes/cursor-draft.ts`). When conversion is **lossless**, the working copy is editable and **Apply Cursor changes** is available. Rich blocks that cannot round-trip (custom embeds, linked checklists, etc.) still open as **read-only** projections for review — DevHub refuses `PATCH` apply with `409`.
 
 ### Storage layout
 
 | File                                       | Purpose                                                                                    |
 | ------------------------------------------ | ------------------------------------------------------------------------------------------ |
-| `.devhub/cursor-notes/<basename>-<key>.md` | Markdown projection with a `<!-- DEVHUB NOTE WORKING COPY … -->` header                    |
-| `.devhub/cursor-notes/<key>.json`          | Manifest: `repoName`, `notePath`, `vaultKey`, `sourceHash`, `baseMarkdownHash`, `writable` |
+| `.devhub/cursor-notes/<repo>/<path>/<basename>-<key>.md` | Markdown projection with a `<!-- DEVHUB NOTE WORKING COPY … -->` header                    |
+| `.devhub/cursor-notes/<repo>/<path>/<basename>-<key>.json` | Manifest: `repoName`, `notePath`, `vaultKey`, `sourceHash`, `baseMarkdownHash`, `writable` |
 
-Files are mode `0600`; the directory is `0700`. Reopening the same note reuses an existing copy when the header is intact. The manifest's `sourceHash` must still match the live note at apply time — if you edited the note in DevHub after opening Cursor, apply fails with `409` until you reopen.
+Files are mode `0600`; the directory is `0700`. The key includes the vault, repo and full note path. Reopening a note reuses a copy only when its manifest matches, including copies in older layouts. The manifest's `sourceHash` must still match the live note at apply time — if you edited the note in DevHub after opening Cursor, apply fails with `409` to protect those edits.
 
 ### Dashboard workflow
 
@@ -273,7 +273,7 @@ Good learning notes are:
 
 ## Appraisal notes
 
-Appraisal notes are intentional review records captured through the DevHub MCP server's `appraisal_*` tools. They are stored as regular BlockNote JSON under the notes tree so the dashboard can render them like other notes:
+The optional Career plugin captures review records through the DevHub MCP server's `appraisal_*` tools. They are regular BlockNote JSON under the notes tree. Disabling Career removes its pages, APIs and tools without deleting these files; the core notes editor can still open them:
 
 ```text
 notes/
@@ -302,7 +302,7 @@ Files are a good fit because they are:
 
 ## Master Checklists
 
-Folder-scoped **master checklists** live under `collections/` at the repo root (one JSON file per list). They are edited from the **Checklists** view in the notes UI (`/notes` with the checklists panel, or `/collections` which redirects there).
+Folder-scoped **master checklists** live under `collections/` at the repo root (one JSON file per list). They are edited from the **Checklists** view in the notes UI (`/notes` with the checklists panel).
 
 | Concept    | Behavior                                                                                                                                                                                                                                                                                                                                                        |
 | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -311,15 +311,9 @@ Folder-scoped **master checklists** live under `collections/` at the repo root (
 | Labels     | Renaming a master item updates the canonical label. Linked blocks in other notes may show **drift** until you sync labels (see below).                                                                                                                                                                                                                          |
 | API        | `GET/POST /api/collections`, `GET/PATCH/DELETE /api/collections/[id]` (route name is historical; payloads use master-list shapes).                                                                                                                                                                                                                              |
 | Label sync | `GET /api/collections/[id]/linked-label-drift?itemId=…` counts linked blocks whose text differs from the master; `POST /api/collections/[id]/sync-linked-labels` with `{ itemId, label, excludeNotePath? }` rewrites matching blocks across notes.                                                                                                              |
-| Assets     | Images and `.mp4` video under the notes tree (e.g. `garden/project/assets/photo-1.jpg`) are served at `GET /api/notes-assets/...`. MCP markdown uses notes-relative paths; saved BlockNote JSON stores `/api/notes-assets/...` URLs. Use `notes_write_asset` to upload bytes from agents. Allowed extensions: `.jpg`, `.jpeg`, `.png`, `.gif`, `.webp`, `.mp4`. Pasted/dropped editor images are separate — see [Pasted images](#pasted-images). |
+| Assets     | Images and `.mp4` video under the notes tree (e.g. `garden/project/assets/photo-1.jpg`) are served at `GET /api/notes-assets/...`. MCP markdown uses notes-relative paths; saved BlockNote JSON stores `/api/notes-assets/...` URLs. Use `notes_write_asset` to upload bytes from agents. Allowed extensions: `.jpg`, `.jpeg`, `.png`, `.gif`, `.webp`, `.mp4`. Images pasted or dropped in the editor are different: they are stored by content hash under `~/.local/state/devhub/note-media` (not in git) and the note keeps a `/api/notes-media/<sha256>.<ext>` URL. |
 
 Collection JSON writes are serialized with a repo mutex so rapid checklist edits from multiple tabs do not corrupt files.
-
-## Pasted images
-
-Paste (⌘V of a screenshot or copied image) or drop a PNG, JPEG, GIF or WebP file into the notes editor or the Notes overlay. DevHub sniffs the **bytes**, not the filename or client MIME: anything else gets a toast and no empty block is left behind. Images are capped at 8 MB (`NOTE_MEDIA_MAX_BYTES`).
-
-Blobs live under `~/.local/state/devhub/note-media` as `<sha256>.<ext>` (override with `DEVHUB_NOTE_MEDIA_DIR`). That directory is outside the git-tracked notes vault, so content sync does not commit them. The note stores a `/api/notes-media/<sha256>.<ext>` URL. Identical bytes reuse the existing file (`200` instead of `201`). `GET` serves them with `nosniff`. Images already under `notes/**/assets` still use `GET /api/notes-assets/...`.
 
 ## In-Editor AI (Optional)
 
@@ -328,7 +322,7 @@ The notes **BlockNote** editor can call an OpenAI-compatible provider through Bl
 - Select text → **AI** (stars) on the formatting toolbar.
 - Type **`/ai`** in the slash menu.
 
-Configuration is env-only - see [Environment Variables](../reference/environment-variables.md#notes-repo-learning-and-briefing-ai-optional) (`AI_API_KEY`, `AI_BASE_URL`, `AI_MODEL`; any OpenAI-compatible provider, z.ai by default). Example placeholders are in `dashboard/.env.example`. Do not commit real API keys.
+Configuration is env-only - see [Environment Variables](../reference/environment-variables.md#notes-repo-learning-and-briefing-ai-optional) (`AI_API_KEY`, `AI_BASE_URL`, `AI_MODEL`; any OpenAI-compatible provider, z.ai by default). Example placeholders are in `apps/ui/.env.example`. Do not commit real API keys.
 
 **Notes work fully without these variables.** When `AI_API_KEY` is unset, the editor omits AI toolbar, `/ai`, and related UI. `GET /api/notes/ai/status` reports `{ configured: false }`.
 
@@ -353,7 +347,7 @@ Notes and docs editors show a **history** chip (`VaultFileHistory`) with the fil
 
 ### Content sync workflow
 
-Content sync is the low-friction path for personal content that changes while using the dashboard. It is intentionally scoped: `dashboard/lib/content/sync-paths.ts` defines `notes/`, `collections/`, `tasks/`, `docs/`, and `upstarts/` as the paths staged by the `sync_notes_tasks_push` action. Under `tasks/`, `items/`, `legacy/`, and `deleted/` are included (including `tasks/<profile>/items/`). `tasks/.local/` and `tasks/<profile>/.local/` hold timers and are gitignored, so they are not staged.
+Content sync is the low-friction path for personal content that changes while using the dashboard. It is intentionally scoped: `apps/ui/lib/content/sync-paths.ts` defines `notes/`, `collections/`, `tasks/`, `docs/`, and `upstarts/` as the paths staged by the `sync_notes_tasks_push` action. Under `tasks/`, `items/`, `legacy/`, and `deleted/` are included (including `tasks/<profile>/items/`). `tasks/.local/` and `tasks/<profile>/.local/` hold timers and are gitignored, so they are not staged.
 
 | Surface                  | Behavior                                                                                                                                                                                                                                                                                                               |
 | ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

@@ -1,0 +1,131 @@
+import { createHash } from "node:crypto";
+import { blocksToPortableMarkdown, blocksToText, textToBlocks } from "../../../../../packages/shared/ui-lib/markdown-convert";
+import {
+  firstHeadingFromMarkdown,
+  titleFromDocMarkdown,
+  vaultDisplayTitle,
+} from "../../../../../packages/shared/ui-lib/vault/display-title";
+import { getVaultStorage } from "../vault/vault-registry";
+import { listShares } from "./share-store";
+import type { ShareStatus, VaultId } from "../../../../../packages/shared/ui-lib/share/share-public";
+import {
+  hasVisibleDiagramShapes,
+  isDiagramStoragePath,
+  type TldrawDiagramData,
+} from "../../../../../packages/shared/ui-lib/diagrams/utils";
+
+export interface ShareSource {
+  title: string;
+  markdown: string;
+}
+
+function isTldrawContent(content: unknown): content is TldrawDiagramData {
+  return (
+    typeof content === "object" &&
+    content !== null &&
+    (content as { type?: unknown }).type === "tldraw"
+  );
+}
+
+/**
+ * Render a tldraw diagram as portable markdown for gist / PrivateBin.
+ * Returns empty string when there are no shapes (same "empty" gate as notes).
+ */
+export function tldrawToShareMarkdown(title: string, content: TldrawDiagramData): string {
+  if (!hasVisibleDiagramShapes(content.store ?? {})) return "";
+  const json = JSON.stringify(content, null, 2);
+  return [
+    `# ${title}`,
+    "",
+    "DevHub tldraw diagram snapshot.",
+    "",
+    "```json",
+    json,
+    "```",
+    "",
+  ].join("\n");
+}
+
+/** Inverse of `tldrawToShareMarkdown` — pull the tldraw JSON out of a gist snapshot. */
+export function parseTldrawShareMarkdown(markdown: string): TldrawDiagramData {
+  const match = /```json\s*([\s\S]*?)\s*```/.exec(markdown);
+  if (!match?.[1]) {
+    throw new Error("Gist is not a diagram snapshot");
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(match[1]);
+  } catch {
+    throw new Error("Gist diagram JSON is invalid");
+  }
+  if (!isTldrawContent(parsed)) {
+    throw new Error("Gist diagram JSON is invalid");
+  }
+  return parsed;
+}
+
+/**
+ * Turn published gist markdown back into vault write content.
+ * Docs stay markdown; diagrams become tldraw JSON; notes become BlockNote blocks.
+ */
+export function vaultContentFromShareMarkdown(
+  vault: VaultId,
+  sharePath: string,
+  markdown: string,
+): unknown {
+  if (vault === "docs") return markdown;
+  if (isDiagramStoragePath(sharePath)) return parseTldrawShareMarkdown(markdown);
+  return textToBlocks(markdown);
+}
+
+/** Resolve a vault note/doc/diagram to the markdown we would publish, or null if gone. */
+export function readShareSource(vault: VaultId, sharePath: string): ShareSource | null {
+  const file = getVaultStorage(vault).read(sharePath);
+  if (!file) return null;
+  const fileName = sharePath.split("/").pop() ?? sharePath;
+
+  if (vault === "docs") {
+    const markdown = typeof file.content === "string" ? file.content : "";
+    const { displayTitle } = vaultDisplayTitle(fileName, titleFromDocMarkdown(markdown));
+    return { title: displayTitle, markdown };
+  }
+
+  // Diagrams live in the notes vault under diagrams/ as tldraw JSON objects.
+  if (isDiagramStoragePath(sharePath) || isTldrawContent(file.content)) {
+    const { displayTitle } = vaultDisplayTitle(fileName, null);
+    if (!isTldrawContent(file.content)) {
+      return { title: displayTitle, markdown: "" };
+    }
+    return {
+      title: displayTitle,
+      markdown: tldrawToShareMarkdown(displayTitle, file.content),
+    };
+  }
+
+  const blocks = Array.isArray(file.content) ? file.content : [];
+  // Round-trip markdown is for DevHub; gists need portable GitHub markdown.
+  const markdown = blocksToPortableMarkdown(blocks);
+  const contentTitle = firstHeadingFromMarkdown(blocksToText(blocks));
+  const { displayTitle } = vaultDisplayTitle(fileName, contentTitle);
+  return { title: displayTitle, markdown };
+}
+
+/** Stable fingerprint of published markdown, used to detect drift. */
+export function hashMarkdown(markdown: string): string {
+  return createHash("sha256").update(markdown).digest("hex");
+}
+
+/** Every live share annotated with live drift status (stale / missing source). */
+export function listShareStatuses(): ShareStatus[] {
+  return listShares().map((share) => {
+    const source = readShareSource(share.vault, share.path);
+    const missing = source === null;
+    const stale = missing || hashMarkdown(source.markdown) !== share.contentHash;
+    return { ...share, stale, missing };
+  });
+}
+
+/** How many live shares have drifted from their source (for nav alerts). */
+export function countStaleShares(): number {
+  return listShareStatuses().filter((s) => s.stale).length;
+}

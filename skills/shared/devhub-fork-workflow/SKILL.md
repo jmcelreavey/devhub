@@ -58,7 +58,8 @@ ship flow doesn't change *what* is generic, only the mechanics.
    features belong in public. Company/private logic stays in a plugin (see
    `docs/architecture/plugins.md`); personal data (`notes/`, `tasks/`, `collections/`,
    `persona/identity.txt`, `.env.local`) and `.devhub/` are excluded and should never be
-   the point of the PR. If in doubt, it doesn't go to public.
+   the point of the PR. `private/` holds the archived plans; their former root paths remain
+   excluded for historical backport ranges. If in doubt, it doesn't go to public.
 
 2. **Pick the source ref and base.** The script ports `BASE..SOURCE_REF`. `--base` defaults
    to `SOURCE_REF^` (correct for a single tip commit). For a multi-commit feature, pass the

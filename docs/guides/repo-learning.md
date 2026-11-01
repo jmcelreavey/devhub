@@ -52,7 +52,7 @@ AI_MODEL=glm-5-turbo
 
 On OpenAI, `gpt-*-luna` sends reasoning effort `low` unless `AI_REASONING_EFFORT` or a per-call override is set.
 
-Set `AI_API_KEY` in `dashboard/.env.local` or a matching 1Password `devhub` item. Set `AI_BASE_URL` and `AI_MODEL` in `dashboard/.env.local` when you want something other than the z.ai defaults; non-secret URLs/model names are not pulled from 1Password by default.
+Set `AI_API_KEY` in `apps/ui/.env.local` or a matching 1Password `devhub` item. Set `AI_BASE_URL` and `AI_MODEL` in `apps/ui/.env.local` when you want something other than the z.ai defaults; non-secret URLs/model names are not pulled from 1Password by default.
 
 ## Typical Use
 

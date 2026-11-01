@@ -1,0 +1,1296 @@
+"use client";
+
+import { DependencyChecklist } from "@/components/setup/DependencyChecklist";
+import { ReleaseNotesAbout } from "@/components/releases/ReleaseNotes";
+import { PaseoConnection } from "@/app/agents/paseo-connection";
+import { PrivateRepoSetup } from "@/components/setup/PrivateRepoSetup";
+import { filterStepsByGoals } from "../../../../packages/shared/ui-lib/setup/goals";
+import { useSetupProgress } from "@/lib/setup/use-setup-progress";
+import { requestedSetupStep } from "../../../../packages/shared/ui-lib/setup/progress";
+import type { SetupStepId } from "../../../../packages/shared/ui-lib/setup/progress";
+import { FetchError } from "@/components/ui/FetchError";
+import Link from "@/lib/navigation";
+import { useHistory, useRouter } from "@/lib/navigation";
+import { useState, useEffect, useCallback, useRef, startTransition } from "react";
+import { mutate as mutateSWR } from "swr";
+import { isDesktop, openInBrowser, pickFolder } from "@/lib/desktop/bridge";
+import {
+  SECRET_FIELD_MASK,
+  type PathCheck,
+  type SetupStatus,
+  type SetupStepMeta,
+} from "./shared";
+import { jiraSetupSavePayload, shouldSaveBeforeNext } from "./save-payload";
+import { pickInstalledAiProvider } from "@/lib/ai/setup-provider";
+import {
+  isStepComplete,
+  WelcomeStep,
+  GitHubStep,
+  type GithubDeviceLogin,
+  InfraStep,
+  PathsStep,
+  type PathsForm,
+  DatadogStep,
+  CalendarStep,
+  JiraStep,
+  AgentCliStep,
+  DoneStep,
+} from "./steps";
+import { JevStep } from "./JevStep";
+import { PluginSetupStep } from "./PluginSetupStep";
+import { RuntimeSlots } from "@/components/plugins/RuntimeSlots";
+import { typesafeKeyFormatError } from "../../../../packages/shared/ui-lib/qa/typesafe-key";
+import {
+  Activity,
+  CalendarDays,
+  CheckCircle2,
+  Circle,
+  ChevronRight,
+  ChevronLeft,
+  Cloud,
+  FlaskConical,
+  FolderOpen,
+  GitBranch,
+  SkipForward,
+  Hand,
+  MessageSquare,
+  TerminalSquare,
+  TicketCheck,
+  Wrench,
+} from "lucide-react";
+
+type Step = Omit<SetupStepMeta, "id"> & { id: SetupStepId };
+
+const STEPS: Step[] = [
+  {
+    id: "welcome",
+    title: "Welcome",
+    icon: <Hand size={18} />,
+    description: "Let's configure your DevHub integrations",
+    configured: true,
+    optional: false,
+  },
+  {
+    id: "tools",
+    title: "Tools",
+    icon: <Wrench size={18} />,
+    description: "What's installed on this machine, and what each one turns on",
+    configured: true,
+    optional: false,
+  },
+  {
+    id: "paths",
+    title: "Your folders",
+    icon: <FolderOpen size={18} />,
+    description: "Choose your code folder and where to keep your notes",
+    configured: false,
+    optional: true,
+  },
+  {
+    id: "github",
+    title: "GitHub",
+    icon: <GitBranch size={18} />,
+    description: "Connect GitHub CLI auth for repo features (recommended)",
+    configured: false,
+    optional: true,
+  },
+  {
+    id: "datadog",
+    title: "Datadog",
+    icon: <Activity size={18} />,
+    description: "Add your Datadog API key for observability and troubleshooting skills",
+    configured: false,
+    optional: true,
+  },
+  {
+    id: "calendar",
+    title: "Google Calendar",
+    icon: <CalendarDays size={18} />,
+    description: "See today's events and week overview on your dashboard",
+    configured: false,
+    optional: true,
+  },
+  {
+    id: "jira",
+    title: "Jira Cloud",
+    icon: <TicketCheck size={18} />,
+    description: "Track your tickets and priorities from the dashboard",
+    configured: false,
+    optional: true,
+  },
+  {
+    id: "infra",
+    title: "Infra",
+    icon: <Cloud size={18} />,
+    description: "AWS profile + infra tooling (optional)",
+    configured: false,
+    optional: true,
+  },
+  {
+    id: "agent",
+    title: "AI Provider",
+    icon: <TerminalSquare size={18} />,
+    description: "Cursor / ChatGPT / OpenCode CLI, or optional HTTP API key",
+    configured: false,
+    optional: true,
+  },
+  {
+    id: "jev",
+    title: "QA (Jev)",
+    icon: <FlaskConical size={18} />,
+    description: "TypeSafe API key for QA runs",
+    configured: false,
+    optional: true,
+  },
+
+  {
+    id: "slack",
+    title: "Slack",
+    icon: <MessageSquare size={18} />,
+    description: "Read-only task answers in one Slack channel",
+    configured: false,
+    optional: true,
+  },
+  {
+    id: "done",
+    title: "All Set",
+    icon: <CheckCircle2 size={18} />,
+    description: "Your DevHub is ready to go",
+    configured: true,
+    optional: false,
+  },
+];
+
+export default function SetupPage() {
+  const router = useRouter();
+  const history = useHistory();
+  const progressState = useSetupProgress();
+  const { currentStep: currentStepId, goals, updateGoals, setCurrentStepId } = progressState;
+  const [status, setStatus] = useState<SetupStatus | null>(null);
+  const [unavailableRequestedStep, setUnavailableRequestedStep] = useState<"datadog" | "slack" | null>(null);
+  const datadogAvailable = status?.datadogAvailable === true && status.datadogStatusError !== true;
+  const slackAvailable = status?.slackAvailable === true;
+
+  useEffect(() => {
+    if (!progressState.ready || !status) return;
+    const openRequested = () => {
+      const requested = requestedSetupStep(window.location.search, window.location.hash);
+      if (!requested) return;
+      if ((requested === "datadog" && !datadogAvailable) || (requested === "slack" && !slackAvailable)) {
+        setUnavailableRequestedStep(requested);
+        return;
+      }
+      setUnavailableRequestedStep(null);
+      setCurrentStepId(requested);
+      const url = new URL(window.location.href);
+      url.searchParams.delete("step");
+      history.replace(`${url.pathname}${url.search}${url.hash}`, history.getState());
+    };
+    openRequested();
+    window.addEventListener("hashchange", openRequested);
+    return () => window.removeEventListener("hashchange", openRequested);
+  }, [progressState.ready, setCurrentStepId, status, datadogAvailable, slackAvailable, history]);
+  const [pathsForm, setPathsForm] = useState<PathsForm>({ repoRoot: "", notesDir: "", reposDir: "" });
+  const [pathChecks, setPathChecks] = useState<{
+    repoRoot: PathCheck | null;
+    notesDir: PathCheck | null;
+    reposDir: PathCheck | null;
+  }>({
+    repoRoot: null,
+    notesDir: null,
+    reposDir: null,
+  });
+  const [datadogForm, setDatadogForm] = useState({ apiKey: "", applicationKey: "", email: "", scheduleId: "" });
+  const [calendarForm, setCalendarForm] = useState({ clientId: "", clientSecret: "" });
+  const [jiraForm, setJiraForm] = useState({ domain: "", email: "", apiToken: "" });
+  const [jevKey, setJevKey] = useState("");
+  const [slackConfigured, setSlackConfigured] = useState(false);
+  const [showSecrets, setShowSecrets] = useState<Record<string, boolean>>({});
+  const [saving, setSaving] = useState(false);
+  const [checkConnectionBusy, setCheckConnectionBusy] = useState<
+    null | "github" | "datadog" | "jira" | "calendar" | "jev"
+  >(null);
+  const [saveResult, setSaveResult] = useState<{ ok: boolean; message: string } | null>(null);
+  const [error, setError] = useState("");
+  const [checkOk, setCheckOk] = useState("");
+  const [agentsPassword, setAgentsPassword] = useState("");
+  const [githubDevice, setGithubDevice] = useState<GithubDeviceLogin | null>(null);
+  const [githubLogin, setGithubLogin] = useState<string | null>(null);
+  /** Bumped to abandon an in-flight device-flow poll (restart or unmount). */
+  const githubPollRef = useRef(0);
+  const [calendarConnectBusy, setCalendarConnectBusy] = useState(false);
+  const [calendarBanner, setCalendarBanner] = useState("");
+  const [infraChecking, setInfraChecking] = useState(false);
+  const [infraForm, setInfraForm] = useState({ scriptsRepoPath: "" });
+  const [agentForm, setAgentForm] = useState<{
+    provider: "cursor-cli" | "chatgpt-cli" | "antigravity-cli" | "opencode" | "api" | null;
+    opencodeModel: string;
+    cursorModel: string;
+  }>({ provider: null, opencodeModel: "", cursorModel: "" });
+
+
+  /**
+   * Native folder picker, when there is one.
+   *
+   * `undefined` in browser mode rather than a no-op function: `PathsStep`
+   * renders the Browse button only when a handler exists, so a browser user
+   * never sees a button that does nothing. The typed input works in both.
+   */
+  const browseForCodeFolder = isDesktop()
+    ? async () => {
+        const picked = await pickFolder("Choose your code folder");
+        // null means the dialog was dismissed. Clearing the field on cancel
+        // would discard whatever the user had already typed.
+        if (picked) setPathsForm((f) => ({ ...f, reposDir: picked }));
+      }
+    : undefined;
+
+  const loadSetupStatus = useCallback(async (): Promise<SetupStatus | null> => {
+    try {
+      const r = await fetch("/api/setup/status");
+      if (!r.ok) throw new Error("Failed to load setup status");
+      const data = (await r.json()) as SetupStatus;
+      setStatus(data);
+      void mutateSWR("/api/setup/status", data, { revalidate: false });
+      setPathsForm({
+        repoRoot: data.coreVars.repoRoot || data.coreDefaults.repoRoot,
+        notesDir: data.coreVars.notesDir || data.coreDefaults.notesDir,
+        // Not defaulted from coreDefaults: pre-filling a guessed path makes the
+        // user confirm a decision they never made. The default shows as
+        // placeholder text instead, so an untouched field saves nothing.
+        reposDir: data.coreVars.reposDir || "",
+      });
+      if (data.calendar) {
+        setCalendarForm({
+          clientId: SECRET_FIELD_MASK,
+          clientSecret: SECRET_FIELD_MASK,
+        });
+      } else if (
+        data.calendarVars.hasClientId &&
+        data.calendarVars.hasClientSecret &&
+        data.calendarClientIdPreview
+      ) {
+        setCalendarForm({
+          clientId: data.calendarClientIdPreview,
+          clientSecret: data.calendarClientSecretPreview ?? "",
+        });
+      }
+      setJiraForm({
+        domain: data.jiraVars.domain || "",
+        email: data.jiraVars.email || "",
+        apiToken: "",
+      });
+      // Email + schedule id are not secrets — prefill them either way so the
+      // step shows what's configured (the email is what gates Datadog).
+      if (data.datadogAvailable === true && data.datadogStatusError !== true) {
+        setDatadogForm((prev) => ({
+          apiKey: data.datadogVars.hasApiKey ? SECRET_FIELD_MASK : prev.apiKey === SECRET_FIELD_MASK ? "" : prev.apiKey,
+          applicationKey: data.datadogVars.hasApplicationKey ? SECRET_FIELD_MASK : "",
+          email: data.datadogVars.email,
+          scheduleId: data.datadogVars.scheduleId,
+        }));
+      }
+      // Only a key Setup saved shows as masked; one from the environment stays blank to replace.
+      setJevKey(data.typesafeVars?.source === "setup" ? SECRET_FIELD_MASK : "");
+      if (data.infraVars.scriptsRepoPath) {
+        setInfraForm({ scriptsRepoPath: data.infraVars.scriptsRepoPath });
+      }
+      if (data.agentVars) {
+        setAgentForm({
+          provider: pickInstalledAiProvider({
+            saved: data.agentVars.provider,
+            installed: {
+              "cursor-cli": data.agentVars.cursorAgentInstalled,
+              "chatgpt-cli": data.agentVars.chatgptCliInstalled === true,
+              "antigravity-cli": data.agentVars.antigravityCliInstalled === true,
+              opencode: data.agentVars.opencodeInstalled === true,
+              api: data.agentVars.apiConfigured === true,
+            },
+          }),
+          opencodeModel: data.agentVars.opencodeModel,
+          cursorModel: data.agentVars.cursorModel,
+        });
+      }
+      return data;
+    } catch {
+      setError("Failed to load setup status");
+      return null;
+    }
+  }, []);
+
+  useEffect(() => {
+    const id = window.setTimeout(() => {
+      void loadSetupStatus();
+    }, 0);
+    return () => window.clearTimeout(id);
+  }, [loadSetupStatus]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const id = window.requestAnimationFrame(() => {
+      const u = new URL(window.location.href);
+      let qsChanged = false;
+
+      if (u.searchParams.has("calendar_connected")) {
+        startTransition(() => setCalendarBanner("Google Calendar is connected."));
+        queueMicrotask(() => {
+          void loadSetupStatus();
+        });
+        u.searchParams.delete("calendar_connected");
+        qsChanged = true;
+      }
+
+      const calendarErrCode = u.searchParams.get("calendar_error");
+      if (calendarErrCode) {
+        const detailRaw = u.searchParams.get("calendar_error_detail") ?? "";
+        let detail = detailRaw;
+        try {
+          detail = decodeURIComponent(detailRaw);
+        } catch {
+          /* ignore */
+        }
+        startTransition(() => {
+          switch (calendarErrCode) {
+            case "missing_credentials":
+              setError("Add Client ID and Client Secret below and save, or reconnect after saving.");
+              break;
+            case "missing_code":
+              setError("Google sign-in did not finish. Try connecting again.");
+              break;
+            case "oauth_failed":
+              /*
+                Google's error codes are precise and completely opaque, and they
+                arrive at the END of a seven-step setup - the worst possible
+                moment to be told only "redirect_uri_mismatch". Each one below
+                has a single, specific cause and a single fix, so say that
+                instead of forwarding the raw string.
+              */
+              if (detail.includes("redirect_uri_mismatch")) {
+                setError(
+                  "Google rejected the redirect URI. Copy the exact URI from step 6 above into " +
+                    "Authorised redirect URIs on your OAuth client - it must match character for character.",
+                );
+              } else if (detail.includes("access_denied")) {
+                setError(
+                  "Google blocked the sign-in. While your app is in Testing, add your own Google " +
+                    "account under Audience → Test users (step 4), then try again.",
+                );
+              } else if (detail.includes("invalid_client")) {
+                setError(
+                  "Google didn't recognise the client ID or secret. Re-copy both from the Credentials " +
+                    "page - it's easy to paste the client ID twice.",
+                );
+              } else if (detail.includes("refresh token")) {
+                setError(
+                  `Google OAuth: ${detail}. Revoke DevHub's access in your Google Account permissions, then reconnect - ` +
+                    "Google only issues a refresh token on the first consent.",
+                );
+              } else {
+                setError(`Google OAuth failed: ${detail || "Try again."}`);
+              }
+              break;
+            default:
+              try {
+                setError(decodeURIComponent(calendarErrCode));
+              } catch {
+                setError(calendarErrCode);
+              }
+          }
+        });
+        u.searchParams.delete("calendar_error");
+        u.searchParams.delete("calendar_error_detail");
+        qsChanged = true;
+      }
+
+      if (qsChanged) {
+        const qs = u.searchParams.toString();
+        history.replace((qs ? `/setup?${qs}` : "/setup") + u.hash, history.getState());
+      }
+    });
+    return () => window.cancelAnimationFrame(id);
+  }, [loadSetupStatus, history]);
+
+  // Validate core paths whenever they change. Debounced so we don't hammer the
+  // API while the user is still typing.
+  useEffect(() => {
+    if (!pathsForm.repoRoot && !pathsForm.notesDir && !pathsForm.reposDir) return;
+    const id = setTimeout(() => {
+      fetch("/api/setup/validate-path", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(pathsForm),
+      })
+        .then((r) => r.json())
+        .then((data: { repoRoot: PathCheck | null; notesDir: PathCheck | null; reposDir: PathCheck | null }) => {
+          setPathChecks(data);
+        })
+        .catch(() => { /* ignore validation transport errors */ });
+    }, 250);
+    return () => clearTimeout(id);
+  }, [pathsForm]);
+
+  // A link straight to a step (?step=jev from the QA page) shows it even when the goals hid it.
+  const availableSteps = STEPS.filter((step) => (step.id !== "datadog" || datadogAvailable) && (step.id !== "slack" || slackAvailable));
+  const offered = filterStepsByGoals(availableSteps, goals);
+  const visibleSteps = offered.some((s) => s.id === currentStepId)
+    ? offered
+    : availableSteps.filter((s) => offered.includes(s) || s.id === currentStepId);
+  const steps: Step[] = visibleSteps.map((s) => {
+    if (s.id === "paths" && status) return { ...s, configured: status.core };
+    if (s.id === "github" && status) return { ...s, configured: status.github };
+    if (s.id === "datadog" && status) return { ...s, configured: status.datadog };
+    if (s.id === "calendar" && status) return { ...s, configured: status.calendar };
+    if (s.id === "jira" && status) return { ...s, configured: status.jira };
+    if (s.id === "infra" && status) return { ...s, configured: status.infra };
+    if (s.id === "agent" && status) return { ...s, configured: Boolean(status.agentVars?.provider) };
+    if (s.id === "jev" && status) return { ...s, configured: status.typesafe === true };
+    if (s.id === "slack") return { ...s, configured: slackConfigured };
+    return s;
+  });
+  const currentStep = Math.max(0, steps.findIndex((step) => step.id === currentStepId));
+
+  const goNext = useCallback(() => {
+    setSaveResult(null);
+    setError("");
+    setCheckOk("");
+    setCurrentStepId(steps[Math.min(currentStep + 1, steps.length - 1)].id);
+  }, [currentStep, steps, setCurrentStepId]);
+
+  const goBack = () => {
+    setSaveResult(null);
+    setError("");
+    setCheckOk("");
+    setCurrentStepId(steps[Math.max(currentStep - 1, 0)].id);
+  };
+
+  const checkConnection = useCallback(
+    async (kind: "github" | "datadog" | "jira" | "calendar" | "jev") => {
+      setCheckConnectionBusy(kind);
+      setError("");
+      setCheckOk("");
+      try {
+        if (kind === "datadog") {
+          // Test exactly what's in the form. Masked/blank secrets are omitted so
+          // the server falls back to the saved env — this lets the check pass
+          // before the step is saved, instead of demanding a save first.
+          const apiKey = datadogForm.apiKey.trim();
+          const applicationKey = datadogForm.applicationKey.trim();
+          const r = await fetch("/api/setup/check/datadog", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              ...(apiKey && apiKey !== SECRET_FIELD_MASK ? { apiKey } : {}),
+              ...(applicationKey && applicationKey !== SECRET_FIELD_MASK ? { applicationKey } : {}),
+            }),
+          });
+          const result = (await r.json()) as { ok: boolean; code?: string; message?: string };
+          if (!result.ok) {
+            setError(result.message ?? "Datadog connection failed.");
+            return;
+          }
+          // Say so out loud: with the auto-check nobody pressed a button, so
+          // silence is indistinguishable from nothing having happened.
+          setCheckOk(result.message ?? "Connected to Datadog successfully.");
+          await loadSetupStatus();
+          return;
+        }
+
+        if (kind === "jev") {
+          const apiKey = jevKey.trim();
+          const r = await fetch("/api/setup/check/typesafe", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(apiKey && apiKey !== SECRET_FIELD_MASK ? { apiKey } : {}),
+          });
+          const result = (await r.json()) as { ok?: boolean; message?: string; error?: string };
+          if (!r.ok || !result.ok) {
+            setError(result.message ?? result.error ?? "Couldn't test the TypeSafe key.");
+            return;
+          }
+          const unsaved = !!apiKey && apiKey !== SECRET_FIELD_MASK;
+          setCheckOk(unsaved ? "Key works. Save & Continue to use it for QA runs." : (result.message ?? "Key works."));
+          return;
+        }
+
+        if (kind === "jira") {
+          const domain = jiraForm.domain.trim();
+          const email = jiraForm.email.trim();
+          const apiToken = jiraForm.apiToken.trim();
+          const r = await fetch("/api/setup/check/jira", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              ...(domain && domain !== SECRET_FIELD_MASK ? { domain } : {}),
+              ...(email && email !== SECRET_FIELD_MASK ? { email } : {}),
+              ...(apiToken && apiToken !== SECRET_FIELD_MASK ? { apiToken } : {}),
+            }),
+          });
+          const result = (await r.json()) as { ok?: boolean; code?: string; message?: string; error?: string };
+          if (!r.ok || !result.ok) {
+            setError(result.message ?? result.error ?? "Jira connection failed.");
+            return;
+          }
+          setCheckOk(result.message ?? "Connected to Jira successfully.");
+          return;
+        }
+
+        const data = await loadSetupStatus();
+        if (!data) {
+          setError("Could not load setup status.");
+          return;
+        }
+        if (kind === "github" && !data.github) {
+          setError("GitHub is not connected yet. Run `gh auth login` in your terminal, then try again.");
+          return;
+        }
+        if (kind === "calendar" && !data.calendar) {
+          setError(
+            "Google Calendar is not connected yet. In Google Cloud: enable the Google Calendar API, create a Web OAuth client with the redirect URI below, enter Client ID and Secret, then use Sign in with Google.",
+          );
+          return;
+        }
+      } catch {
+        setError("Could not verify connection.");
+      } finally {
+        setCheckConnectionBusy(null);
+      }
+    },
+    [loadSetupStatus, datadogForm, jiraForm, jevKey],
+  );
+
+  /**
+   * Verify credentials as soon as they are complete, without a button press.
+   *
+   * "Paste three values, then remember to press Check connection" is a step
+   * you can finish while it is silently broken — the wizard happily lets you
+   * continue, and the failure surfaces days later on the dashboard. So the
+   * check runs itself once every field it needs has a value.
+   *
+   * The signature ref is what keeps this honest: it only fires when the values
+   * actually changed, never on step entry with what was already saved, and
+   * never twice for the same input.
+   */
+  const autoCheckedRef = useRef<Record<string, string>>({});
+  const stepId = steps[currentStep]?.id;
+  /**
+   * `checkConnection` is rebuilt on every keystroke (it closes over the forms),
+   * so depending on it directly would clear the pending timer whenever any
+   * *other* field on the step changed — and since the signature had not moved,
+   * nothing would reschedule it. The check would just quietly never run.
+   */
+  const checkConnectionRef = useRef(checkConnection);
+  checkConnectionRef.current = checkConnection;
+
+  useEffect(() => {
+    if (stepId !== "datadog" && stepId !== "jira") return;
+
+    const signature =
+      stepId === "datadog"
+        ? [datadogForm.apiKey, datadogForm.applicationKey].join(" ")
+        : [jiraForm.domain, jiraForm.email, jiraForm.apiToken].join(" ");
+
+    const complete =
+      stepId === "datadog"
+        ? !!datadogForm.apiKey.trim() && !!datadogForm.applicationKey.trim()
+        : !!jiraForm.domain.trim() && !!jiraForm.email.trim() && !!jiraForm.apiToken.trim();
+
+    // First sight of this step's values is the baseline, not a trigger.
+    if (autoCheckedRef.current[stepId] === undefined) {
+      autoCheckedRef.current[stepId] = signature;
+      return;
+    }
+    if (!complete || autoCheckedRef.current[stepId] === signature) return;
+
+    // Long enough that typing a domain character by character doesn't fire a
+    // request per keystroke; short enough to feel like a response to a paste.
+    const timer = setTimeout(() => {
+      autoCheckedRef.current[stepId] = signature;
+      void checkConnectionRef.current(stepId);
+    }, 900);
+    return () => clearTimeout(timer);
+  }, [
+    stepId,
+    datadogForm.apiKey,
+    datadogForm.applicationKey,
+    jiraForm.domain,
+    jiraForm.email,
+    jiraForm.apiToken,
+  ]);
+
+  /**
+   * Run GitHub's device flow from the wizard.
+   *
+   * Polling lives here rather than in a `useEffect` because the loop is
+   * naturally sequential — ask, wait the interval GitHub dictates, ask again —
+   * and GitHub rate-limits anything faster. `githubPollRef` is what stops it
+   * when the user navigates away mid-flow or restarts the sign-in.
+   */
+  const startGithubDeviceLogin = useCallback(async () => {
+    setError("");
+    setCheckOk("");
+    const run = ++githubPollRef.current;
+    try {
+      const r = await fetch("/api/setup/github/device", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "start" }),
+      });
+      const started = (await r.json()) as {
+        id?: string;
+        userCode?: string;
+        verificationUri?: string;
+        intervalMs?: number;
+        message?: string;
+      };
+      if (!r.ok || !started.id || !started.userCode || !started.verificationUri) {
+        setError(started.message ?? "Could not start GitHub sign-in.");
+        return;
+      }
+
+      setGithubDevice({
+        userCode: started.userCode,
+        verificationUri: started.verificationUri,
+        waiting: true,
+      });
+      /**
+       * Only in the desktop app. In a browser this open happens after the
+       * `await` above, i.e. outside the click gesture, so the popup blocker
+       * eats it and the user gets a failure toast instead of a tab. The link
+       * in the panel below is the reliable path there.
+       */
+      if (isDesktop()) void openInBrowser(started.verificationUri);
+
+      let intervalMs = started.intervalMs ?? 5000;
+      for (;;) {
+        await new Promise((resolve) => setTimeout(resolve, intervalMs));
+        if (githubPollRef.current !== run) return;
+
+        const pr = await fetch("/api/setup/github/device", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "poll", id: started.id }),
+        });
+        const result = (await pr.json()) as {
+          status: "pending" | "connected" | "expired" | "error";
+          intervalMs?: number;
+          login?: string | null;
+          message?: string;
+        };
+        if (githubPollRef.current !== run) return;
+
+        if (result.status === "pending") {
+          intervalMs = result.intervalMs ?? intervalMs;
+          continue;
+        }
+        setGithubDevice(null);
+        if (result.status === "connected") {
+          setGithubLogin(result.login ?? null);
+          setCheckOk(
+            result.login ? `Connected to GitHub as ${result.login}.` : "Connected to GitHub.",
+          );
+          await loadSetupStatus();
+          return;
+        }
+        setError(
+          result.status === "expired"
+            ? "The GitHub code expired. Start sign-in again."
+            : (result.message ?? "GitHub sign-in failed."),
+        );
+        return;
+      }
+    } catch {
+      if (githubPollRef.current !== run) return;
+      setGithubDevice(null);
+      setError("Could not reach GitHub.");
+    }
+  }, [loadSetupStatus]);
+
+  // Abandon any in-flight device poll when setup unmounts.
+  useEffect(() => () => void ++githubPollRef.current, []);
+
+  const startGoogleCalendarOAuth = useCallback(async () => {
+    if (!status) return;
+    setCalendarConnectBusy(true);
+    setError("");
+    setCalendarBanner("");
+    try {
+      const id = calendarForm.clientId.trim();
+      const sec = calendarForm.clientSecret.trim();
+      const typedCreds =
+        id &&
+        sec &&
+        id !== SECRET_FIELD_MASK &&
+        sec !== SECRET_FIELD_MASK;
+
+      if (typedCreds) {
+        const r = await fetch("/api/setup/save", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ calendar: { clientId: id, clientSecret: sec } }),
+        });
+        const result = await r.json();
+        if (!r.ok) throw new Error(result.error || "Save failed");
+      } else if (!status.calendarVars.hasClientId || !status.calendarVars.hasClientSecret) {
+        setCalendarConnectBusy(false);
+        setError("Enter Client ID and Client Secret, then use Sign in with Google (or Save & Continue first).");
+        return;
+      }
+
+      window.location.href = "/api/calendar/auth/start";
+    } catch (e) {
+      setCalendarConnectBusy(false);
+      setError(e instanceof Error ? e.message : "Could not start Google sign-in");
+    }
+  }, [status, calendarForm.clientId, calendarForm.clientSecret]);
+
+  const hasTypedGoogleOAuthCreds =
+    !!calendarForm.clientId.trim() &&
+    !!calendarForm.clientSecret.trim() &&
+    calendarForm.clientId !== SECRET_FIELD_MASK &&
+    calendarForm.clientSecret !== SECRET_FIELD_MASK;
+
+  /** Used by OAuth start: allow redirect when creds are in the form or already in `.env.local`. */
+  const canStartGoogleCalendarOAuth =
+    !!status &&
+    (hasTypedGoogleOAuthCreds ||
+      (status.calendarVars.hasClientId && status.calendarVars.hasClientSecret));
+
+  /** Pre-OAuth: both fields typed, or saved secret on disk plus client ID in the form (secret field left blank). */
+  const canShowSignInWithGoogle =
+    !!status &&
+    (status.calendar
+      ? canStartGoogleCalendarOAuth
+      : hasTypedGoogleOAuthCreds ||
+        (status.calendarVars.hasClientId &&
+          status.calendarVars.hasClientSecret &&
+          !!calendarForm.clientId.trim() &&
+          calendarForm.clientId !== SECRET_FIELD_MASK));
+
+  const save = useCallback(async () => {
+    setSaving(true);
+    setError("");
+    try {
+      const body: Record<string, unknown> = {};
+      const step = steps[currentStep];
+      if (step.id === "paths") {
+        body.core = {
+          repoRoot: pathsForm.repoRoot,
+          notesDir: pathsForm.notesDir,
+          reposDir: pathsForm.reposDir,
+        };
+      }
+      if (step.id === "datadog") {
+        const apiKey = datadogForm.apiKey.trim();
+        const applicationKey = datadogForm.applicationKey.trim();
+        const email = datadogForm.email.trim();
+        const scheduleId = datadogForm.scheduleId.trim();
+        const newApiKey = apiKey && apiKey !== SECRET_FIELD_MASK ? apiKey : undefined;
+
+        // Datadog needs the API key to unlock the page; email only improves on-call matching.
+        if (!newApiKey && !status?.datadogVars.hasApiKey) {
+          throw new Error("Enter a Datadog API key or skip this step.");
+        }
+
+        body.datadog = {
+          ...(newApiKey ? { apiKey: newApiKey } : {}),
+          ...(applicationKey && applicationKey !== SECRET_FIELD_MASK ? { applicationKey } : {}),
+          ...(email ? { email } : {}),
+          scheduleId,
+        };
+      }
+      if (step.id === "calendar" && !status?.calendar) {
+        const cid = calendarForm.clientId.trim();
+        const cs = calendarForm.clientSecret.trim();
+        body.calendar = {
+          ...(cid && cid !== SECRET_FIELD_MASK ? { clientId: cid } : {}),
+          ...(cs && cs !== SECRET_FIELD_MASK ? { clientSecret: cs } : {}),
+        };
+      }
+      if (step.id === "jira") {
+        const payload = jiraSetupSavePayload(jiraForm, status?.jira === true);
+        if (!payload.ok) throw new Error(payload.error);
+        if (payload.jira) body.jira = payload.jira;
+      }
+      if (step.id === "infra") {
+        body.infra = { scriptsRepoPath: infraForm.scriptsRepoPath };
+      }
+      if (step.id === "agent" && agentForm.provider) {
+        body.agent = agentForm;
+      }
+      if (step.id === "jev") {
+        const apiKey = jevKey.trim();
+        if (apiKey && apiKey !== SECRET_FIELD_MASK) {
+          const formatError = typesafeKeyFormatError(apiKey);
+          if (formatError) throw new Error(formatError);
+          body.typesafe = { apiKey };
+        } else if (!status?.typesafe) {
+          throw new Error("Paste a TypeSafe API key, or skip this step.");
+        }
+      }
+
+      if (Object.keys(body).length > 0) {
+        const r = await fetch("/api/setup/save", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        const result = await r.json();
+        if (!r.ok) throw new Error(result.error || "Save failed");
+        setSaveResult({ ok: true, message: result.message });
+        await loadSetupStatus();
+      }
+      goNext();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to save");
+    } finally {
+      setSaving(false);
+    }
+  }, [currentStep, pathsForm, datadogForm, calendarForm, jiraForm, jevKey, infraForm.scriptsRepoPath, agentForm, status, steps, goNext, loadSetupStatus]);
+
+  const goToStep = (i: number) => {
+    if (i < 0 || i >= steps.length || i === currentStep) return;
+    setSaveResult(null);
+    setError("");
+    setCheckOk("");
+    setCurrentStepId(steps[i].id);
+  };
+
+  const toggleSecret = (key: string) => {
+    setShowSecrets((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  const finishSetup = async () => {
+    setSaving(true);
+    setError("");
+    try {
+      await progressState.finish();
+      router.replace("/");
+      router.refresh();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Couldn't finish setup. Please retry.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!status || !progressState.ready) {
+    return (
+      <div className="page-wrapper">
+        <ReleaseNotesAbout />
+        {error || progressState.error ? (
+          <FetchError message={error || progressState.error} onRetry={() => {
+            void loadSetupStatus();
+            progressState.retry();
+          }} />
+        ) : (
+          <div role="status" aria-label="Loading setup" className="space-y-4">
+            <div className="skeleton h-8 w-48" />
+            <div className="skeleton h-40 w-full" />
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  const step = steps[currentStep];
+  const progress = ((currentStep + 1) / steps.length) * 100;
+  /*
+    An empty code folder is valid — someone here for notes and tasks has no
+    repositories, and blocking them on a path they do not have is how a setup
+    wizard becomes a wall. Only a path the user actually typed has to resolve.
+    The DevHub checkout is advanced and optional, so it never gates Next.
+  */
+  const pathsValid =
+    step.id !== "paths" ||
+    ((!pathsForm.notesDir || !!pathChecks.notesDir?.ok) &&
+      (!pathsForm.reposDir || !!pathChecks.reposDir?.ok) &&
+      (!pathsForm.repoRoot || !!pathChecks.repoRoot?.ok));
+
+  // Jira/Datadog stay "configured" whenever env vars exist — including a dead
+  // token. Agent has a default too. Next must still persist replacements.
+  const saveBeforeNext = shouldSaveBeforeNext(step.id, step.configured);
+
+  return (
+    <div className="page-wrapper h-full min-h-0 overflow-y-auto">
+      <div className="w-full min-w-0 max-w-full">
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
+          <h1 className="text-2xl font-semibold">Set up DevHub</h1>
+          <div className="flex items-center gap-2">
+            <Link href="/recovery" className="btn btn-ghost">Backup and recovery</Link>
+            <button type="button" className="btn btn-ghost" disabled={saving} onClick={() => void finishSetup()}>
+              Set up later
+            </button>
+          </div>
+        </div>
+        <ReleaseNotesAbout />
+        {progressState.error && <FetchError message={progressState.error} onRetry={progressState.retry} />}
+        <div className="space-y-4 mb-4"><RuntimeSlots context={{ location: "setup" }} /></div>
+        {status.datadogStatusError && <FetchError message="Couldn't read Datadog setup. Saved settings are unchanged." onRetry={() => void loadSetupStatus()} />}
+        {!datadogAvailable && !status.datadogStatusError && (unavailableRequestedStep === "datadog" || currentStepId === "datadog") && (
+          <p role="status" className="mb-4 text-sm text-text-muted">
+            Datadog setup is unavailable. Enable the plugin and rebuild DevHub to use it; saved settings are unchanged.
+          </p>
+        )}
+        {!slackAvailable && (unavailableRequestedStep === "slack" || currentStepId === "slack") && (
+          <p role="status" className="mb-4 text-sm text-text-muted">
+            Team Slack is unavailable. Enable the plugin and rebuild DevHub to use it; saved settings are unchanged.
+          </p>
+        )}
+        {/* Progress bar */}
+        <div
+          style={{
+            height: "3px",
+            background: "var(--bg-elevated)",
+            borderRadius: "2px",
+            marginBottom: "32px",
+            overflow: "hidden",
+          }}
+        >
+          <div
+            style={{
+              height: "100%",
+              width: "100%",
+              transform: `scaleX(${Math.min(1, Math.max(0, progress / 100))})`,
+              transformOrigin: "left center",
+              background: "var(--accent)",
+              borderRadius: "2px",
+              transition: "transform 0.3s var(--ease-swift, ease)",
+            }}
+          />
+        </div>
+
+        {/* Step indicators - scroll horizontally on narrow screens rather than
+            squishing; the active step always shows its label (see below) so
+            mobile users can tell where they are. */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "4px",
+            marginBottom: "32px",
+            overflowX: "auto",
+          }}
+        >
+          {steps.map((s, i) => {
+            const complete = i < currentStep || s.configured;
+            return (
+            <button
+              key={s.id}
+              type="button"
+              onClick={() => goToStep(i)}
+              aria-current={i === currentStep ? "step" : undefined}
+              title={s.title}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "6px",
+                padding: "6px 10px",
+                borderRadius: "6px",
+                border: "none",
+                background: i === currentStep ? "var(--accent-dim)" : "transparent",
+                color: i === currentStep
+                  ? "var(--accent)"
+                  : complete
+                    ? "var(--success)"
+                    : "var(--text-muted)",
+                cursor: "pointer",
+                fontSize: "12px",
+                fontWeight: i === currentStep ? 600 : 400,
+                whiteSpace: "nowrap",
+                flexShrink: 0,
+                transition: "all 0.15s ease",
+              }}
+            >
+              {complete ? <CheckCircle2 size={14} /> : i === currentStep ? s.icon : <Circle size={14} style={{ opacity: 0.5 }} />}
+              {/* Desktop shows every label; mobile shows only the active step's
+                  label (icon-only otherwise) so the row stays compact but the
+                  current step is always identifiable. */}
+              <span className={i === currentStep ? "inline" : "hidden sm:inline"}>{s.title}</span>
+              {s.optional && !complete && (
+                <span className="hidden sm:inline text-[9px] font-normal" style={{ color: "var(--text-subtle)", opacity: 0.8 }}>opt</span>
+              )}
+            </button>
+            );
+          })}
+        </div>
+
+        {/* Optional: plugins are never a required setup step, so this sits above every step. */}
+        <div className="card card-body mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div className="min-w-0">
+            <h2 className="text-sm font-semibold text-text">Plugins</h2>
+            <p className="mt-1 text-xs text-text-subtle">Add shared skills and agents from a GitHub repo.</p>
+          </div>
+          <Link href="/plugins" className="btn btn-ghost shrink-0 text-xs">Manage plugins</Link>
+        </div>
+
+        {/* Step content card */}
+        <div
+          style={{
+            background: "var(--bg-surface)",
+            border: "1px solid var(--border)",
+            borderRadius: "12px",
+            padding: "32px",
+            minHeight: "320px",
+          }}
+        >
+          {step.id === "welcome" && (
+            <WelcomeStep
+              agentsPassword={agentsPassword}
+              onAgentsPasswordChange={setAgentsPassword}
+              hasExistingPassword={status?.hasAgentsPassword === true}
+              datadogAvailable={datadogAvailable}
+              goals={goals}
+              onGoalsChange={updateGoals}
+            />
+          )}
+          {step.id === "tools" && (
+            <div className="flex flex-col gap-3">
+              <div>
+                <h2 className="text-lg font-semibold" style={{ color: "var(--text)" }}>
+                  Tools on this machine
+                </h2>
+                <p className="text-sm" style={{ color: "var(--text-muted)" }}>
+                  DevHub drives command-line tools you already use. Missing an optional one just
+                  means that feature stays off - nothing breaks.
+                </p>
+              </div>
+              <DependencyChecklist goals={goals} />
+            </div>
+          )}
+          {step.id === "paths" && (
+            <PathsStep
+              form={pathsForm}
+              setForm={setPathsForm}
+              checks={pathChecks}
+              defaults={status.coreDefaults}
+              error={error}
+              desktop={status.desktop ?? false}
+              hasCheckout={status.hasCheckout ?? true}
+              onBrowse={browseForCodeFolder}
+            />
+          )}
+          {step.id === "github" && (
+            <div>
+              <GitHubStep
+                configured={status.github}
+                checking={checkConnectionBusy === "github"}
+                onCheckConnection={() => void checkConnection("github")}
+                onStartDeviceLogin={() => void startGithubDeviceLogin()}
+                device={githubDevice}
+                login={githubLogin}
+                error={error}
+                ghCommand={status.githubVars.ghCommand}
+              />
+              {status.desktop && <PrivateRepoSetup connected={status.github} onLinked={() => void loadSetupStatus()} onLater={() => { progressState.skipStep(step.id); goNext(); }} />}
+            </div>
+          )}
+          {step.id === "datadog" && (
+            <DatadogStep
+              form={datadogForm}
+              setForm={setDatadogForm}
+              showSecrets={showSecrets}
+              toggleSecret={toggleSecret}
+              configured={status.datadog}
+              hasApiKey={status.datadogVars.hasApiKey}
+              hasApplicationKey={status.datadogVars.hasApplicationKey}
+              hasEmail={status.datadogVars.hasEmail}
+              hasScheduleId={status.datadogVars.hasScheduleId}
+              appOrigin={status.datadogVars.appOrigin ?? "https://app.datadoghq.com"}
+              checking={checkConnectionBusy === "datadog"}
+              onCheckConnection={() => void checkConnection("datadog")}
+              error={error}
+              checkOk={checkOk}
+            />
+          )}
+          {step.id === "calendar" && (
+            <CalendarStep
+              form={calendarForm}
+              setForm={setCalendarForm}
+              configured={status.calendar}
+              banner={calendarBanner}
+              connectBusy={calendarConnectBusy}
+              canConnectOAuth={canShowSignInWithGoogle}
+              onConnectGoogle={() => void startGoogleCalendarOAuth()}
+              checking={checkConnectionBusy === "calendar"}
+              onCheckConnection={() => void checkConnection("calendar")}
+              error={error}
+            />
+          )}
+          {step.id === "jira" && (
+            <JiraStep
+              form={jiraForm}
+              setForm={setJiraForm}
+              showSecrets={showSecrets}
+              toggleSecret={toggleSecret}
+              configured={status.jira}
+              checking={checkConnectionBusy === "jira"}
+              onCheckConnection={() => void checkConnection("jira")}
+              error={error}
+              checkOk={checkOk}
+            />
+          )}
+          {step.id === "infra" && (
+            <InfraStep
+              configured={status.infra}
+              awsProfile={status.infraVars.awsProfile}
+              account={status.infraVars.account}
+              checking={infraChecking}
+              onCheckConnection={async () => {
+                setInfraChecking(true);
+                try {
+                  await loadSetupStatus();
+                } finally {
+                  setInfraChecking(false);
+                }
+              }}
+              scriptsRepoPath={infraForm.scriptsRepoPath}
+              onScriptsRepoPathChange={(v) => setInfraForm((prev) => ({ ...prev, scriptsRepoPath: v }))}
+            />
+          )}
+          {step.id === "agent" && (
+            <div>
+            <PaseoConnection setup />
+            <AgentCliStep
+              provider={agentForm.provider}
+              onProviderChange={(v) => setAgentForm((prev) => ({ ...prev, provider: v }))}
+              opencodeModel={agentForm.opencodeModel}
+              onOpencodeModelChange={(v) => setAgentForm((prev) => ({ ...prev, opencodeModel: v }))}
+              cursorModel={agentForm.cursorModel}
+              onCursorModelChange={(v) => setAgentForm((prev) => ({ ...prev, cursorModel: v }))}
+              availability={{
+                cursorAgentInstalled: status.agentVars?.cursorAgentInstalled === true,
+                chatgptCliInstalled: status.agentVars?.chatgptCliInstalled === true,
+                antigravityCliInstalled: status.agentVars?.antigravityCliInstalled === true,
+                opencodeInstalled: status.agentVars?.opencodeInstalled === true,
+                apiConfigured: status.agentVars?.apiConfigured === true,
+              }}
+              desktop={status.desktop === true}
+            />
+            </div>
+          )}
+          {step.id === "jev" && (
+            <JevStep
+              apiKey={jevKey}
+              onApiKeyChange={setJevKey}
+              showSecret={!!showSecrets["typesafe-key"]}
+              onToggleSecret={() => toggleSecret("typesafe-key")}
+              source={status.typesafeVars?.source ?? null}
+              checking={checkConnectionBusy === "jev"}
+              onTest={() => void checkConnection("jev")}
+              error={error}
+              checkOk={checkOk}
+            />
+          )}
+          {step.id === "slack" && <PluginSetupStep onConfigured={setSlackConfigured} />}
+          {step.id === "done" && <DoneStep saveResult={saveResult} />}
+
+          {/* Navigation */}
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginTop: "28px",
+              paddingTop: "20px",
+              borderTop: "1px solid var(--border)",
+            }}
+          >
+            <button
+              onClick={goBack}
+              disabled={currentStep === 0}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "6px",
+                padding: "8px 16px",
+                borderRadius: "8px",
+                border: "1px solid var(--border)",
+                background: "transparent",
+                color: currentStep === 0 ? "var(--text-muted)" : "var(--text)",
+                cursor: currentStep === 0 ? "default" : "pointer",
+                opacity: currentStep === 0 ? 0.4 : 1,
+                fontSize: "13px",
+              }}
+            >
+              <ChevronLeft size={14} /> Back
+            </button>
+
+            <div style={{ display: "flex", gap: "8px" }}>
+              {step.optional && !isStepComplete(step, status) && (
+                <button
+                  onClick={() => { progressState.skipStep(step.id); goNext(); }}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "6px",
+                    padding: "8px 16px",
+                    borderRadius: "8px",
+                    border: "1px solid var(--border)",
+                    background: "transparent",
+                    color: "var(--text-subtle)",
+                    cursor: "pointer",
+                    fontSize: "13px",
+                  }}
+                >
+                  Skip <SkipForward size={14} />
+                </button>
+              )}
+
+              {step.id === "done" ? (
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={() => void finishSetup()}
+                  className="btn btn-primary"
+                >
+                  {saving ? "Finishing…" : "Go to Dashboard"}
+                </button>
+              ) : step.id === "welcome" ? (
+                <button
+                  onClick={async () => {
+                    setSaving(true);
+                    setError("");
+                    try {
+                      const r = await fetch("/api/setup/save", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          network: {
+                            // Only send when the user entered/generated one; empty
+                            // preserves any existing password.
+                            agentsPassword: agentsPassword.trim() || undefined,
+                          },
+                        }),
+                      });
+                      const result = await r.json();
+                      if (!r.ok) throw new Error(result.error || "Save failed");
+                      setSaveResult({ ok: true, message: result.message });
+                      goNext();
+                    } catch (e) {
+                      setError(e instanceof Error ? e.message : "Failed to save the Agents password");
+                    } finally {
+                      setSaving(false);
+                    }
+                  }}
+                  disabled={saving}
+                  className="btn btn-primary"
+                >
+                  {saving ? "Saving…" : "Get Started"} <ChevronRight size={14} />
+                </button>
+              ) : (
+                <button
+                  onClick={() => (saveBeforeNext ? void save() : goNext())}
+                  disabled={saving || !pathsValid}
+                  className={step.id === "slack" ? "btn btn-ghost" : "btn btn-primary"}
+                >
+                  {saving ? "Saving..." : saveBeforeNext ? "Save & Continue" : "Next"}
+                  {!saving && <ChevronRight size={14} />}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

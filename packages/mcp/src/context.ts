@@ -1,0 +1,64 @@
+/**
+ * Shared context handed to every tool registrar. Holds the filesystem storage
+ * layers (notes/docs/tasks/diagrams) and the dashboard HTTP client, so the
+ * individual `tools/*.ts` modules stay free of wiring.
+ */
+import path from "node:path";
+import type { ContentStorage } from "../../shared/storage/content.ts";
+import { fileURLToPath } from "node:url";
+import { readSchedulerLog } from "../../../apps/core/src/domains/scheduler/log.ts";
+import { NotesStorage } from "./storage.ts";
+import { TasksStorage, DiagramsStorage } from "./task-diagram-storage.ts";
+import { VaultStorage, markdownVaultCodec, resolveActiveTasksDir, resolveContentDir } from "./shared.ts";
+import { DashboardClient } from "./dashboard-client.ts";
+import { resolveDashboard, type ResolvedDashboard } from "./discover-dashboard.ts";
+
+export interface Context {
+  /** DevHub checkout the server runs from (REPO_ROOT) — where skills/ lives. */
+  repoRoot: string;
+  notesDir: string;
+  docsDir: string;
+  tasksDir: string;
+  storage: NotesStorage;
+  /** Local headless adapters shared with the corresponding vault storage. */
+  noteContent: ContentStorage;
+  docContent: ContentStorage;
+  docsStorage: VaultStorage;
+  tasksStorage: TasksStorage;
+  diagramsStorage: DiagramsStorage;
+  schedulerLog: typeof readSchedulerLog;
+  dashboard: DashboardClient;
+  /** How the dashboard was found, and what that instance says it can serve. */
+  dashboardInfo: ResolvedDashboard;
+}
+
+export function createContext(): Context {
+  const sourceDir = path.dirname(fileURLToPath(import.meta.url));
+  const repoRoot = process.env.REPO_ROOT || path.resolve(sourceDir, "../../..");
+  const notesDir = resolveContentDir("NOTES_DIR", repoRoot, "notes");
+  const tasksDir = resolveActiveTasksDir(resolveContentDir("TASKS_DIR", repoRoot, "tasks"));
+  const docsDir = resolveContentDir("DOCS_DIR", repoRoot, "docs");
+  const storage = new NotesStorage(notesDir);
+  const docsStorage = new VaultStorage(docsDir, markdownVaultCodec);
+  return {
+    repoRoot,
+    notesDir,
+    docsDir,
+    tasksDir,
+    storage,
+    noteContent: storage.content,
+    docContent: docsStorage.content,
+    docsStorage,
+    tasksStorage: new TasksStorage(tasksDir, notesDir),
+    diagramsStorage: new DiagramsStorage(storage),
+    schedulerLog: readSchedulerLog,
+    // Discovered rather than assumed, and per request: the dashboard advertises
+    // its port, so a checkout on a free port is reachable, a stale packaged
+    // build on 1337 is recognised instead of 404-ing every newer tool, and a
+    // session outlives whichever dashboard was up when it started.
+    dashboard: new DashboardClient(() => resolveDashboard().baseUrl),
+    get dashboardInfo() {
+      return resolveDashboard();
+    },
+  };
+}

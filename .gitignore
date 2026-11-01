@@ -19,13 +19,12 @@ node_modules/
 # rejected outright. Ignoring it is cheaper than remembering not to.
 node_modules.host/
 *.lock
-/package-lock.json
 
 # Next.js dashboard build artifacts. DEVHUB_DIST_DIR (next.config.ts) lets any
 # instance pick its own dist dir, so match the prefix rather than chasing names.
-dashboard/.next*/
-dashboard/.env.local
-dashboard/output/
+apps/ui/.next*/
+apps/ui/.env.local
+apps/ui/output/
 
 # Trace artifacts at repo root
 /.next/
@@ -77,10 +76,10 @@ Desktop.ini
 *.log
 logs/
 # Next.js routes that happen to be named logs/ — not log directories.
-!dashboard/app/logs/
-!dashboard/app/logs/**
-!dashboard/app/api/status/logs/
-!dashboard/app/api/status/logs/**
+!apps/ui/app/logs/
+!apps/ui/app/logs/**
+!apps/ui/app/api/status/logs/
+!apps/ui/app/api/status/logs/**
 
 # OS-level
 .Spotlight-V100

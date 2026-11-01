@@ -134,7 +134,7 @@ bash scripts/devhub-backport-status.sh              # list commits waiting to ba
 bash scripts/devhub-backport-status.sh --set-watermark  # mark current HEAD as caught up
 ```
 
-Exit `0` = nothing pending; exit `1` = commits are waiting (informational only). The pre-push hook runs this after verify and prints a reminder when work is pending — it never blocks the push. After a successful `devhub-backport.sh` or `devhub-ship.sh` public step, advance the marker with `devhub-update.sh --mark-synced` or `--set-watermark`.
+Exit `0` = nothing pending; exit `1` = commits are waiting (informational only). After a successful `devhub-backport.sh` or `devhub-ship.sh` public step, advance the marker with `devhub-update.sh --mark-synced` or `--set-watermark`.
 
 ## See also
 

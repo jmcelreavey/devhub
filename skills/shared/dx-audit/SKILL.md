@@ -165,7 +165,7 @@ all freshness claims as unverified.
   cannot both appear — take one position and defend it).
 - A finding without a next step is trivia — cut it.
 - Don't recommend a rewrite. Biggest-lever-first, smallest-diff-first.
-- If the dashboard/notes MCP is unavailable, write the report to
+- If the apps/ui/notes MCP is unavailable, write the report to
   `notes/reviews/dx-audit-<repo>-<date>.md` in the DevHub repo and say so.
 
 ## Verification

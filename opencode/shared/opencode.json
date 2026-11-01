@@ -399,6 +399,37 @@
           "name": "Fable 5 1M Thinking"
         }
       }
+    },
+    "experiential": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Experiential Labs",
+      "options": {
+        "baseURL": "https://api.experientiallabs.ai/v1",
+        "apiKey": "{file:~/.config/devhub/secrets/experiential_api_key}"
+      },
+      "models": {
+        "glm-5.3-uncensored:free": {
+          "name": "GLM 5.3 Uncensored (free)",
+          "limit": {
+            "context": 1048576,
+            "output": 131072
+          },
+          "cost": {
+            "input": 0,
+            "output": 0,
+            "cache_read": 0,
+            "cache_write": 0
+          },
+          "variants": {
+            "low": {
+              "reasoningEffort": "low"
+            },
+            "high": {
+              "reasoningEffort": "high"
+            }
+          }
+        }
+      }
     }
   }
 }

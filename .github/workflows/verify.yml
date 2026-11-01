@@ -17,8 +17,6 @@ jobs:
     name: Lint, typecheck, test, and build
     runs-on: ubuntu-latest
     env:
-      # verify runs tsc before build; skip Next's duplicate TS pass (see next.config.ts).
-      DEVHUB_SKIP_NEXT_TYPECHECK: "true"
       NODE_OPTIONS: --max-old-space-size=4096
       REPO_ROOT: ${{ github.workspace }}
       NOTES_DIR: ${{ github.workspace }}/notes
@@ -34,6 +32,17 @@ jobs:
       - name: Setup dashboard
         uses: ./.github/actions/dashboard-setup
 
+      - name: Check generated core routes
+        run: |
+          node scripts/gen-core-routes.mjs
+          git diff --exit-code -- apps/core/src/http/routes.generated.ts apps/core/src/http/namespaces.generated.ts
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
       - name: Check documentation links
         run: npm run docs:links
 
@@ -48,42 +57,37 @@ jobs:
       # run inside `npm run verify` below. They need python3, which
       # ubuntu-latest has; on a runner without it they skip rather than fail.
       - name: Verify vendored skills
-        run: npm run skills:verify-vendor --prefix dashboard
+        run: npm run skills:verify-vendor --prefix apps/ui
 
       # The desktop staging and supervisor scripts are plain .mjs outside the
       # dashboard's vitest project, so `verify` never saw them. They were
       # therefore only exercised by a release build — which is a 25-minute,
       # three-platform way to find out that a staging rule is wrong.
+      - name: Test workspace paths and checkout rebuild
+        run: node --test scripts/workspace-paths.test.mjs scripts/checkout-rebuild.test.mjs
+
       - name: Test desktop scripts
         run: npm run desktop:test
 
       - name: Run verify
-        run: npm run verify --prefix dashboard
+        run: npm run verify
 
-      - name: Verify Slack gateway
-        run: npm run verify:gateway
+      - name: Build dashboard
+        run: npm run verify:build --prefix apps/ui
 
-      # `verify` (lint + tsc + vitest + build) can go green on a dashboard that
-      # throws on mount: the vitest environment is `node` and there are 2
-      # component tests for 185 components. Nothing above this line renders a
-      # page. These smoke journeys are the only thing that does.
-      # WebKit is here because the desktop app renders in the OS webview
-      # (WKWebView / WebKitGTK), not Blink. Chromium-only CI would let an
-      # engine-level regression ship straight into the installer.
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium webkit
-        working-directory: dashboard
+        working-directory: apps/ui
 
       - name: Smoke test the built app
-        # verify builds to `.next-verify`; e2e must start against that distDir.
         env:
-          DEVHUB_VERIFY_BUILD: "1"
-        run: npm run test:e2e --prefix dashboard
+          PLAYWRIGHT_PORT: "41337"
+        run: npm run test:e2e --prefix apps/ui
 
       - name: Upload Playwright report on failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report
-          path: dashboard/playwright-report/
+          path: apps/ui/playwright-report/
           retention-days: 7

@@ -57,13 +57,13 @@ Graphite and Hollow still use `devhub:graphite-effects` and `devhub:hollow-effec
 
 ### Add a theme with effects
 
-1. Add both palette blocks to `dashboard/app/globals.css` and metadata to `CORE_THEME_PRESETS` in `dashboard/lib/theme-presets.ts`. Keep swatches identical to `--bg` and `--accent`. Keep Graphite and Hollow pinned first.
-2. Declare the theme in `dashboard/lib/theme-effects.ts`, then attach it as the preset's `effects`. Include a unique storage key, event, preview title/description, mark and task/merge messages. Each effect declares `id`, `label`, `description`, `default`, `group`, `reducedMotion` and optional `requires` ids. The master switch is shared, not another theme-specific control.
+1. Add both palette blocks to `apps/ui/app/globals.css` and metadata to `CORE_THEME_PRESETS` in `apps/ui/lib/theme-presets.ts`. Keep swatches identical to `--bg` and `--accent`. Keep Graphite and Hollow pinned first.
+2. Declare the theme in `apps/ui/lib/theme-effects.ts`, then attach it as the preset's `effects`. Include a unique storage key, event, preview title/description, mark and task/merge messages. Each effect declares `id`, `label`, `description`, `default`, `group`, `reducedMotion` and optional `requires` ids. The master switch is shared, not another theme-specific control.
 3. Add a compact SVG mark to `ThemeMark.tsx` and theme-scoped treatments to `theme-effects.css`. The shared gate sets `data-theme-fx-<id>` after applying the master switch, dependencies and motion policy. Gate every treatment with its flag; use transform/opacity for animation, avoid permanent frame loops and never overlay text. The existing mouse follower sleeps when settled and already protects editors and terminals.
 4. Reuse the shared preview and reset. Don't add controls to the bottom of the theme list. For a specialised runtime, use the same saved keys and declarations, and keep its listeners mounted only while selected. Audio still needs an explicit user gesture.
 5. Run registry/migration/bootstrap tests, AA contrast tests across all five surfaces in both modes, UI tests and `npm run verify`. Capture desktop/mobile, light/dark and reduced-motion screenshots. If retiring an id, add an explicit alias or preserve the default fallback in both first-paint bootstrap and runtime sanitisation.
 
-Plugins without an effects declaration get a clear empty state; no core effect flags or follower leak into them. Plugin palette/logo/font materialisation stays unchanged.
+Plugins without an effects declaration get a clear empty state; no core effect flags or follower leak into them. Runtime themes supply their own reviewed assets.
 
 ## Graphite Neon (Default) workshop effects
 
@@ -101,7 +101,7 @@ Hollow (Halloween) 🎃 is an optional spooky Halloween theme: bruised near-blac
 - **If you pick another theme during October**, that choice sticks for the rest of the month.
 - **When October ends**, DevHub puts your previous theme back, unless you chose a different one yourself. Your mode (System, Light or Dark) is left alone.
 
-The Halloween logo is its own mark: the Shift Dock rows in two purples, with the docked hub drawn as a jack-o'-lantern (green stem, carved face cut out of the pumpkin). It is flat artwork with no glow or backdrop, and no theme paints effects on or behind any logo, so switching icons or themes never leaves anything behind. It has separate light and dark assets, and Hollow also uses it as the browser tab icon. In the desktop app, Hollow also overrides the Dock, window and tray icons on startup and when the theme changes. Switching away restores the selected DevHub or plugin icon; macOS keeps a monochrome tray template. Regenerate the assets with `node dashboard/scripts/render-brand-icons.mjs --halloween-only`.
+The Halloween logo is its own mark: the Shift Dock rows in two purples, with the docked hub drawn as a jack-o'-lantern (green stem, carved face cut out of the pumpkin). It is flat artwork with no glow or backdrop, and no theme paints effects on or behind any logo, so switching icons or themes never leaves anything behind. It has separate light and dark assets, and Hollow also uses it as the browser tab icon. In the desktop app, Hollow also overrides the Dock, window and tray icons on startup and when the theme changes. Switching away restores the selected DevHub or plugin icon; macOS keeps a monochrome tray template. Regenerate the assets with `node apps/ui/scripts/render-brand-icons.mjs --halloween-only`.
 
 The bookkeeping is in `localStorage` (`devhub:hollow-season`), so it belongs to one browser (or the desktop app) at one address. Open DevHub from a different browser or port and that counts as a first open.
 
@@ -124,13 +124,13 @@ Reduced motion keeps the static textures (grain, vignette, stains) and turns off
 
 ## Plugin whitelabel (tier 3)
 
-An enabled plugin can contribute branding: custom presets, default mode, fonts, logo, and a desktop app icon. The branding materialiser writes generated files locally (`plugin-branding.generated.*`) that `theme-presets.ts` and the layout consume. That happens when a checkout materialises the plugin, not inside an already built app. The Plugins page can review a branding declaration, but it will not enable or apply it.
+An enabled runtime plugin can contribute reviewed palettes, logos and fonts. See [runtime themes](../architecture/plugins.md#reviewed-runtime-theme-assets).
 
 - Plugin presets appear in the same Appearance menu as core themes.
 - `defaultMode` can seed **system**, **dark**, or **light** for fresh installs; user overrides still win.
 - Logo and fonts replace the sidebar chip and UI typeface when configured.
 
-See [Plugins › Tier 3 — branding](../architecture/plugins.md#tier-3--branding-whitelabel) and [Creating a Plugin › Whitelabel](../contributing/creating-plugins.md#5c-optional-whitelabel-devhub-tier-3-branding) for the manifest layout.
+See [reviewed runtime theme assets](../architecture/plugins.md#reviewed-runtime-theme-assets) for the manifest layout.
 
 ## Customization Guidance
 

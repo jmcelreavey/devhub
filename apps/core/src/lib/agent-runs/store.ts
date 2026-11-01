@@ -1,0 +1,571 @@
+/**
+ * Agent run registry: create, read, list, reconcile and cancel runs.
+ *
+ * The files in each run dir are the source of truth (run-files.ts). This module
+ * adds the dashboard's side: where runs live, and correcting a status the
+ * runner could not write itself — a tab closed mid-run, a run the dock never
+ * picked up.
+ */
+import { randomBytes } from "node:crypto";
+import fs from "node:fs";
+import path from "node:path";
+import { clip } from "./events";
+import {
+  isActiveAgentRunState,
+  taskScopeForDirectory,
+  readRunSpec,
+  readRunStatus,
+  writeRunSpec,
+  writeRunStatus,
+  appendRunEvent,
+  type AgentRunSpec,
+  type AgentRunState,
+  type AgentRunStatus,
+} from "./run-files";
+import { agentConsentFile, hasConsented, recordConsent } from "./consent";
+import { getTerminalProposal, resolveTerminalProposal } from "../terminal/proposals";
+import { syncTaskAgentRunFromAgentState } from "../../domains/tasks/task-agent-runs";
+import { getNotesDir } from "../notes/dir";
+import { recordWorkflowRun } from "../workflows/store";
+import { recordRunSnapshot } from "../../domains/tasks/run-snapshot";
+import { sqliteRunDirectories, sqliteRunsEnabled } from "../../domains/storage/runs";
+import { agentRunsDir, legacyAgentRunsDir } from "./paths";
+import { getGithubFullNameForLocalRepo, resolveGitDir } from "../repos/index";
+
+export { agentRunsDir } from "./paths";
+
+/** Proposals expire after 15 minutes, so a run still queued past this never started. */
+const NEVER_STARTED_MS = 16 * 60 * 1_000;
+/**
+ * A Paseo run still without an acknowledged agent after this long can't be
+ * followed or cancelled; keeping it "active" only holds capacity forever.
+ */
+const ORPHANED_START_MS = 30 * 60 * 1_000;
+const RUN_ID_RE = /^run-[a-z0-9]{6,12}-[0-9a-f]{8}$/;
+
+export interface AgentRun {
+  spec: AgentRunSpec;
+  status: AgentRunStatus;
+  dir: string;
+}
+
+export function newAgentRunId(): string {
+  return `run-${Date.now().toString(36)}-${randomBytes(4).toString("hex")}`;
+}
+
+export function isValidAgentRunId(id: string): boolean {
+  return RUN_ID_RE.test(id);
+}
+
+/** Absolute run dir, or null for a malformed id (guards path traversal). */
+export function agentRunDir(id: string): string | null {
+  return isValidAgentRunId(id) ? path.join(agentRunsDir(), id) : null;
+}
+
+function safeReaddir(dir: string): string[] {
+  try {
+    return fs.readdirSync(dir);
+  } catch {
+    return [];
+  }
+}
+
+export function archiveLegacyAgentRun(run: AgentRun, root = agentRunsDir()): AgentRun {
+  if (!isValidAgentRunId(run.spec.id)) throw new Error("Invalid legacy agent run id");
+  if (isActiveAgentRunState(run.status.state)) return run;
+  const target = path.join(root, run.spec.id);
+  const existing = readRunFromDir(target);
+  if (existing) return existing;
+  fs.mkdirSync(root, { recursive: true, mode: 0o700 });
+  const temporary = `${target}.migration-${randomBytes(6).toString("hex")}`;
+  try {
+    fs.cpSync(run.dir, temporary, { recursive: true, errorOnExist: true, force: false });
+    fs.chmodSync(temporary, 0o700);
+    try {
+      fs.renameSync(temporary, target);
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code;
+      if (code !== "EEXIST" && code !== "ENOTEMPTY") throw err;
+    }
+  } finally {
+    fs.rmSync(temporary, { recursive: true, force: true });
+  }
+  return readRunFromDir(target) ?? run;
+}
+
+export function createAgentRun(spec: AgentRunSpec): AgentRun {
+  const dir = agentRunDir(spec.id);
+  if (!dir) throw new Error(`Invalid agent run id: ${spec.id}`);
+  const root = path.dirname(dir);
+  // 0700: specs hold prompts and events hold whatever the agent read.
+  fs.mkdirSync(root, { recursive: true, mode: 0o700 });
+  fs.mkdirSync(dir, { mode: 0o700 });
+  writeRunSpec(dir, spec);
+  const status = writeRunStatus(dir, {
+    state: "queued", updatedAt: Date.now(), eventCount: 0,
+    ...(spec.runtime === "generation" ? { ownerPid: process.pid } : {}),
+  });
+  return { spec, status, dir };
+}
+
+/**
+ * Register an interactive CLI session (Claude/etc in the dock) so Agent Activity
+ * lists it without spawning agent-run.cjs. Stays queued until the tab's
+ * `--interactive-start` records the shell pid (see interactive-shell.ts); from
+ * then on the normal dead-pid and never-started reconcile applies.
+ */
+export function createInteractiveAgentRun(input: {
+  id: string;
+  provider: string;
+  providerLabel: string;
+  cwd: string;
+  title: string;
+  prompt: string;
+  model?: string;
+  sessionId?: string;
+  parentRunId?: string;
+}): AgentRun {
+  const now = Date.now();
+  const run = createAgentRun({
+    id: input.id,
+    provider: input.provider,
+    providerLabel: input.providerLabel,
+    bin: "interactive",
+    args: [],
+    format: "text",
+    cwd: input.cwd,
+    title: input.title.slice(0, 80),
+    prompt: input.prompt,
+    model: input.model,
+    depth: 0,
+    createdAt: now,
+    parentRunId: input.parentRunId,
+  });
+  return input.sessionId ? updateAgentRunStatus(run, { sessionId: input.sessionId }) : run;
+}
+
+function syncLinkedTaskAgentRun(run: AgentRun, status: AgentRunStatus): void {
+  if (run.spec.runtime === "generation" && !run.spec.activity?.taskId) return;
+  // Runner process writes status.json directly; dashboard paths sync here.
+  // notesDir is resolved now, not when the promise runs — see recordRunSnapshot.
+  void syncTaskAgentRunFromAgentState(run.spec.id, status.state, {
+    sessionId: status.sessionId ?? null,
+    terminalSessionId: status.terminalSessionId ?? null,
+    provider: run.spec.provider,
+    notesDir: getNotesDir(),
+  }).catch(() => undefined);
+}
+
+export function updateAgentRunStatus(run: AgentRun, patch: Partial<AgentRunStatus>, options?: { skipIfUnchanged?: boolean }): AgentRun {
+  // Re-read first: the runner writes status.json from its own process.
+  const current = readRunStatus(run.dir) ?? run.status;
+  const next = { ...current, ...patch };
+  if (options?.skipIfUnchanged && JSON.stringify(next) === JSON.stringify(current)) {
+    syncLinkedTaskAgentRun(run, current);
+    return { ...run, status: current };
+  }
+  const status = writeRunStatus(run.dir, next);
+  syncLinkedTaskAgentRun(run, status);
+  if (current.state !== status.state) void recordWorkflowRun(run.spec, status).catch((error: unknown) => console.error("[workflow] Could not record run transition", error));
+  if (run.spec.runtime !== "generation" && isActiveAgentRunState(current.state) && !isActiveAgentRunState(status.state)) {
+    // Finished here (MCP finish, cancel, closed tab): leave the next agent a handoff.
+    void recordRunSnapshot(
+      run.spec.worktree?.path ?? run.spec.cwd,
+      {
+        runId: run.spec.id,
+        state: status.state,
+        provider: run.spec.provider,
+        exitCode: status.exitCode,
+        sessionId: status.sessionId,
+        error: status.error,
+      },
+      getNotesDir(),
+    ).catch(() => false);
+  }
+  return { ...run, status };
+}
+
+function pidAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err) {
+    return (err as NodeJS.ErrnoException).code === "EPERM";
+  }
+}
+
+/** Needs no network: a start Paseo never acknowledged has no agent to look up. */
+function reconcileOrphanedPaseoStart(run: AgentRun): AgentRun {
+  const { status } = run;
+  if (!isActiveAgentRunState(status.state) || (status.conversationId && status.messageId)) return run;
+  if (Date.now() - run.spec.createdAt < ORPHANED_START_MS) return run;
+  return updateAgentRunStatus(run, {
+    state: "failed",
+    finishedAt: Date.now(),
+    error: status.submissionAttemptedAt
+      ? "Paseo never acknowledged this start, so DevHub could not follow it. Check Paseo for an agent it may have created."
+      : "This run never reached Paseo.",
+  });
+}
+
+export function reconcileAgentRun(run: AgentRun): AgentRun {
+  if (run.spec.runtime === "aionui") return run;
+  if (run.spec.runtime === "paseo") return reconcileOrphanedPaseoStart(run);
+  if (run.spec.runtime === "generation") {
+    if (isActiveAgentRunState(run.status.state) && run.status.ownerPid && !pidAlive(run.status.ownerPid)) {
+      return updateAgentRunStatus(run, {
+        state: "failed", finishedAt: Date.now(),
+        error: "DevHub stopped before the generation reported a result. The request was not replayed.",
+      });
+    }
+    return run;
+  }
+  const { status } = run;
+  const now = Date.now();
+  // The dock chip approved (or already injected) this run's proposal: that is
+  // the user saying "this agent may work in this repo" — remember it so later
+  // dispatches to the same provider+repo auto-run (see consent.ts).
+  if (status.proposalId && (status.state === "running" || status.state === "succeeded")) {
+    try {
+      // Reconcile runs on every list/poll — only write the first time.
+      const file = agentConsentFile();
+      const repoKey = run.spec.worktree?.repoRoot ?? run.spec.cwd;
+      if (!hasConsented(file, run.spec.provider, repoKey)) recordConsent(file, run.spec.provider, repoKey, now);
+    } catch {
+      // Consent recording must never break reconciliation.
+    }
+  }
+  if (status.state === "running" && status.pid && !pidAlive(status.pid)) {
+    // Interactive runs track the tab's shell: it dying means the tab was closed.
+    return updateAgentRunStatus(
+      run,
+      run.spec.bin === "interactive"
+        ? { state: "cancelled", finishedAt: now, error: status.error ?? "Terminal tab closed before the CLI exited." }
+        : {
+            state: "failed",
+            finishedAt: now,
+            error: status.error ?? "The runner exited without reporting a result — was the terminal tab closed?",
+          },
+    );
+  }
+  if (status.state !== "queued") return run;
+
+  const proposal = status.proposalId ? getTerminalProposal(status.proposalId) : null;
+  if (proposal?.status === "denied") {
+    return updateAgentRunStatus(run, { state: "cancelled", finishedAt: now, error: "Denied in the DevHub terminal dock." });
+  }
+  if (proposal?.status === "expired" || proposal?.status === "failed") {
+    return updateAgentRunStatus(run, {
+      state: "failed",
+      finishedAt: now,
+      error: proposal.error ?? `Terminal proposal ${proposal.status}.`,
+    });
+  }
+  if (!proposal && now - run.spec.createdAt > NEVER_STARTED_MS) {
+    return updateAgentRunStatus(run, {
+      state: "failed",
+      finishedAt: now,
+      error: "Never started — the DevHub terminal dock did not pick the run up. Is the dashboard open?",
+    });
+  }
+  return run;
+}
+
+function readRunFromDir(dir: string): AgentRun | null {
+  const spec = readRunSpec(dir);
+  const status = readRunStatus(dir);
+  return spec && status ? { spec, status, dir } : null;
+}
+
+export function readAgentRun(id: string): AgentRun | null {
+  const dir = agentRunDir(id);
+  if (!dir) return null;
+  let run = readRunFromDir(dir);
+  const legacyRoot = legacyAgentRunsDir();
+  if (!run && legacyRoot) {
+    const legacy = readRunFromDir(path.join(legacyRoot, id));
+    if (legacy) run = archiveLegacyAgentRun(reconcileAgentRun(legacy));
+  }
+  if (!run) return null;
+  const reconciled = reconcileAgentRun(run);
+  // Heal task sidecar when status.json already shows a terminal state.
+  if (!isActiveAgentRunState(reconciled.status.state)) {
+    syncLinkedTaskAgentRun(reconciled, reconciled.status);
+  }
+  return reconciled;
+}
+
+/** Bounded lookup for read-only integrations; does not reconcile or migrate runs. */
+export function findAgentRunByConversation(conversationId: string): AgentRun | null {
+  const root = agentRunsDir();
+  const names = sqliteRunsEnabled() ? sqliteRunDirectories(root).map((dir) => path.basename(dir)) : safeReaddir(root);
+  const newest = names.filter(isValidAgentRunId)
+    .sort((a, b) => parseInt(b.split("-")[1], 36) - parseInt(a.split("-")[1], 36)).slice(0, 200);
+  for (const id of newest) {
+    const run = readRunFromDir(path.join(root, id));
+    if (run?.status.conversationId === conversationId) return run;
+  }
+  return null;
+}
+
+function scanAgentWaiting(onSelected?: (entry: { id: string; dir: string }, status: AgentRunStatus) => boolean, includeActive = false, includeAll = false): { waiting: number; incomplete: boolean } {
+  const entries: { id: string; dir: string }[] = [];
+  const seen = new Set<string>();
+  let incomplete = false;
+  for (const root of [agentRunsDir(), legacyAgentRunsDir()]) {
+    if (!root) continue;
+    try {
+      if (sqliteRunsEnabled()) sqliteRunDirectories(root);
+      for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
+        if (!isValidAgentRunId(entry.name) || seen.has(entry.name)) continue;
+        seen.add(entry.name);
+        if (!entry.isDirectory()) continue;
+        entries.push({ id: entry.name, dir: path.join(root, entry.name) });
+      }
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") incomplete = true;
+    }
+  }
+  entries.sort((left, right) => parseInt(right.id.split("-")[1], 36) - parseInt(left.id.split("-")[1], 36));
+  const states = new Set(["queued", "starting", "running", "needs-attention", "completed", "succeeded", "failed", "cancelled"]);
+  let waiting = 0;
+  // Only the newest runs matter for attention; older history is ignored, not an error.
+  for (const entry of entries.slice(0, 200)) {
+    try {
+      const file = fs.lstatSync(sqliteRunsEnabled() ? entry.dir : path.join(entry.dir, "status.json"));
+      if ((!sqliteRunsEnabled() && (!file.isFile() || file.size > 1024 * 1024)) || (sqliteRunsEnabled() && !file.isDirectory())) { incomplete = true; continue; }
+      const status = readRunStatus(entry.dir);
+      if (!status || !states.has(status.state) || Buffer.byteLength(JSON.stringify(status)) > 1024 * 1024) { incomplete = true; continue; }
+      if (status.state === "needs-attention") waiting++;
+      if ((includeAll || status.state === "needs-attention" || (includeActive && isActiveAgentRunState(status.state))) && onSelected && !onSelected(entry, status)) incomplete = true;
+    } catch {
+      incomplete = true;
+    }
+  }
+  return { waiting, incomplete };
+}
+
+export function readAgentWaitingSummary(): { waiting: number; incomplete: boolean } {
+  return scanAgentWaiting();
+}
+
+function runGithubRepo(cwd: string): string | null {
+  if (!path.isAbsolute(cwd)) return null;
+  let directory = path.resolve(cwd);
+  while (true) {
+    if (resolveGitDir(directory)) return getGithubFullNameForLocalRepo(directory);
+    const parent = path.dirname(directory);
+    if (parent === directory) return null;
+    directory = parent;
+  }
+}
+
+export function readProfileAgentAttention(profile: string, directory: string, tasks: readonly { id: string; createdAt: string }[], options?: { includeActive?: boolean; includeLatestFailure?: boolean }): { taskIds: string[]; failedTaskIds?: string[]; attentionKeys?: Record<string, string>; repos?: Record<string, string>; incomplete: boolean } {
+  const byId = new Map(tasks.map((task) => [task.id, task]));
+  const taskIds = new Set<string>();
+  const failedTaskIds = new Set<string>();
+  const latestTasks = new Map<string, { timestamp: number; state: AgentRunState; key: string }>();
+  const waitingKeys = new Map<string, string[]>();
+  const repos = new Map<string, string>();
+  const { incomplete } = scanAgentWaiting(({ id, dir }, status) => {
+    const { state } = status;
+    const attentionKey = JSON.stringify([id, state, typeof status.updatedAt === "number" ? status.updatedAt : null]);
+    const relevant = state === "needs-attention" || (options?.includeActive && isActiveAgentRunState(state)) || (options?.includeLatestFailure && state === "failed");
+    try {
+      if (!sqliteRunsEnabled()) {
+        const file = fs.lstatSync(path.join(dir, "spec.json"));
+        if (!file.isFile() || file.size > 1024 * 1024) return !relevant;
+      }
+      const spec = readRunSpec(dir);
+      if (!spec || spec.id !== id || Buffer.byteLength(JSON.stringify(spec)) > 1024 * 1024) return !relevant;
+      if (!spec.activity || typeof spec.activity !== "object" || Array.isArray(spec.activity)) return true;
+      const taskId = spec.activity.taskId;
+      const task = typeof taskId === "string" ? byId.get(taskId) : undefined;
+      const scope = spec.activity.taskScope;
+      if (!scope || typeof scope !== "object" || typeof scope.profile !== "string" || typeof scope.directoryIdentity !== "string" || typeof scope.taskCreatedAt !== "string") return !(options?.includeActive && task);
+      if (scope.profile !== profile || !task) return true;
+      const expected = taskScopeForDirectory(profile, directory, task.id, task.createdAt);
+      if (!expected || scope.directoryIdentity !== expected.directoryIdentity || scope.taskCreatedAt !== expected.taskCreatedAt) return options?.includeActive !== true;
+      if (options?.includeLatestFailure && relevant && !repos.has(task.id)) {
+        const cwd = spec.worktree?.repoRoot ?? spec.cwd;
+        const repo = cwd ? runGithubRepo(cwd) : null;
+        if (repo) repos.set(task.id, repo);
+      }
+      let ambiguousLatest = false;
+      if (options?.includeLatestFailure) {
+        const timestamp = parseInt(id.split("-")[1], 36);
+        const latest = latestTasks.get(task.id);
+        if (!latest) {
+          latestTasks.set(task.id, { timestamp, state, key: attentionKey });
+          if (state === "failed") failedTaskIds.add(task.id);
+        } else if (latest.timestamp === timestamp && latest.state !== state && (latest.state === "failed" || state === "failed")) {
+          failedTaskIds.delete(task.id);
+          ambiguousLatest = true;
+        }
+      }
+      if (options?.includeLatestFailure && state === "needs-attention") waitingKeys.set(task.id, [...(waitingKeys.get(task.id) ?? []), attentionKey]);
+      if (state === "needs-attention" || (options?.includeActive && isActiveAgentRunState(state))) taskIds.add(task.id);
+      return !ambiguousLatest;
+    } catch {
+      return !relevant;
+    }
+  }, options?.includeActive === true, options?.includeLatestFailure === true);
+  const attentionKeys = Object.fromEntries([...new Set([...taskIds, ...failedTaskIds])].map((taskId) => [taskId, JSON.stringify([...(waitingKeys.get(taskId) ?? []), ...(failedTaskIds.has(taskId) ? [latestTasks.get(taskId)?.key] : [])].sort())]));
+  return { taskIds: [...taskIds], ...(options?.includeLatestFailure ? { failedTaskIds: [...failedTaskIds], attentionKeys, repos: Object.fromEntries(repos) } : {}), incomplete };
+}
+
+/** Newest first. */
+export function listAgentRuns(limit = 20): AgentRun[] {
+  const root = agentRunsDir();
+  const names = sqliteRunsEnabled() ? sqliteRunDirectories(root).map((dir) => path.basename(dir)) : safeReaddir(root);
+  const runs = names
+    .filter(isValidAgentRunId)
+    .map((name) => readRunFromDir(path.join(root, name)))
+    .filter((run): run is AgentRun => run !== null);
+  const ids = new Set(runs.map((run) => run.spec.id));
+  const legacyRoot = legacyAgentRunsDir();
+  if (legacyRoot) {
+    const legacyNames = sqliteRunsEnabled() ? sqliteRunDirectories(legacyRoot).map((dir) => path.basename(dir)) : safeReaddir(legacyRoot);
+    for (const id of legacyNames.filter(isValidAgentRunId)) {
+      if (ids.has(id)) continue;
+      const legacy = readRunFromDir(path.join(legacyRoot, id));
+      if (legacy) runs.push(archiveLegacyAgentRun(reconcileAgentRun(legacy)));
+    }
+  }
+  return runs
+    .sort((a, b) => b.spec.createdAt - a.spec.createdAt)
+    .slice(0, limit)
+    .map(reconcileAgentRun);
+}
+
+/** Short generation calls and historical AionUi records never hold a coding-run slot. */
+export function isCapacityRun(run: AgentRun): boolean {
+  return run.spec.runtime !== "generation" && run.spec.runtime !== "aionui" && isActiveAgentRunState(run.status.state);
+}
+
+/** The runs the dispatch limit counts, newest first. */
+export function listCapacityRuns(): AgentRun[] {
+  return listAgentRuns(Number.MAX_SAFE_INTEGER).filter(isCapacityRun);
+}
+
+export function countActiveAgentRuns(): number {
+  return listCapacityRuns().length;
+}
+
+export type AgentRunCancelOutcome = "signalled" | "cancelled" | "already-finished";
+
+/**
+ * A running run is signalled and records "cancelled" itself when the CLI exits;
+ * a queued one is denied in the dock and marked cancelled here.
+ */
+export function cancelAgentRun(run: AgentRun): { run: AgentRun; outcome: AgentRunCancelOutcome } {
+  const { status } = run;
+  if ((run.spec.runtime === "generation" || run.spec.runtime === "aionui" || run.spec.runtime === "paseo") && isActiveAgentRunState(status.state)) {
+    throw new Error("Cancel this request through its owning runtime; it has no terminal process to signal.");
+  }
+  // Interactive runs' pid is the user's shell — never signal it; just close the record.
+  if (status.state === "running" && run.spec.bin === "interactive") {
+    return {
+      run: updateAgentRunStatus(run, {
+        state: "cancelled",
+        finishedAt: Date.now(),
+        error: "Cancelled while the interactive CLI was still open.",
+      }),
+      outcome: "cancelled",
+    };
+  }
+  if (status.state === "running" && status.pid) {
+    try {
+      process.kill(status.pid, "SIGTERM");
+      return { run, outcome: "signalled" };
+    } catch {
+      return { run: reconcileAgentRun(run), outcome: "already-finished" };
+    }
+  }
+  if (status.state === "queued") {
+    if (status.proposalId) resolveTerminalProposal(status.proposalId, "deny");
+    return {
+      run: updateAgentRunStatus(run, { state: "cancelled", finishedAt: Date.now(), error: "Cancelled before it started." }),
+      outcome: "cancelled",
+    };
+  }
+  return { run, outcome: "already-finished" };
+}
+
+export function appendInteractiveAgentNote(run: AgentRun, text: string): AgentRun {
+  const trimmed = clip(text, 8_000).trim();
+  if (!trimmed) return run;
+  const page = { type: "text" as const, text: trimmed, seq: run.status.eventCount, ts: Date.now() };
+  appendRunEvent(run.dir, page);
+  return updateAgentRunStatus(run, { eventCount: run.status.eventCount + 1, updatedAt: Date.now() });
+}
+
+export function finishInteractiveAgentRun(
+  run: AgentRun,
+  input: {
+    ok: boolean;
+    resultText?: string;
+    sessionId?: string;
+    error?: string;
+  },
+): AgentRun {
+  const now = Date.now();
+  if (input.resultText?.trim()) {
+    appendRunEvent(run.dir, {
+      type: "result",
+      ok: input.ok,
+      text: clip(input.resultText.trim(), 8_000),
+      seq: run.status.eventCount,
+      ts: now,
+    });
+  }
+  const eventBump = input.resultText?.trim() ? 1 : 0;
+  return updateAgentRunStatus(run, {
+    state: input.ok ? "succeeded" : "failed",
+    finishedAt: now,
+    updatedAt: now,
+    eventCount: run.status.eventCount + eventBump,
+    resultText: input.resultText?.trim() || run.status.resultText,
+    sessionId: input.sessionId?.trim() || run.status.sessionId,
+    error: input.ok ? undefined : input.error?.trim() || run.status.error || "Interactive run marked failed",
+    exitCode: input.ok ? 0 : 1,
+  });
+}
+
+export function toAgentRunSummary(run: AgentRun) {
+  const { spec, status } = run;
+  return {
+    id: spec.id,
+    runtime: spec.runtime ?? "legacy-cli",
+    activity: spec.activity ?? null,
+    provider: spec.provider,
+    providerLabel: spec.providerLabel,
+    title: spec.title,
+    model: spec.model ?? null,
+    reasoningEffort: spec.reasoningEffort ?? null,
+    state: status.state,
+    cwd: spec.cwd,
+    worktree: spec.worktree ?? null,
+    parentRunId: spec.parentRunId ?? null,
+    depth: spec.depth,
+    createdAt: spec.createdAt,
+    startedAt: status.startedAt ?? null,
+    startupPhase: status.startupPhase ?? null,
+    finishedAt: status.finishedAt ?? null,
+    exitCode: status.exitCode ?? null,
+    eventCount: status.eventCount,
+    sessionId: status.sessionId ?? null,
+    terminalSessionId: status.terminalSessionId ?? null,
+    conversationId: status.conversationId ?? null,
+    turnId: status.turnId ?? null,
+    connectivity: status.connectivity ?? null,
+    inputTokens: status.inputTokens ?? null,
+    outputTokens: status.outputTokens ?? null,
+    resultText: status.resultText ? clip(status.resultText, 4_000) : null,
+    costUsd: status.costUsd ?? null,
+    turns: status.turns ?? null,
+    error: status.error ?? null,
+  };
+}
+
+export type AgentRunSummary = ReturnType<typeof toAgentRunSummary>;

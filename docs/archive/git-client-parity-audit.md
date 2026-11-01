@@ -11,8 +11,8 @@ tags: [archive, git]
 What DevHub's Git workspace does vs what a full desktop Git client (GitKraken Desktop,
 Fork, Tower, SourceTree) does.
 
-Method: every `case` in `dashboard/app/api/repos/[name]/{branches,git/*}/route.ts` compared
-against the panels in `dashboard/components/repo-git/`, then against GitKraken Desktop's
+Method: every `case` in `apps/ui/app/api/repos/[name]/{branches,git/*}/route.ts` compared
+against the panels in `apps/ui/components/repo-git/`, then against GitKraken Desktop's
 documented feature set.
 
 Regenerated 2026-08-11. The previous revision (2026-08-05) had gone stale in a way worth

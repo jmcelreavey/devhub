@@ -100,23 +100,23 @@ is under `~/Library/Application Support/DevHub`; updater residue exists under
 - `electron-updater` checks GitHub Releases and contains an unsigned-development
   cache installer that must not survive the migration.
 - `.github/workflows/release.yml` builds unsigned macOS arm64 and Linux artifacts.
-- `dashboard/app/api/setup/install-app/route.ts`, `dashboard/lib/install-app.ts`,
-  and `InstallAppCard` in `dashboard/app/setup/steps.tsx` build the Electron app
+- `apps/ui/app/api/setup/install-app/route.ts`, `apps/ui/lib/install-app.ts`,
+  and `InstallAppCard` in `apps/ui/app/setup/steps.tsx` build the Electron app
   from the user's checkout.
-- `dashboard/app/setup/client.tsx` already has goal selection, dependency checks,
+- `apps/ui/app/setup/client.tsx` already has goal selection, dependency checks,
   paths, integrations, agent CLI selection, and a completion step.
-- `dashboard/lib/setup/dependencies.ts` currently calls Git and Node required.
+- `apps/ui/lib/setup/dependencies.ts` currently calls Git and Node required.
   A packaged app must not require Node, and Git is only required for code goals.
-- `dashboard/lib/repos/index.ts#getReposScanDir` infers the code folder as the
+- `apps/ui/lib/repos/index.ts#getReposScanDir` infers the code folder as the
   parent of `REPO_ROOT`. That coupling must be removed for a packaged app.
 - Personal data paths are already abstracted by `NOTES_DIR`, `TASKS_DIR`,
   `COLLECTIONS_DIR`, and `UPSTARTS_DIR`; `DOCS_DIR` is also configurable. Some
   call sites still construct `REPO_ROOT/notes` directly and must be audited.
-- Configuration and secrets are written to `dashboard/.env.local` by
-  `dashboard/lib/dashboard-env-local.ts`.
+- Configuration and secrets are written to `apps/ui/.env.local` by
+  `apps/ui/lib/dashboard-env-local.ts`.
 - Upstarts live outside target repositories under
   `upstarts/<repo>/upstart.sh`. Today, a newly generated script is immediately
-  chained to `bash` by `dashboard/lib/terminal-launch.ts`; first-run must insert
+  chained to `bash` by `apps/ui/lib/terminal-launch.ts`; first-run must insert
   a review/approval step.
 
 ## Target architecture
@@ -162,7 +162,7 @@ checkout.
 | ---------------------- | ------------------------------------------------------ | -------------------------------- |
 | `DEVHUB_RESOURCE_ROOT` | Read-only packaged resource root                       | Current checkout root            |
 | `REPO_ROOT`            | Optional DevHub Git checkout for checkout-only actions | Current checkout root            |
-| `DEVHUB_ENV_FILE`      | `<app-data>/config/.env.local`                         | `dashboard/.env.local`           |
+| `DEVHUB_ENV_FILE`      | `<app-data>/config/.env.local`                         | `apps/ui/.env.local`           |
 | `DEVHUB_REPOS_DIR`     | User-selected code folder                              | Parent of `REPO_ROOT`            |
 | `NOTES_DIR`            | `<app-data>/notes` or migrated path                    | `REPO_ROOT/notes`                |
 | `TASKS_DIR`            | `<app-data>/tasks` or migrated path                    | `REPO_ROOT/tasks`                |
@@ -231,14 +231,14 @@ output. The Rust shell itself is 4.7 MB.
 One WebKit-only defect found and fixed: the skip link was unreachable by
 keyboard, because WebKit omits links from the tab order unless macOS Full
 Keyboard Access is enabled. Chromium never showed it. Fixed with an explicit
-`tabIndex={0}` in `dashboard/app/layout.tsx`.
+`tabIndex={0}` in `apps/ui/app/layout.tsx`.
 
 The disposable harness was graduated rather than deleted, since Phases 1 and 2
 followed immediately — `desktop/` is the production shell.
 
 Tasks:
 
-- Add a WebKit project to `dashboard/playwright.config.ts` and install WebKit in
+- Add a WebKit project to `apps/ui/playwright.config.ts` and install WebKit in
   `.github/workflows/verify.yml`. Treat Playwright WebKit as an early signal,
   not proof that macOS WKWebView works.
 - Run the existing smoke suite against Chromium and WebKit.
@@ -246,7 +246,7 @@ Tasks:
   xterm input/resize/clipboard behavior, Mermaid rendering, command palette,
   file downloads, OAuth redirects, and external links.
 - Add `output: "standalone"` behind `DEVHUB_DESKTOP_BUILD=1` in
-  `dashboard/next.config.ts`.
+  `apps/ui/next.config.ts`.
 - Create a disposable Tauri harness that builds the standalone server, packages
   the target Node runtime plus `node-pty`, starts the real process group, loads
   the dashboard in WKWebView on macOS, opens a terminal connection, hits the
@@ -285,7 +285,7 @@ Goal: make auto-update safe before building auto-update.
 Tasks:
 
 - Add `DEVHUB_ENV_FILE` support to
-  `dashboard/lib/dashboard-env-local.ts`; create parent directories with `0700`
+  `apps/ui/lib/dashboard-env-local.ts`; create parent directories with `0700`
   and write the file with `0600` permissions where supported.
 - Make the desktop sidecar supervisor load `DEVHUB_ENV_FILE` before it starts
   Next, peers, terminal, or LAN proxy, and pass the resolved managed environment
@@ -293,7 +293,7 @@ Tasks:
 - Add `DEVHUB_RESOURCE_ROOT` for packaged generic assets and make checkout-only
   code require an actual optional `REPO_ROOT` rather than silently treating app
   resources as a Git checkout.
-- Add `DEVHUB_REPOS_DIR` to `dashboard/lib/repos/index.ts#getReposScanDir` with
+- Add `DEVHUB_REPOS_DIR` to `apps/ui/lib/repos/index.ts#getReposScanDir` with
   the current parent-of-`REPO_ROOT` behavior as the development fallback.
 - Add it to the managed setup schema/status/save flow and rename the setup field
   from ambiguous "Repo root" to "Code folder".
@@ -308,7 +308,7 @@ Tasks:
   docs, seed them once into `DOCS_DIR` and record the seed version; never replace
   user-edited files during an update.
 - Pass explicit content/config paths to MCP and one-shot agent jobs instead of
-  constructing `${REPO_ROOT}/notes` in `dashboard/lib/terminal-launch.ts`.
+  constructing `${REPO_ROOT}/notes` in `apps/ui/lib/terminal-launch.ts`.
 - Add an explicit writable identity path for `persona/identity.txt`, migrate an
   existing private identity without placing it in resources, and keep the
   generic packaged persona as the fallback.
@@ -480,7 +480,7 @@ Wizard flow:
 Migration behavior:
 
 - Detect likely Electron user-data directories and `repo-path.txt`.
-- Read the selected checkout's `dashboard/.env.local`,
+- Read the selected checkout's `apps/ui/.env.local`,
   `launcher-settings.json`, personal identity path, and content path variables.
 - Resolve every effective legacy path, including implicit
   `REPO_ROOT/{notes,tasks,collections,upstarts,docs}` defaults. For each path,
@@ -504,7 +504,7 @@ Upstart implementation notes:
 
 - Keep scripts in `UPSTARTS_DIR/<repo>/upstart.sh`; never write generated control
   files into the target repo.
-- Split generation from execution in `dashboard/lib/terminal-launch.ts` or a new
+- Split generation from execution in `apps/ui/lib/terminal-launch.ts` or a new
   small Upstart service. Remove the current `agent ... && bash script` chain for
   first generation.
 - Reuse the terminal dock and PTY transport for interactive logs rather than
@@ -669,7 +669,7 @@ Tasks:
   old Electron bundle and updater caches.
 - Replace the Setup completion `InstallAppCard` with desktop-aware status:
   installed app shows version/update state; browser mode links to Releases.
-- Remove `POST /api/setup/install-app` and `dashboard/lib/install-app.ts` after
+- Remove `POST /api/setup/install-app` and `apps/ui/lib/install-app.ts` after
   cutover. Building a local installer remains a developer command, not onboarding.
 - Delete `electron-wrapper/` and Electron dependencies only after migration and
   updater evidence is recorded.
@@ -696,27 +696,27 @@ Exit gate:
 Likely additions:
 
 - `desktop/**`
-- `dashboard/app/api/desktop/health/route.ts`
+- `apps/ui/app/api/desktop/health/route.ts`
 - desktop path/migration/update unit tests
 - focused setup and Upstart E2E specs
 
 Likely modifications:
 
 - `package.json`
-- `dashboard/package.json`
-- `dashboard/next.config.ts`
-- `dashboard/playwright.config.ts`
-- `dashboard/lib/dashboard-env-local.ts`
-- `dashboard/lib/content/dirs.ts`
+- `apps/ui/package.json`
+- `apps/ui/next.config.ts`
+- `apps/ui/playwright.config.ts`
+- `apps/ui/lib/dashboard-env-local.ts`
+- `apps/ui/lib/content/dirs.ts`
 - persona identity path/sync helpers
-- `dashboard/lib/repos/index.ts`
-- `dashboard/lib/terminal-launch.ts`
-- `dashboard/lib/setup/dependencies.ts`
-- `dashboard/app/api/setup/status/route.ts`
-- `dashboard/app/api/setup/save/route.ts`
-- `dashboard/app/api/setup/validate-path/route.ts`
-- `dashboard/app/setup/client.tsx`
-- `dashboard/app/setup/steps.tsx`
+- `apps/ui/lib/repos/index.ts`
+- `apps/ui/lib/terminal-launch.ts`
+- `apps/ui/lib/setup/dependencies.ts`
+- `apps/ui/app/api/setup/status/route.ts`
+- `apps/ui/app/api/setup/save/route.ts`
+- `apps/ui/app/api/setup/validate-path/route.ts`
+- `apps/ui/app/setup/client.tsx`
+- `apps/ui/app/setup/steps.tsx`
 - `.github/workflows/verify.yml`
 - `.github/workflows/release.yml`
 - branding/plugin manifests in core and their source plugin repos
@@ -725,8 +725,8 @@ Likely modifications:
 Likely removals after cutover:
 
 - `electron-wrapper/**`
-- `dashboard/app/api/setup/install-app/route.ts`
-- `dashboard/lib/install-app.ts`
+- `apps/ui/app/api/setup/install-app/route.ts`
+- `apps/ui/lib/install-app.ts`
 - Electron-only tests and docs
 
 Before editing any dashboard path, run `git ls-files -- <path>`. If it is

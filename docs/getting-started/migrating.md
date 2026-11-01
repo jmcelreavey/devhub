@@ -19,7 +19,7 @@ Two bigger moves have happened. If one of these is you, start there.
 | You were using | What changed | What to do |
 | -------------- | ------------ | ---------- |
 | The old **Electron** desktop app | The desktop app is now Tauri-based. | Install the new app. On first launch it finds the old install and offers to import it, keeping or copying each data folder. The old install is never modified. See [Coming from the old Electron app](desktop-app.md#coming-from-the-old-electron-app). |
-| **OpenChamber**, the OpenCode web chat, or the **AionUi** workspace | Coding chats and agent runs now live on **Agents** (`/agents`), backed by the [Paseo](../guides/paseo-agents.md) daemon. `/chamber` and `/opencode` redirect there. | Set the **Agents password** in Setup, then run `npm run agents:install`. `OPENCHAMBER_UI_PASSWORD` still works as a fallback for the new `DEVHUB_PASEO_PASSWORD`. Older run records stay on disk; to continue an old task, start a Paseo conversation with its saved handoff. |
+| **OpenChamber**, the OpenCode web chat, or the **AionUi** workspace | Coding chats and agent runs now live on **Agents** (`/agents`), backed by the [Paseo](../guides/paseo-agents.md) daemon. | Set the **Agents password** in Setup, then run `npm run agents:install`. `OPENCHAMBER_UI_PASSWORD` still works as a fallback for the new `DEVHUB_PASEO_PASSWORD`. Older run records stay on disk; to continue an old task, start a Paseo conversation with its saved handoff. |
 
 Anything else is covered by the general flow below.
 
@@ -38,11 +38,7 @@ bash scripts/install.sh
 npm run verify
 ```
 
-Then open:
-
-```text
-http://localhost:1337/setup
-```
+Then open `/setup` on the dashboard URL printed at startup. Unsupervised checkouts, including WSL, normally use <http://localhost:1437/setup>; installed apps normally use port `1337`, though the Windows app may select a fallback.
 
 Review paths, integrations, and network settings.
 

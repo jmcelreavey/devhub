@@ -155,10 +155,9 @@ Some dashboard actions preload a skill. Review-with-agent starts an Agents (Pase
 | `pr-explain-review` | `/prs` **Review with agent** | Explain a GitHub PR and save a review note under `notes/pr-reviews/…`. Starts a Paseo agent, not a PTY inject. Ticket-to-PR review also follows `code-review` and writes `## Standards` and `## Spec` into that note. See [GitHub integration](../integrations/github.md#row-actions). |
 | `git-hook-fix` | Repo Git **GitHookFailureDialog** | Diagnose and fix pre-commit/pre-push hook failures after a `422 hook_failed` response. |
 | `git-conflict-resolve` | Repo Git stash conflicts | Walk through resolving conflict markers after a failed stash apply/pop (`409 stash_conflict`). |
-| `taste-skill` | Briefing canvas generation (house aesthetic) | Anti-slop frontend rules distilled into briefing prompts via `lib/briefing-taste.ts`. Install under `skills/shared/` (or sync to tool paths) for stricter default palettes; **fresh look** / custom aesthetics bypass house rules until reset. |
-| `impeccable` / `ui-ux-pro-max` | Product UI polish / searchable design DB | Prefer these over `frontend-design` / `hallmark` for general UI work. Keep `taste-skill` for briefing canvas. |
+| `impeccable` / `ui-ux-pro-max` | Product UI polish / searchable design DB | Prefer these over `frontend-design` / `hallmark` for general UI work. |
 | `my-voice` | Human-facing prose in your own voice | `explain-simply` for chat; `full-voice` for all prose written on your behalf, including tasks, tickets, notes, docs, PRs, commits, email, and Slack. |
-| `vercel-react-best-practices` / `web-design-guidelines` | Next.js dashboard UI | Vercel-labs skills for DevHub dashboard work. |
+| `vercel-react-best-practices` / `web-design-guidelines` | React dashboard UI | Vercel-labs skills for DevHub dashboard work. |
 
 Configure the underlying provider (`cursor-cli`, `chatgpt-cli`, `antigravity-cli`, `opencode`, or `api`) from **/setup → AI Provider**. See [Terminal and agent CLI](terminal-and-agent-cli.md#agent-cli-selection).
 

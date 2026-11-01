@@ -33,7 +33,7 @@ Then walk the code and note where you feel friction:
 
 Apply the deletion test. If deleting the module would make the complexity reappear across its callers, it was earning its keep. If the complexity just vanishes, it was a pass-through.
 
-On DevHub, files materialised from a plugin (`dashboard/lib/team-ops.ts` and its neighbours) are copies. Do not propose deepening the copy. Name the plugin source.
+On DevHub, files materialised from a plugin (`apps/ui/lib/team-ops.ts` and its neighbours) are copies. Do not propose deepening the copy. Name the plugin source.
 
 Dependency categories and how the deepened module gets tested: [DEEPENING.md](./DEEPENING.md).
 

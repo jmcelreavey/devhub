@@ -81,7 +81,7 @@ The backup goes to `DEVHUB_TASK_MIGRATION_DIR`, or `$DEVHUB_CONFIG_DIR/task-migr
 
 ### When the import does not run
 
-The import writes into the content dir, so `ensureTasksMigrated()` (`dashboard/lib/tasks/storage.ts`) skips it:
+The import writes into the content dir, so `ensureTasksMigrated()` (`apps/ui/lib/tasks/storage.ts`) skips it:
 
 - during `next build` (`NEXT_PHASE=phase-production-build`);
 - under test unless the tasks dir sits inside the OS temp dir. A test that never set a content root resolves to the checkout's own `tasks/` and must not touch it (`migration-guard.test.ts`).
@@ -90,7 +90,7 @@ At startup `instrumentation.ts` **awaits** the import. Next holds requests until
 
 ## The local day
 
-`todayISO()` is the **local** calendar day, and there is one implementation (`shared/tasks/dates.ts`; `dashboard/lib/utils.ts` re-exports it). Complete and abandon set `endDate` from it, so finishing a task at 00:30 local time lands on today, not yesterday. The same helper names the daily note (`daily/YYYY-MM-DD`), so in the hour after local midnight the daily note and "today" agree instead of pointing at yesterday's UTC date.
+`todayISO()` is the **local** calendar day, and there is one implementation (`shared/tasks/dates.ts`; `apps/ui/lib/utils.ts` re-exports it). Complete and abandon set `endDate` from it, so finishing a task at 00:30 local time lands on today, not yesterday. The same helper names the daily note (`daily/YYYY-MM-DD`), so in the hour after local midnight the daily note and "today" agree instead of pointing at yesterday's UTC date.
 
 ## Two machines
 

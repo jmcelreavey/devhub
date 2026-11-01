@@ -1,0 +1,422 @@
+/**
+ * The Node sidecar: one process that owns the dashboard and its peers.
+ *
+ * Rust starts exactly this file and nothing else. Everything the app needs at
+ * runtime hangs off it, in one process group, so shutdown is "kill the group I
+ * started" rather than "find things listening on ports and hope they're mine".
+ * Killing by port is how a launcher takes down somebody's unrelated dev server.
+ *
+ * What it deliberately does NOT do:
+ * - install anything
+ * - build anything
+ * - choose between dev and production
+ * - shell out to npm, tsx, or concurrently
+ *
+ * All of those were the Electron launcher's job and all of them are reasons an
+ * installed app can fail on a machine that is not this developer's.
+ */
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import net from "node:net";
+import { fork, spawn } from "node:child_process";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { prepareManagedTools } from "./managed-tools.mjs";
+
+const here = path.dirname(fileURLToPath(import.meta.url));
+
+/** Structured progress for the Rust shell. One JSON object per line on stdout. */
+function emit(event) {
+  process.stdout.write(`${JSON.stringify({ devhubSidecar: true, ...event })}\n`);
+}
+
+function log(message) {
+  process.stderr.write(`[sidecar] ${message}\n`);
+}
+
+/**
+ * Keys the shell owns absolutely. The config file cannot change these.
+ *
+ * These are infrastructure, not preferences: where the bundle is, which ports
+ * were checked and reserved, and the per-launch bootstrap token. A stale or
+ * hand-edited `.env.local` that could move the resource root, change the port
+ * the shell is already waiting on, or — worst — set the bootstrap token would
+ * break startup at best and defeat the auth boundary at worst.
+ */
+const SHELL_OWNED = new Set([
+  "DEVHUB_DESKTOP",
+  "DEVHUB_APP_DATA",
+  "DEVHUB_RESOURCE_ROOT",
+  "DEVHUB_SERVER_DIR",
+  "DEVHUB_ENV_FILE",
+  "DEVHUB_BOOTSTRAP_TOKEN",
+  "DEVHUB_STATE_PROFILE",
+  "PORT",
+  "TERMINAL_PORT",
+  "NODE_ENV",
+]);
+
+/**
+ * Load `DEVHUB_ENV_FILE` before anything starts.
+ *
+ * This is the difference between "the config file is supported" and "the config
+ * file works". Read/write support in the dashboard is useless if the process
+ * tree was already spawned without those values — the LAN bind host, the
+ * Agents password, and every integration credential are read at startup by
+ * children that would otherwise never see them.
+ *
+ * **The config file wins over the shell's defaults for everything except
+ * `SHELL_OWNED`.** This is the opposite of what it originally did, and the
+ * original was wrong in a way that only showed up when a real migration ran:
+ * Rust sets `NOTES_DIR` to `<app-data>/notes` as a sensible default, so a user
+ * who migrated with "keep my notes where they are" had their choice silently
+ * ignored and opened the app to an empty vault. Their data was fine — the app
+ * was looking in the wrong place, which is arguably worse, because it looks
+ * like data loss.
+ *
+ * Content directories are the user's decision. The shell provides a default for
+ * a fresh install and gets out of the way when the user has said otherwise.
+ */
+export function loadEnvFile(envFile) {
+  if (!envFile || !fs.existsSync(envFile)) return {};
+  const loaded = {};
+  const raw = fs.readFileSync(envFile, "utf8");
+  for (const line of raw.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const idx = trimmed.indexOf("=");
+    if (idx === -1) continue;
+    const key = trimmed.slice(0, idx).trim();
+    let value = trimmed.slice(idx + 1).trim();
+    if (
+      (value.startsWith('"') && value.endsWith('"')) ||
+      (value.startsWith("'") && value.endsWith("'"))
+    ) {
+      value = value.slice(1, -1);
+    }
+    if (!key || !value) continue;
+    if (SHELL_OWNED.has(key)) {
+      if (process.env[key] !== undefined && process.env[key] !== value) {
+        log(`ignoring ${key} from the config file — the shell owns that value`);
+      }
+      continue;
+    }
+    // A fallback-port instance must not start a second scheduler for the same data.
+    if (key === "DEVHUB_SCHEDULER" && process.env.DEVHUB_SCHEDULER === "0") continue;
+    process.env[key] = value;
+    loaded[key] = value;
+  }
+  return loaded;
+}
+
+/**
+ * Repair the GUI `PATH`.
+ *
+ * A process launched from Finder inherits a minimal `PATH` — typically just
+ * `/usr/bin:/bin:/usr/sbin:/sbin`. It does not include Homebrew, nvm, or the
+ * user-local bins where `opencode`, `gh` and agent CLIs actually
+ * live. The Electron launcher repaired this explicitly; the first desktop
+ * builds did not.
+ *
+ * Deliberately additive and deliberately last: the user's own `PATH` entries
+ * keep priority, and these are appended as fallbacks rather than shadowing
+ * anything they have configured.
+ */
+function repairedPath() {
+  const home = process.env.HOME ?? "";
+  const nodeDir = path.dirname(process.execPath);
+  const extras = [
+    nodeDir,
+    "/opt/homebrew/bin",
+    "/usr/local/bin",
+    "/opt/local/bin",
+    "/usr/bin",
+    "/bin",
+    "/usr/sbin",
+    "/sbin",
+  ];
+  if (home) {
+    extras.push(
+      path.join(home, ".opencode", "bin"),
+      path.join(home, ".npm", "bin"),
+      path.join(home, ".local", "bin"),
+      path.join(home, "bin"),
+      path.join(home, ".cargo", "bin"),
+      path.join(home, ".bun", "bin"),
+    );
+    // nvm installs each Node version under its own directory, and whichever is
+    // current owns the globally-installed CLIs. Add every version rather than
+    // guessing which one — a missing entry is a CLI the user "has" but the app
+    // cannot see.
+    const nvm = path.join(home, ".nvm", "versions", "node");
+    try {
+      const versions = fs
+        .readdirSync(nvm)
+        .sort((a, b) => b.localeCompare(a, undefined, { numeric: true }));
+      for (const version of versions) {
+        extras.push(path.join(nvm, version, "bin"));
+      }
+    } catch {
+      /* no nvm on this machine */
+    }
+  }
+
+  const current = (process.env.PATH ?? "").split(path.delimiter).filter(Boolean);
+  const seen = new Set(current);
+  for (const dir of extras) {
+    if (!seen.has(dir)) {
+      current.push(dir);
+      seen.add(dir);
+    }
+  }
+  return current.join(path.delimiter);
+}
+
+/** Resolve once, hand to every child. No child re-reads the config file. */
+export function managedEnv() {
+  // npm infers its prefix from the bundled Node binary, inside an immutable
+  // payload. Agent-installed tools must survive app updates.
+  const prefix = path.join(os.homedir(), ".local", "share", "devhub", "tools");
+  fs.mkdirSync(prefix, { recursive: true, mode: 0o700 });
+  let managedNode = "";
+  try {
+    managedNode = prepareManagedTools({ dataDir: process.env.DEVHUB_APP_DATA || path.dirname(prefix) });
+  } catch (err) {
+    log(err instanceof Error ? err.message : "Bundled tools are unavailable");
+  }
+  return { ...process.env, NPM_CONFIG_PREFIX: prefix, npm_config_prefix: prefix,
+    DEVHUB_MANAGED_NODE_BIN: managedNode,
+    PATH: [managedNode, path.join(prefix, "bin"), repairedPath()].filter(Boolean).join(path.delimiter) };
+}
+
+/**
+ * The env for the PTY server, whose shells are the user's own terminals.
+ *
+ * The npm prefix in `managedEnv()` exists for DevHub's installs. A shell that
+ * inherits it cannot load nvm and sends `npm -g` into DevHub's tools folder.
+ * The PTY server scrubs its shells again; this keeps it out of the process.
+ */
+export function terminalChildEnv(env) {
+  return Object.fromEntries(Object.entries(env).filter(([key]) => !key.toLowerCase().startsWith("npm_config_")));
+}
+
+function waitForPort(port, host, timeoutMs) {
+  const deadline = Date.now() + timeoutMs;
+  return new Promise((resolve, reject) => {
+    const attempt = () => {
+      const socket = net.connect({ port, host });
+      const fail = () => {
+        socket.destroy();
+        if (Date.now() > deadline) {
+          reject(new Error(`Timed out waiting for ${host}:${port} after ${timeoutMs}ms`));
+          return;
+        }
+        setTimeout(attempt, 150);
+      };
+      socket.once("connect", () => {
+        socket.end();
+        resolve();
+      });
+      socket.once("error", fail);
+      socket.setTimeout(1000, fail);
+    };
+    attempt();
+  });
+}
+
+const children = new Set();
+
+function track(child, label) {
+  children.add({ child, label });
+  child.on("exit", (code, signal) => {
+    for (const entry of children) {
+      if (entry.child === child) children.delete(entry);
+    }
+    // A peer dying is not fatal; the core dying is. The caller decides which.
+    log(`${label} exited (code ${code ?? "null"}, signal ${signal ?? "none"})`);
+  });
+  return child;
+}
+
+/**
+ * Stop every child we started, then ourselves.
+ *
+ * SIGTERM first with a real grace window: the core exits, the PTY server closes
+ * its sockets and finishes writing session logs. SIGKILL only for what is still
+ * alive afterwards. Nothing here looks at ports.
+ */
+async function shutdown(code = 0) {
+  emit({ state: "stopping" });
+  for (const { child, label } of children) {
+    try {
+      child.kill("SIGTERM");
+    } catch {
+      log(`could not signal ${label}`);
+    }
+  }
+  const deadline = Date.now() + 4000;
+  while (children.size > 0 && Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  for (const { child, label } of children) {
+    log(`force-killing ${label}`);
+    try {
+      child.kill("SIGKILL");
+    } catch {
+      /* already gone */
+    }
+  }
+  process.exit(code);
+}
+
+const TERMINAL_MAX_RESTARTS = 5;
+/** Up this long counts as healthy again, so an old crash doesn't eat the budget. */
+const TERMINAL_STABLE_MS = 60_000;
+
+/**
+ * Run the PTY server, restarting it if it dies.
+ *
+ * Unlike the core server, a dead terminal server doesn't fail the app — but nothing
+ * brought it back either, so one node-pty crash left the dock's Restart
+ * button reconnecting to nothing until DevHub itself was relaunched.
+ * Exponential backoff, capped, so a server that dies on start can't spin.
+ */
+function startTerminal(entry, cwd, env, attempt = 0) {
+  const startedAt = Date.now();
+  const child = track(
+    spawn(process.execPath, [entry], { cwd, env, stdio: ["ignore", "inherit", "inherit"] }),
+    "terminal",
+  );
+  child.on("exit", () => {
+    if (stopping) return;
+    const next = Date.now() - startedAt >= TERMINAL_STABLE_MS ? 0 : attempt + 1;
+    if (next > TERMINAL_MAX_RESTARTS) {
+      log(`terminal server keeps exiting — giving up after ${TERMINAL_MAX_RESTARTS} restarts`);
+      return;
+    }
+    const delay = Math.min(30_000, 1_000 * 2 ** next);
+    log(`restarting terminal server in ${delay}ms`);
+    setTimeout(() => {
+      if (!stopping) startTerminal(entry, cwd, env, next);
+    }, delay);
+  });
+}
+
+async function main() {
+  const resourceRoot = process.env.DEVHUB_RESOURCE_ROOT;
+  const serverDir = process.env.DEVHUB_SERVER_DIR ?? path.resolve(here, "..", "server");
+  const port = Number.parseInt(process.env.PORT ?? "1337", 10);
+  const terminalPort = Number.parseInt(process.env.TERMINAL_PORT ?? "1339", 10);
+  const host = "127.0.0.1";
+
+  const loaded = loadEnvFile(process.env.DEVHUB_ENV_FILE);
+  if (Object.keys(loaded).length > 0) {
+    log(`loaded ${Object.keys(loaded).length} keys from DEVHUB_ENV_FILE`);
+  }
+
+  emit({ state: "preparing", port, terminalPort });
+
+  const serverEntry = path.join(serverDir, "core-server.mjs");
+  if (!fs.existsSync(serverEntry)) {
+    emit({ state: "failed", error: `Missing packaged server at ${serverEntry}` });
+    log(`missing ${serverEntry} — the bundle is incomplete`);
+    process.exit(2);
+  }
+  if (!resourceRoot || !fs.existsSync(resourceRoot)) {
+    emit({ state: "failed", error: `Missing resource root: ${resourceRoot ?? "(unset)"}` });
+    process.exit(2);
+  }
+
+  const env = { ...managedEnv(), DEVHUB_PACKAGED_RUNTIME: "1" };
+
+  emit({ state: "starting", service: "core" });
+  const core = track(
+    fork(serverEntry, [], {
+      cwd: serverDir,
+      env: { ...env, PORT: String(port), DEVHUB_BIND_HOST: host, DEVHUB_CORE_SERVER: "1", DEVHUB_UI_DIST: path.join(serverDir, "ui", "dist"), NODE_ENV: "production" },
+      stdio: ["ignore", "inherit", "inherit", "ipc"],
+    }),
+    "core",
+  );
+  core.on("exit", (code) => {
+    if (!stopping) {
+      emit({ state: "failed", error: `Dashboard server exited (code ${code ?? "null"})` });
+      void shutdown(1);
+    }
+  });
+
+  const ptyEntry = path.join(here, "terminal-pty-server.cjs");
+  if (fs.existsSync(ptyEntry)) {
+    emit({ state: "starting", service: "terminal" });
+    startTerminal(ptyEntry, serverDir, { ...terminalChildEnv(env), TERMINAL_PORT: String(terminalPort) });
+  } else {
+    log(`no terminal server staged at ${ptyEntry} — the terminal dock will not connect`);
+  }
+
+  try {
+    await waitForPort(port, host, 60_000);
+  } catch (err) {
+    emit({ state: "failed", error: err.message });
+    await shutdown(1);
+    return;
+  }
+
+  emit({ state: "ready", url: `http://${host}:${port}`, port, terminalPort });
+}
+
+let stopping = false;
+function run() {
+// The shell may have died: broken log pipes must not interrupt child shutdown.
+for (const stream of [process.stdout, process.stderr]) {
+  stream.on("error", (error) => {
+    if (error.code !== "EPIPE") throw error;
+  });
+}
+for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"]) {
+  process.on(signal, () => {
+    if (stopping) return;
+    stopping = true;
+    void shutdown(0);
+  });
+}
+
+/**
+ * Orphan guard: if Rust dies without signalling us — a crash, a SIGKILL —
+ * the stdin pipe closes and we take the children down with us. Without it the
+ * sidecar and everything it started survive holding ports, and the next launch
+ * finds 1337 occupied by a process nobody owns.
+ *
+ * Armed only when stdin really is a pipe. Launched any other way — `/dev/null`
+ * from `nohup`, a terminal, a CI harness — stdin reports EOF immediately or
+ * never, and an unconditional guard would shut the supervisor down about 200ms
+ * after start. That made it impossible to run this file by hand to debug the
+ * thing it exists to supervise.
+ */
+function stdinIsPipe() {
+  try {
+    return fs.fstatSync(0).isFIFO();
+  } catch {
+    return false;
+  }
+}
+
+if (stdinIsPipe()) {
+  process.stdin.on("end", () => {
+    if (stopping) return;
+    stopping = true;
+    log("parent closed stdin — shutting down");
+    void shutdown(0);
+  });
+  process.stdin.resume();
+} else {
+  log("stdin is not a pipe — orphan guard disabled (signals still work)");
+}
+
+main().catch(async (err) => {
+  emit({ state: "failed", error: err instanceof Error ? err.message : String(err) });
+  await shutdown(1);
+});
+}
+
+// Importing the environment helpers in tests must not start services.
+if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) run();

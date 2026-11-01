@@ -1,0 +1,212 @@
+/**
+ * In-memory terminal proposal queue (dashboard process).
+ *
+ * MCP `terminal_propose_run` posts here; TerminalDock polls/resolves via
+ * `/api/terminal/propose`. Desktop tickets alone never imply user intent —
+ * ordinary agent-requested commands launch automatically in the visible dock.
+ *
+ * Two exceptions set `autoRun` server-side, never by hand in the dock:
+ * - agent dispatch (`/api/agent/runs`), whose POST schema cannot set it;
+ * - `autoRunConfirmed` on the public POST (`/api/terminal/propose`), which an
+ *   MCP tool sets for agent-requested execution (see mcp tools/terminal.ts).
+ *   MCP commands execute without a separate approval.
+ */
+
+import type { HostApprovalRequest, HostApprovalDecision } from "../../../../../packages/shared/plugin-runtime";
+import type { TerminalSessionKind } from "../../../../../packages/shared/ui-lib/terminal/meta";
+import { isDestructiveTerminalCommand, newTerminalProposeId } from "../../../../../packages/shared/terminal/command";
+import { emitCoreEvent } from "../../domains/events/core-events";
+
+export type TerminalProposalStatus =
+  | "pending"
+  | "approved"
+  | "denied"
+  | "expired"
+  | "injected"
+  | "failed";
+
+export interface TerminalProposal {
+  id: string;
+  hostApproval?: HostApprovalRequest & { plugin: string; revision: string; target: string; delivered?: boolean };
+  command: string;
+  cwd?: string;
+  label?: string;
+  summary?: string;
+  kind?: TerminalSessionKind;
+  repoName?: string;
+  reason?: string;
+  source: "mcp" | "api";
+  destructive: boolean;
+  /** Dock injects without a confirm chip. Server-internal; see module comment. */
+  autoRun: boolean;
+  requiresConfirmation?: boolean;
+  status: TerminalProposalStatus;
+  createdAt: number;
+  resolvedAt?: number;
+  /** Edited command when the user tweaked before approve. */
+  finalCommand?: string;
+  error?: string;
+}
+
+const TTL_MS = 15 * 60 * 1_000;
+const MAX_PENDING = 20;
+
+/**
+ * Pinned to globalThis: the dock reads through /api/terminal/propose while
+ * agent dispatch writes from /api/agent/runs, and a module-level Map is only
+ * shared if both routes get the same module instance.
+ */
+const globalStore = globalThis as typeof globalThis & {
+  __devhubTerminalProposals?: Map<string, TerminalProposal>;
+};
+const proposals = (globalStore.__devhubTerminalProposals ??= new Map<string, TerminalProposal>());
+
+type ProposalListener = () => void;
+const listenerStore = globalThis as typeof globalThis & {
+  __devhubTerminalProposalListeners?: Set<ProposalListener>;
+};
+const listeners = (listenerStore.__devhubTerminalProposalListeners ??= new Set<ProposalListener>());
+
+/** Notified on every new proposal so the dock can fetch instead of polling. */
+export function subscribeToTerminalProposals(listener: ProposalListener): () => void {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
+}
+
+function notifyProposalListeners(): void {
+  for (const listener of listeners) {
+    try {
+      listener();
+    } catch {
+      listeners.delete(listener);
+    }
+  }
+}
+
+function prune(): void {
+  const now = Date.now();
+  let changed = false;
+  for (const [id, p] of proposals) {
+    if (p.status === "pending" && now - p.createdAt > TTL_MS) {
+      p.status = "expired";
+      p.resolvedAt = now;
+      changed = true;
+    }
+    if (p.resolvedAt && now - p.resolvedAt > TTL_MS) {
+      proposals.delete(id);
+      changed = true;
+    }
+  }
+  if (changed) emitCoreEvent("terminal");
+}
+
+export function createTerminalProposal(input: {
+  command: string;
+  cwd?: string;
+  label?: string;
+  summary?: string;
+  kind?: TerminalSessionKind;
+  repoName?: string;
+  preferAgentTab?: boolean;
+  forceNewTab?: boolean;
+  reason?: string;
+  source?: "mcp" | "api";
+  autoRun?: boolean;
+  /** Caller requests automatic dock execution. */
+  autoRunConfirmed?: boolean;
+  requiresConfirmation?: boolean;
+  hostApproval?: TerminalProposal["hostApproval"];
+}): TerminalProposal {
+  prune();
+  const pending = [...proposals.values()].filter((p) => p.status === "pending");
+  if (pending.length >= MAX_PENDING) {
+    throw new Error("Too many pending terminal proposals — resolve or deny some in the dock first.");
+  }
+  const command = input.command.trim();
+  if (!command) throw new Error("command is required");
+  if (command.length > 8_000) throw new Error("command too long");
+
+  const destructive = isDestructiveTerminalCommand(command);
+  const proposal: TerminalProposal = {
+    id: newTerminalProposeId(),
+    command,
+    ...(input.hostApproval ? { hostApproval: input.hostApproval } : {}),
+    cwd: input.cwd,
+    label: input.label,
+    summary: input.summary,
+    kind: input.kind,
+    repoName: input.repoName,
+    reason: input.reason,
+    source: input.source ?? "api",
+    destructive,
+    // MCP invocations request execution; other callers retain the dock confirmation.
+    autoRun: input.requiresConfirmation !== true && (input.source === "mcp" || ((input.autoRun === true || input.autoRunConfirmed === true) && !destructive)),
+    ...(input.requiresConfirmation === true ? { requiresConfirmation: true } : {}),
+    status: "pending",
+    createdAt: Date.now(),
+  };
+  proposals.set(proposal.id, proposal);
+  notifyProposalListeners();
+  emitCoreEvent("terminal");
+  return proposal;
+}
+
+export function listTerminalProposals(opts?: { status?: TerminalProposalStatus }): TerminalProposal[] {
+  prune();
+  // FIFO — oldest pending first so newer MCP proposals don't starve older chips.
+  const all = [...proposals.values()].sort((a, b) => a.createdAt - b.createdAt);
+  if (opts?.status) return all.filter((p) => p.status === opts.status);
+  return all;
+}
+
+export function getTerminalProposal(id: string): TerminalProposal | null {
+  prune();
+  return proposals.get(id) ?? null;
+}
+
+export function resolveTerminalProposal(
+  id: string,
+  action: "approve" | "deny" | "injected" | "failed",
+  opts?: { finalCommand?: string; error?: string },
+): TerminalProposal | null {
+  prune();
+  const p = proposals.get(id);
+  if (!p) return null;
+  if (p.hostApproval && (action === "injected" || action === "failed" || (action === "deny" && p.status !== "pending"))) return p;
+  if (action === "approve") {
+    if (p.status !== "pending") return p;
+    p.status = "approved";
+    p.finalCommand = opts?.finalCommand?.trim() || p.command;
+    p.resolvedAt = Date.now();
+  } else if (action === "deny") {
+    if (p.status !== "pending" && p.status !== "approved") return p;
+    p.status = "denied";
+    p.resolvedAt = Date.now();
+  } else if (action === "failed") {
+    if (p.status === "denied" || p.status === "expired") return p;
+    p.status = "failed";
+    p.finalCommand = opts?.finalCommand?.trim() || p.finalCommand || p.command;
+    p.error = opts?.error ?? "Inject failed";
+    p.resolvedAt = Date.now();
+  } else {
+    // injected — only from pending/approved; never overwrite deny/expire/fail
+    if (p.status !== "pending" && p.status !== "approved") return p;
+    p.status = "injected";
+    p.finalCommand = opts?.finalCommand?.trim() || p.finalCommand || p.command;
+    p.error = opts?.error;
+    p.resolvedAt = Date.now();
+  }
+  emitCoreEvent("terminal");
+  return p;
+}
+
+/** Deliver a decision at most once to the same reviewed plugin entry point. */
+export function takeHostApproval(id: string, plugin: string, revision: string, target: string): HostApprovalDecision {
+  const proposal = getTerminalProposal(id);
+  const approval = proposal?.hostApproval;
+  if (!proposal || !approval || approval.plugin !== plugin || approval.revision !== revision || approval.target !== target || approval.delivered) throw new Error("Approval unavailable");
+  const status = proposal.status;
+  if (status !== "pending" && status !== "approved" && status !== "denied" && status !== "expired") throw new Error("Invalid approval status");
+  if (status !== "pending") approval.delivered = true;
+  return { proposalId: proposal.id, id: approval.id, summary: approval.summary, payload: approval.payload, status };
+}

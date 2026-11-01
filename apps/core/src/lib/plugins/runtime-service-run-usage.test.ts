@@ -1,0 +1,77 @@
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { afterEach, expect, it, vi } from "vitest";
+import { createTask, writeItem } from "../../domains/tasks/store";
+import { taskAgentRunsPath, upsertTaskAgentRun } from "../../domains/tasks/task-agent-runs";
+import { closeSqliteDatabase, openSqliteDatabase, sqliteDatabasePath } from "../../domains/storage/sqlite";
+import { taskScopeForDirectory } from "../agent-runs/run-files";
+import { runtimeServiceTaskOperation } from "./runtime-service-tasks";
+
+const roots: string[] = [];
+const databases: string[] = [];
+afterEach(() => {
+  for (const file of databases.splice(0)) closeSqliteDatabase(file);
+  vi.unstubAllEnvs();
+  for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true });
+});
+
+it("reads only reviewed, scoped run usage without changing task or run data", async () => {
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "service-run-usage-")));
+  roots.push(root);
+  const tasks = path.join(root, "tasks");
+  const work = path.join(tasks, "work");
+  const personal = path.join(tasks, "personal");
+  const notes = path.join(root, "notes");
+  const runs = path.join(root, "runs");
+  for (const dir of [work, personal, notes, runs]) fs.mkdirSync(dir, { recursive: true });
+  vi.stubEnv("TASKS_DIR", tasks);
+  vi.stubEnv("NOTES_DIR", notes);
+  vi.stubEnv("DEVHUB_AGENT_RUNS_DIR", runs);
+  vi.stubEnv("DEVHUB_DESKTOP", "1");
+  vi.stubEnv("DEVHUB_STATE_PROFILE", "");
+  vi.stubEnv("DEVHUB_APP_DATA", path.join(root, "app-data"));
+  vi.stubEnv("DEVHUB_PROFILE", "work");
+  vi.stubEnv("DEVHUB_STORAGE_SQLITE", "1");
+  const task = createTask(work, { id: "task-1", text: "Work task", createdAt: "2026-01-01T12:00:00.000Z" });
+  createTask(personal, { id: task.id, text: "Other task", createdAt: "2026-01-02T12:00:00.000Z" });
+  const runId = "run-abcdef-12345678";
+  await upsertTaskAgentRun({ taskId: task.id, runId, status: "queued", notesDir: notes });
+  const sidecar = taskAgentRunsPath(task.id, notes);
+  const taskFile = path.join(work, "items", task.id + ".json");
+  const runDir = path.join(runs, runId);
+  const spec = { id: runId, prompt: "private prompt", activity: { taskId: task.id, taskScope: taskScopeForDirectory("work", work, task.id, task.createdAt) } };
+  const status = { state: "failed", updatedAt: 100, error: "Run failed", resultText: "Result" };
+  const dbPath = sqliteDatabasePath();
+  const db = openSqliteDatabase(dbPath);
+  databases.push(dbPath);
+  db.prepare("INSERT INTO agent_runs (id, directory, root, spec_json, status_json) VALUES (?, ?, ?, ?, ?)").run(runId, runDir, runs, JSON.stringify(spec), JSON.stringify(status));
+  const before = db.prepare("SELECT spec_json, status_json FROM agent_runs WHERE id = ?").get(runId);
+  const beforeTask = fs.readFileSync(taskFile, "utf8");
+  const beforeSidecar = fs.readFileSync(sidecar, "utf8");
+  const request = { operation: "run-usage", profile: "work", taskId: task.id, createdAt: task.createdAt, runId };
+  await expect(runtimeServiceTaskOperation([], request)).rejects.toThrow(/not reviewed/);
+  await expect(runtimeServiceTaskOperation(["run-usage"], { ...request, profile: "personal" })).rejects.toThrow(/profile|authorisation/);
+  await expect(runtimeServiceTaskOperation(["run-usage"], { ...request, createdAt: "stale" })).rejects.toThrow(/no longer available/);
+  await expect(runtimeServiceTaskOperation(["run-usage"], request, () => false)).rejects.toThrow(/authorised/);
+  let checks = 0;
+  await expect(runtimeServiceTaskOperation(["run-usage"], request, () => ++checks < 5)).rejects.toThrow(/authorisation/);
+  expect(await runtimeServiceTaskOperation(["run-usage"], request)).toMatchObject({ stateChangedAt: 100, error: "Run failed", resultText: "Result" });
+  expect(JSON.stringify(await runtimeServiceTaskOperation(["run-usage"], request))).not.toContain("private prompt");
+  expect(db.prepare("SELECT spec_json, status_json FROM agent_runs WHERE id = ?").get(runId)).toEqual(before);
+  expect(fs.readFileSync(taskFile, "utf8")).toBe(beforeTask);
+  expect(fs.readFileSync(sidecar, "utf8")).toBe(beforeSidecar);
+  const closed = createTask(work, { id: "closed-task", text: "Old task", createdAt: "2025-01-01T12:00:00.000Z" });
+  writeItem(work, { ...closed, done: true });
+  await upsertTaskAgentRun({ taskId: closed.id, runId: "run-oldold-12345678", status: "done", notesDir: notes });
+  const boardRequest = { operation: "board-snapshot", profile: "work" };
+  expect(await runtimeServiceTaskOperation(["board-snapshot"], boardRequest)).not.toHaveProperty("uncertainRunState");
+  expect(await runtimeServiceTaskOperation(["board-snapshot", "run-usage"], boardRequest)).toMatchObject({ uncertainRunState: false });
+  for (const mismatch of [{ taskCreatedAt: "old" }, { profile: "personal" }, { directoryIdentity: "old" }]) {
+    db.prepare("UPDATE agent_runs SET spec_json = ? WHERE id = ?").run(JSON.stringify({ ...spec, activity: { ...spec.activity, taskScope: { ...spec.activity.taskScope, ...mismatch } } }), runId);
+    expect(await runtimeServiceTaskOperation(["run-usage"], request)).toBeNull();
+  }
+  expect(await runtimeServiceTaskOperation(["board-snapshot", "run-usage"], boardRequest)).toMatchObject({ uncertainRunState: true });
+  db.prepare("UPDATE agent_runs SET spec_json = ?, status_json = ? WHERE id = ?").run(JSON.stringify(spec), JSON.stringify({ ...status, error: "x".repeat(60_001) }), runId);
+  expect(await runtimeServiceTaskOperation(["run-usage"], request)).toBeNull();
+});

@@ -85,8 +85,7 @@ data folder on your computer. Nothing is uploaded.
 Do this when you want a backup, a history of your changes, or the same content on a second
 machine. You can do it on day one, or never.
 
-1. Open **Setup → GitHub** (or choose **Set up private repo** on the strip at the top of
-   Today).
+1. Open **Setup → GitHub**.
 2. **Sign in with GitHub.** DevHub uses the GitHub CLI it ships with, so you install
    nothing for this.
 3. If Git is missing you will see **Git isn't installed**, an **Install Git** button on a Mac, and
@@ -132,10 +131,7 @@ Day-to-day syncing afterwards is ordinary Git against `origin`. See the
 
 ### If you skip it
 
-The Today page shows a strip: *Your notes and tasks are stored only on this computer. A private
-GitHub repo gives them a backup and a history. It's optional.* Choose **Set up private
-repo** to continue, or **Not now** to dismiss it for good. It appears only after setup is
-finished, and disappears once a repo is linked.
+You can return to **Setup → GitHub** whenever you want to link a private repo.
 
 Until a repo is linked, features that need a Git checkout, such as the sync button in the
 top bar and **Sync skills**, report "No linked git checkout". Notes, tasks and the rest

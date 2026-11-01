@@ -1,6 +1,6 @@
 ---
 title: Google Calendar
-description: Upcoming events in the Today view and the morning briefing.
+description: Upcoming events, week view and meeting notes.
 order: 3
 icon: Calendar
 tags: [integrations]
@@ -14,7 +14,7 @@ The Google Calendar integration shows upcoming events in DevHub and supports cal
 
 ## What It Enables
 
-- Calendar widget on Today.
+- Upcoming-meetings badge in navigation.
 - Dedicated Calendar page.
 - Week view of events.
 - Better daily planning alongside tasks and notes.
@@ -37,8 +37,6 @@ For local use, this is usually:
 ```text
 http://localhost:1337/api/calendar/auth/callback
 ```
-
-If you open DevHub from another device on your LAN, also add the LAN URL variant.
 
 ## Configuration
 

@@ -195,7 +195,7 @@ In the target repo:
     already exist — the difference between reusing
     `tone-panel--warning-banner` and inventing a near-identical second one.
   - Never call `execFile`/`spawn` directly — use `execExternal`
-    (`dashboard/lib/exec-external.ts`). It applies a mandatory timeout and
+    (`apps/ui/lib/exec-external.ts`). It applies a mandatory timeout and
     registers the call for `/api/status/exec`; an un-timed subprocess blocks
     every route.
 - **Minimal diffs.** Smallest change that does the job. No speculative
@@ -231,6 +231,24 @@ captures a reproduction or a specific risk that Jev will not cover. A before
 capture is optional: add `Baseline capture: required` under `## Verification`
 only when requested by the user or needed to reproduce/compare the change.
 Otherwise spend visual verification on the finished behaviour.
+
+For Auto UI work, check the task's planned initial-page QA assertions after
+implementation. Use `task_note_update` with `op: "set_qa_scenario"` to add or
+correct up to five specific, non-sensitive text/visibility goals when needed;
+never invent expected text, add URLs/actions or credentials, or replace a named
+scenario. Only declare one for a known non-production preview with test data
+and no real submissions or destructive writes. Loading a page can change data;
+a selector isn't a safety boundary. Auto QA uses the task's opt-in managed
+preview, not a task URL; provenance does not isolate scripts or requests.
+Model-assisted QA may send the page URL, text and
+screenshots; keep private data and credentials out of the preview and scenario.
+If safety is unknown, leave QA unset and record the safety gap and manual check.
+A pass covers only those goals. Run flows needing clicks or input manually in
+QA Lab against a safe preview. Do not request a baseline after implementation has started;
+record a missed before capture as a gap.
+
+Only add tests the repo's policy asks for (DevHub: `docs/contributing/testing.md`).
+No tests for UI rendering, copy or presentation; verify those visually.
 
 When the user asked for test-first, or you are locking a bug in with a
 regression test: red, then green. One failing test at the public seam the

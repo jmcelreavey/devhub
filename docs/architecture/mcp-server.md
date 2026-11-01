@@ -15,7 +15,7 @@ DevHub ships a local Model Context Protocol (MCP) server named `devhub`. AI tool
 launch it as a stdio process so agents can read/write local DevHub content and call
 selected dashboard workflows through one standard interface.
 
-The canonical server lives in `mcp-servers/devhub-server/src/mcp.ts`; the shared
+The canonical server lives in `packages/mcp/src/mcp.ts`; the shared
 tool config lives in `mcp/shared/devhub.json`. Users normally do not start the
 server manually. Claude, Cursor, Codex, OpenCode, or another MCP client starts it
 from the synced config when a tool is invoked.
@@ -45,11 +45,13 @@ The server has three tool tiers:
 
 | Tier              | Source Of Truth                           | Dashboard Required | Tool Groups                                                                                                                                                                          |
 | ----------------- | ----------------------------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Filesystem-backed | Local files under configured content dirs | No                 | Notes, docs, tasks, diagrams, appraisal, DX audit, MCP call history                                                                                                                  |
-| Dashboard-backed  | DevHub HTTP routes on `DEVHUB_BASE_URL`   | Yes                | Status, briefing, calendar, work/PRs/Jira, assets, search, scripts, repos (list/open/reveal/clone/learn + full git workspace), capability, sessions, share, workspace reads, Datadog, terminal, agent dispatch (`agent_*`), **database client (`db_*`)**, integration proposals, editor discussions, durable task evidence and reviewed plugin actions |
+| Filesystem-backed | Local files under configured content dirs | No                 | Notes, docs, tasks, diagrams, DX audit, MCP call history; appraisal when the Career plugin is enabled                                                                                                                  |
+| Dashboard-backed  | DevHub HTTP routes on `DEVHUB_BASE_URL`   | Yes                | Status, calendar, work/PRs/Jira, assets, search, scripts, repos (list/open/reveal/clone/learn + full git workspace), capability, sessions, share, workspace reads, Datadog, terminal, agent dispatch (`agent_*`), **database client (`db_*`)**, integration writes, editor discussions, durable task evidence and reviewed plugin actions |
 | Script-backed     | Local shell scripts under `REPO_ROOT`     | No (runs detached) | `repo_ship`, `repo_ship_status`                                                                                                                                                      |
 
-Filesystem-backed tools call the vault/storage layer directly and work headless. The `tasks` toolset also carries dashboard-backed workflow/review tools; selecting that group does not make those particular tools headless.
+Filesystem-backed tools call the vault/storage layer directly and work headless. `jobs_log` and the jobs log resource call the core scheduler log service in-process. The `tasks` and `jobs` toolsets also carry dashboard-backed tools; selecting either group does not make those particular tools headless.
+Notes and docs reuse each vault’s local content adapter, which uses the same revision-aware file storage as core. Core has revision-aware file routes, but MCP also needs headless access and operations such as append and workspace-scoped search have no equivalent routes. A discovered dashboard can use different content roots, so MCP does not switch vaults or retry an uncertain HTTP write locally.
+The scheduler log uses the MCP process's state environment; a checkout-scoped scheduler needs the same `DEVHUB_CHECKOUT_DEV` and `DEVHUB_APP_DATA` values in its MCP client.
 Dashboard-backed tools proxy through `DashboardClient`, defaulting to
 `http://localhost:1337`, because the dashboard owns runtime state such as service
 status, script run history, loaded integration secrets, and repo actions.
@@ -83,7 +85,7 @@ tool groups for both stdio and HTTP.
 | `src/convert.ts`                                | BlockNote ↔ Markdown conversion for notes                                         |
 | `scripts/call-tool.mjs`                         | Call one tool from a shell without an AI client (stdio, same env as Claude/Codex) |
 
-Filesystem tools import from `shared/vault/` via relative paths. Dashboard tools call
+Filesystem tools import from `packages/shared/vault/` via relative paths. Dashboard tools call
 matching routes on `DEVHUB_BASE_URL` through `DashboardClient`.
 
 To add a tool group: create `src/tools/<group>.ts` with a `register*Tools(server, ctx)`
@@ -93,30 +95,32 @@ dashboard-backed. The shared client config stays in `mcp/shared/devhub.json`.
 Call a tool without an AI client (same stdio server, so `NOTES_DIR` / `REPO_ROOT` match):
 
 ```bash
-node mcp-servers/devhub-server/scripts/call-tool.mjs --list
-node mcp-servers/devhub-server/scripts/call-tool.mjs notes_search '{"query":"lockfile"}'
+node packages/mcp/scripts/call-tool.mjs --list
+node packages/mcp/scripts/call-tool.mjs notes_search '{"query":"lockfile"}'
 ```
 
-Requires `tsx` in `mcp-servers/devhub-server/node_modules`. Used by `npm run demos:record`.
+Requires the root workspace dependencies (`npm install` from the repo root).
 
 ## Connect any MCP client over HTTP
 
-The dashboard normally starts a Streamable HTTP peer at `http://127.0.0.1:1340/mcp`. It exposes the same toolsets as stdio and requires a bearer token. See [Connect over HTTP](#connect-over-http) for commands, client configuration and access controls.
+The dashboard normally starts a Streamable HTTP peer at `http://127.0.0.1:1340/mcp` (or `1440` for checkout development). It exposes the same toolsets as stdio and requires a bearer token. See [Connect over HTTP](#connect-over-http) for commands, client configuration and access controls.
 
 ## Tool Inventory
 
 Run `npm run mcp:inventory` from the repo root for the registered tool names.
 Client toolsets can narrow that list with `DEVHUB_MCP_TOOLSETS`; the registrars in
-`src/server.ts` define the available groups.
+`src/server.ts` define the core groups. Explicitly enabled local plugins can add groups through `devhub-mcp-toolsets.json`; Career supplies the optional `appraisal` group.
 
 | Toolsets | Purpose |
 | --- | --- |
-| `notes`, `docs`, `tasks`, `diagrams`, `appraisal` | Read and write file-backed content |
+| `notes`, `docs`, `tasks`, `diagrams` | Read and write file-backed content |
+| `appraisal` (Career plugin) | Capture review goals and evidence; absent when the plugin is disabled |
 | `plans`, `agents`, `terminal` | Plan tasks, hand work to agents and propose terminal commands |
 | `repos`, `ownership` | Repo actions, Git workspace, conventions and owned-repo triage |
 | `db` | Database reads and confirmed writes through the dashboard |
 | `scripts`, `status`, `jobs`, `events` | Maintenance actions, diagnostics, scheduling and waits |
-| `work`, `calendar`, `datadog`, `briefing` | Integration and daily-work views |
+| `work`, `calendar` | Integration and daily-work views |
+| `datadog` (BI plugin) | On-call, alerts and investigations; absent when the plugin is disabled |
 | `integrations`, `editor`, `plugins` | Direct integration writes, captured-code discussions and reviewed plugin request-worker actions |
 | `recall`, `search`, `capability`, `sessions`, `dx-audit` | Retrieval, learning and saved reports |
 | `share`, `workspace`, `assets`, `ui` | Sharing, catalogue reads, voice training and opening pages |
@@ -132,7 +136,7 @@ The private plugin plugin contributes its broader plugin tools as a separate ser
 
 **Scope notes:** `notes_list` and `notes_search` cover the workspace slice only — `daily/` journals plus root-level `.json` scratch notes. Structured areas like `learnings/` need explicit paths via `notes_read`. `calendar_list` returns Google Calendar **calendars and selection state**, not events (use `calendar_week` for the week grid).
 
-Some dashboard-backed mutations require `confirm: true` (for example mutating `scripts_run` entries, `repos_git_stage`, `repos_git_commit`, `repos_git_push`, `repos_git_branch`, `prs_open_in_cursor`, `prs_auto_review`, `jira_ticket_transition`, and `db_execute`). Long-running actions return a `runId`; poll the matching status tool, such as `scripts_run_status`, until the run exits. MCP cannot stream the dashboard's live run log.
+Some dashboard-backed mutations require `confirm: true` (for example mutating `scripts_run` entries, `repos_git_stage`, `repos_git_commit`, `repos_git_push`, `repos_git_branch`, `prs_open_in_cursor`, `prs_auto_review`, `jira_ticket_transition`, `jira_ticket_assign`, and `db_execute`). Long-running actions return a `runId`; poll the matching status tool, such as `scripts_run_status`, until the run exits. MCP cannot stream the dashboard's live run log.
 
 All `repos_git_*` tools proxy the Repo Git workspace HTTP routes (`/api/repos/<name>/git/*` and `/branches`) — they do not shell out to `git` directly from the MCP process. Start the dashboard before using them.
 
@@ -154,7 +158,7 @@ The MCP server itself uses local files, not a database. Notes, tasks, docs, and 
 
 The server converts notes between Markdown-like text and BlockNote JSON so AI tools
 can read and write notes naturally. Docs are read and written as raw Markdown. Core
-vault filesystem logic lives in [`shared/vault/`](../../shared/vault/README.md) and
+vault filesystem logic lives in [`packages/shared/vault/`](../../packages/shared/vault/README.md) and
 is shared by the dashboard and MCP server.
 
 The MCP server runs as plain Node. Imports that cross into shared code must use
@@ -162,16 +166,16 @@ relative paths; dashboard `@/` aliases are not resolved when tools spawn the ser
 
 ## Configuration
 
-The shared config starts the server through `bin/devhub-mcp.mjs`, which runs a
-cached esbuild bundle (`dist/mcp.mjs`, ~200 ms to first response vs ~500 ms
-under `tsx`). The bundle rebuilds on spawn whenever a `.ts` file under `src/` or
-the repo's `shared/` is newer, and falls back to `tsx` if the build fails. It is
+The shared config starts `packages/mcp/bin/devhub-mcp.mjs`, which runs a
+cached esbuild bundle (`packages/mcp/dist/mcp.mjs`). The bundle rebuilds on
+spawn when its source, shared code, plugin validator, launcher inputs or root
+lockfile are newer, and falls back to `tsx` if the build fails. It is
 executable with a `#!/usr/bin/env node` shebang, so GUI clients resolve `node`
 exactly as they did for the `tsx` binary it replaces:
 
 ```json
 {
-  "command": "REPO_ROOT/mcp-servers/devhub-server/bin/devhub-mcp.mjs",
+  "command": "REPO_ROOT/packages/mcp/bin/devhub-mcp.mjs",
   "env": {
     "NOTES_DIR": "REPO_ROOT/notes",
     "TASKS_DIR": "REPO_ROOT/tasks",
@@ -189,15 +193,15 @@ client configs, and leaves any other value alone.
 real secrets through a client-local config or environment, never the committed
 `mcp/shared/` catalogue.
 
-`REPO_ROOT` is replaced during MCP sync. The dashboard health check and bootstrap
-install the `devhub-server` package dependencies if `node_modules` is missing.
+`REPO_ROOT` is replaced during MCP sync. Existing client configs may still use
+`mcp-servers/devhub-server/bin/devhub-mcp.mjs`; that compatibility launcher
+forwards to the package launcher. Install core dependencies from the repo root.
 
 Useful commands:
 
 ```bash
 npm run dev
-(cd dashboard && npx tsx scripts/run-action.ts sync)
-(cd mcp-servers/devhub-server && npm install)
+(cd apps/ui && npx tsx scripts/run-action.ts sync)
 ```
 
 Run `npm run dev` for dashboard-backed tools. Run the sync action after changing MCP
@@ -217,7 +221,7 @@ list, which is how Playwriter/`lean-ctx` looked "connected" while `execute` and
 2. Rewrites Cursor `mcp.json` key order so `playwriter`, `lean-ctx`, `agentmemory`,
    `figma` comes before `devhub`. An overflow then drops DevHub
    tail tools, not the small servers.
-3. Launches Playwriter through `dashboard/lib/mcp/playwriter-compact.ts`, which
+3. Launches Playwriter through `apps/ui/lib/mcp/playwriter-compact.ts`, which
    truncates `execute`'s ~53KB `prompt.md` description. The full API stays on
    Playwriter's MCP resources.
 4. Pins `LEAN_CTX_TOOL_PROFILE=standard` on Cursor/`lean-ctx` so a wrap that
@@ -233,15 +237,15 @@ Reload Cursor MCP after **Sync MCP**. Do not put `DEVHUB_MCP_TOOLSETS` in
 Clients that take a URL rather than launching a process can use the Streamable HTTP entry. It builds the same server (`src/server.ts`) — same tools, toolsets and history — with one MCP session per client.
 
 ```bash
-(cd mcp-servers/devhub-server && npm run mcp:http)
+npm run mcp:http -w packages/mcp
 ```
 
 - Endpoint: `http://127.0.0.1:1340/mcp` (`DEVHUB_MCP_HTTP_PORT`, `DEVHUB_MCP_HTTP_HOST`).
 - Every request needs `Authorization: Bearer <token>`. The token comes from `DEVHUB_MCP_HTTP_TOKEN`, or is generated once into `~/.config/devhub/mcp-http-token` (0600) and reused.
-- Onboarding: `npm run mcp:token` in `mcp-servers/devhub-server` prints the token plus paste-ready configs for generic MCP clients (AutoClaw, Grok Bot), the Claude Code CLI, and Cursor.
+- Onboarding: `npm run mcp:token -w packages/mcp` from the repo root prints the token plus paste-ready configs for generic MCP clients (AutoClaw, Grok Bot), the Claude Code CLI, and Cursor.
 - `Host` and any `Origin` must be loopback, which blocks DNS-rebinding pages. Add names such as a Tailscale hostname with `DEVHUB_MCP_HTTP_ALLOWED_HOSTS` (and bind a reachable `DEVHUB_MCP_HTTP_HOST`) only when a remote client needs it.
 
-The dashboard starts it at boot from the linked checkout (`dashboard/lib/mcp-http-peer.ts`, called from `instrumentation.ts`), pointed at that dashboard's URL and content dirs, with output in `~/.local/state/devhub/mcp-http.log`. It is skipped when `DEVHUB_MCP_HTTP=0`, there is no checkout, the MCP package has no `node_modules`, or the port is held by something else (a second live DevHub, or a manual `npm run mcp:http`). The server is given the dashboard's pid (`DEVHUB_MCP_HTTP_PARENT_PID`) and exits within a few seconds of that dashboard going away; a peer that still outlives its dashboard is replaced at the next dashboard start, so a rebuild, reinstall or relaunch always serves the checkout's current MCP code. MCP servers that clients launch over stdio (Claude Code, Cursor, …) belong to those clients — reconnect the client to pick up new tools. Cloud-hosted agents (for example a Grok Bot box) cannot reach `127.0.0.1` on your machine; they need a tunnelled URL, which also exposes every tool the server has — narrow it with `DEVHUB_MCP_TOOLSETS` first.
+The dashboard starts it at boot from the linked checkout (`apps/ui/lib/mcp-http-peer.ts`, called from `instrumentation.ts`), pointed at that dashboard's URL and content dirs, with output in `~/.local/state/devhub/mcp-http.log`. It is skipped when `DEVHUB_MCP_HTTP=0`, there is no checkout, the MCP entry or `tsx` binary is missing, or the port is held by something else (a second live DevHub, or a manual `npm run mcp:http`). The server is given the dashboard's pid (`DEVHUB_MCP_HTTP_PARENT_PID`) and exits within a few seconds of that dashboard going away; a peer that still outlives its dashboard is replaced at the next dashboard start, so a rebuild, reinstall or relaunch always serves the checkout's current MCP code. MCP servers that clients launch over stdio (Claude Code, Cursor, …) belong to those clients — reconnect the client to pick up new tools. Cloud-hosted agents (for example a Grok Bot box) cannot reach `127.0.0.1` on your machine; they need a tunnelled URL, which also exposes every tool the server has — narrow it with `DEVHUB_MCP_TOOLSETS` first.
 
 Clients that launch stdio servers (Claude Code, Cursor, Codex, OpenCode, AutoClaw via `mcporter.json`) should keep using the synced stdio config.
 
@@ -265,11 +269,11 @@ The tool is read-only and doesn't accept a file path.
 
 ### Link tasks, meetings, and PRs from an agent
 
-Cross-entity edges use the shared `EntityRef` contract in `shared/entity-note/`. Notes store outbound refs in a `## Links` section; tasks can also carry `links` for hop-around without a note body.
+Cross-entity edges use the shared `EntityRef` contract in `packages/shared/entity-note/`. Notes store outbound refs in a `## Links` section; tasks can also carry `links` for hop-around without a note body.
 
 1. `notes_create_task` — scaffold `task-notes/YYYY-MM-DD-<taskId>` with `::task-ref` and Work href (same as the task-row **Note** action). Pass `overwrite: true` to rewrite an existing note.
 2. `notes_create_meeting` — scaffold `meetings/YYYY-MM-DD-<slug>` with calendar backrefs (same as the calendar **Note** button).
-3. `notes_create_pr` — scaffold `pr-reviews/<repo-slug>-<n>` with PR + repo EntityRefs (same as the PR row note action). `notes_write` on `pr-reviews/` upserts those links via the same `shared/pr-note` helper.
+3. `notes_create_pr` — scaffold `pr-reviews/<repo-slug>-<n>` with PR + repo EntityRefs (same as the PR row note action). `notes_write` on `pr-reviews/` upserts those links via the same `packages/shared/pr-note` helper.
 4. `entity_links_read` — parse `## Links` from an existing note path.
 5. `tasks_create` — optional `withNote: true` and/or `links: EntityRef[]` on the new task.
 6. `tasks_update` — pass `links` to replace hop-around refs on an existing task.
@@ -277,7 +281,7 @@ Cross-entity edges use the shared `EntityRef` contract in `shared/entity-note/`.
 8. `tasks_implement_ready` — light ready-to-implement checklist (`GET /api/tasks/implement/ready`). See [Task agent handoff](../guides/task-agent-handoff.md#implement-ready).
 9. `tasks_implement_review_settings_get` / `_set` / `tasks_implement_review` — assign a different assistant to review a finished implementation, and start it (`/api/tasks/implement/review-settings`, `/review`). See [Review with another assistant](../guides/task-agent-handoff.md#review-with-another-assistant).
 
-Path helpers and markdown scaffolds live in `shared/task-note/`, `shared/meeting-note/`, and `shared/pr-note/`. When the dashboard is running, `GET /api/entity-links` resolves the combined read model (notes + related entities). See [Notes System — Cross-entity linking](notes-system.md#cross-entity-linking).
+Path helpers and markdown scaffolds live in `packages/shared/task-note/`, `packages/shared/meeting-note/`, and `packages/shared/pr-note/`. When the dashboard is running, `GET /api/entity-links` resolves the combined read model (notes + related entities). See [Notes System — Cross-entity linking](notes-system.md#cross-entity-linking).
 
 ### Edit a note in Cursor with repo context
 
@@ -308,7 +312,7 @@ Use `status_exec` first when the dashboard is hanging or a page never loads — 
 
 Use `sessions_recap` (or the `devhub-recap` skill) when you need **what happened** in an OpenCode run — commands, MCP calls, file changes, failures — without prompts or reasoning.
 
-1. Start the dashboard. Recap/Investigate still lazy-start OpenCode on an ephemeral loopback port via `GET /api/opencode/listen` (`/opencode` itself now redirects to `/agents`).
+1. Start the dashboard. Recap/Investigate still lazy-start OpenCode on an ephemeral loopback port via `GET /api/opencode/listen`.
 2. Call `sessions_recap` with `directory` set to the workspace path. Omit `sessionId` to pick the current busy root, then the latest root in that directory.
 3. Pass `includeChildren: true` only when subagent/child sessions matter.
 4. On `409`, multiple root sessions are busy — pass an explicit `sessionId`.
@@ -329,7 +333,7 @@ Agent tools proxy `/api/agent/runs`. Start the dashboard and set up Paseo from *
 4. `agent_diff` shows what changed against HEAD at dispatch. `agent_followup` continues the same Paseo agent; `agent_cancel` stops the managed run.
 5. `agent_race` sends one prompt to 2–4 assistants, each in its own worktree and conversation.
 
-Watch runs on **Agents → Chats** (`/agents`). Durable files live under `DEVHUB_AGENT_RUNS_DIR`. The leftover CLI runner (`dashboard/scripts/agent-run.ts`) is only for historic `legacy-cli` records and `POST /api/agent/runs/interactive`.
+Watch runs on **Agents → Chats** (`/agents`). Durable files live under `DEVHUB_AGENT_RUNS_DIR`. The leftover CLI runner (`apps/ui/scripts/agent-run.ts`) is only for historic `legacy-cli` records and `POST /api/agent/runs/interactive`.
 
 ### Trace what agents did
 
@@ -395,7 +399,7 @@ User-facing workflow and storage layout: [Repo ownership](../guides/repo-ownersh
 
 ### Capture appraisal notes from an agent
 
-Appraisal data lives under `notes/appraisal/` as BlockNote JSON. Filesystem-backed tools work without the dashboard.
+The optional Career plugin registers these tools through its `devhub-mcp-toolsets.json` descriptor. Its source must remain available to the MCP peer. With Career enabled, the filesystem-backed tools work without the dashboard. Disabled peers expose no appraisal tools; existing note files remain under `notes/appraisal/` as BlockNote JSON.
 
 1. `appraisal_record` — append a moment, win, or feedback entry for a year (self or a person slug).
 2. `appraisal_set_goal` / `appraisal_list_goals` — define and review goals for the review period.
@@ -422,7 +426,7 @@ Capability tools proxy dashboard routes under `/api/capability/*`. Start `npm ru
 4. `capability_get_lab` — fetch an existing lab by `signalId` (labs are built from the UI or terminal skill).
 5. `capability_complete_lab` — mark a lab done and tick its follow-up task.
 
-See the [Capability Radar plan](../archive/capability-radar-plan.md) for the original feature map (archived — it shipped as `dashboard/lib/capability/`).
+See the [Capability Radar plan](../archive/capability-radar-plan.md) for the original feature map (archived — it shipped as `apps/ui/lib/capability/`).
 
 ### Share a note or doc from an agent
 
@@ -442,9 +446,9 @@ Workspace tools are read-only GET proxies — useful as a first call when pickin
 - `context_pack` — consolidated working-state snapshot (optional `format`, e.g. `markdown`).
 - `skills_list` / `skills_read` — browse the merged skill catalog before improvising.
 - `collections_list` — optional `notePath` filter for membership.
-- `research_list`, `radar_personal`, `learnings_list` (optional `category`), `agents_list`, `briefing_tasks`, `persona_list`.
+- `radar_personal`, `learnings_list` (optional `category`), `agents_list`, `persona_list`.
 
-Writes in these areas (`/api/persona` POST, `/api/collections` POST, `/api/briefing/tasks` POST, `/api/actions/*` launches) are deliberately not exposed yet.
+Writes in these areas (`/api/persona` POST, `/api/collections` POST, `/api/actions/*` launches) are deliberately not exposed yet.
 
 ### Schedule work
 
@@ -460,13 +464,13 @@ Mutating tools take `confirm: true` and apply immediately. Agent jobs are ready 
 
 ### Integration writes
 
-`integrations_list` reads providers and account references. `integrations_propose` retains its name and input schema but applies Jira and GitHub actions immediately through `POST /api/integrations/actions`. `jira_ticket_create` and `jira_ticket_transition` apply immediately with `confirm:true`. Validation, account checks and uncertain-outcome handling remain; check the provider before retrying.
+`integrations_list` reads providers and account references. `integrations_write` writes to Jira or GitHub immediately through `POST /api/integrations/actions`; call it only when the user asked for that specific change. `jira_ticket_create`, `jira_ticket_transition` and `jira_ticket_assign` apply immediately with `confirm:true`. `jira_ticket_assign` takes `key`, an optional `assignee` (`me` by default, a Jira accountId, or a name/email matching one user) and `confirm`; `jira_ticket_get` reports the current assignee. Validation, account checks and uncertain-outcome handling remain; check the provider before retrying.
 
-The old proposal list, review and confirm tools remain registered and return removal notices. The legacy alert and chat tools return “Telegram support was removed”. The separate `integrations_slack_status`, `integrations_slack_usage` and `integrations_slack_test` tools still work; see [Slack](../guides/integrations.md) and [Team Slack gateway](../slack-gateway.md).
+The old proposal list, review and confirm tools and the legacy alert and chat tools have been removed. The separate `integrations_slack_status`, `integrations_slack_usage` and `integrations_slack_test` tools still work; see [Slack](../guides/integrations.md).
 
 ### Discuss an editor selection
 
-The `editor` toolset doesn't pair an editor or install code-server. It uses the existing dashboard selection/discussion path:
+The `editor` toolset doesn't pair an editor. It uses the existing dashboard selection/discussion path:
 
 | Tool | Input | Behaviour |
 | --- | --- | --- |
@@ -535,7 +539,7 @@ plugin MCP packages. See [Plugin System](plugins.md) and
 | `sessions_recap` returns `401` / `403`  | Set `DEVHUB_API_SECRET` in dashboard and MCP env (or call from a same-origin browser tab). Restart the dashboard after changing the secret. |
 | `repos_git_*` can't find the repo       | Pass `path` for clones outside the DevHub scan directory, or use `repos_list` names only for siblings under `dirname(REPO_ROOT)`.           |
 | MCP client shows an old tool list       | Re-run MCP sync, then restart the AI tool so it reloads server metadata.                                                                    |
-| `tsx` is missing for `devhub`           | Run `cd mcp-servers/devhub-server && npm install`.                                                                                          |
+| `tsx` is missing for `devhub`           | Run `npm install` from the repo root.                                                                                                        |
 | `call-tool.mjs` exits 2                 | Pass `--list` or `<tool> '<json object>'`. Arguments must be JSON, not a bare string.                                                       |
 | Plugin MCP server fails to start        | Run `npm install` inside the plugin's `mcp-servers/<name>/` package and re-run MCP sync.                                                    |
 | A plugin MCP tool is missing            | Check plugin registration in `~/.config/devhub/plugins.json`, then run the sync action so plugin MCP configs are materialized.              |
@@ -545,7 +549,7 @@ plugin MCP packages. See [Plugin System](plugins.md) and
 | `db_connect` still unavailable          | Check Tailscale / AWS profile from Ops. `fix: true` only applies remedies the provider declared.                                 |
 | `agent_dispatch` `503` “Paseo is unavailable” | Open `/agents?view=connection` and run setup or restart. Local dashboard only. |
 | `agent_dispatch` `400` maxTurns         | Paseo has no turn override. Drop `maxTurns` or use the agent's own controls. |
-| `agent_dispatch` `429`                  | Wait, cancel on Agents, or raise `DEVHUB_AGENT_MAX_RUNS` / `DEVHUB_AGENT_MAX_COST_USD`. A limit refusal names the runs holding it (`code: "capacity"`); `GET /api/agent/runs/capacity` lists them and `POST /api/agent/runs/<id>/clear` drops one DevHub can no longer follow (it does not stop Paseo). Idle DevHub-started chats are archived after 15 minutes — [Agents (Paseo)](../guides/paseo-agents.md#idle-chats-and-capacity). |
+| `agent_dispatch` `429`                  | Wait, cancel on Activity, or raise `DEVHUB_AGENT_MAX_RUNS` / `DEVHUB_AGENT_MAX_COST_USD`. A limit refusal names the runs holding it (`code: "capacity"`); `GET /api/agent/runs/capacity` lists them and `POST /api/agent/runs/<id>/clear` drops one DevHub can no longer follow. |
 
 ## Safety Model
 

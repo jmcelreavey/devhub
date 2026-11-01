@@ -4,7 +4,11 @@ import os from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { cleanBuildEnv } from "../dashboard/lib/desktop/build-env.mjs";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { resolveWorkspacePaths, resolveWorkspaceRoot } from "./workspace-paths.mjs";
+
+const workspace = resolveWorkspacePaths(resolveWorkspaceRoot(path.dirname(fileURLToPath(import.meta.url))));
+const { cleanBuildEnv } = await import(pathToFileURL(workspace.buildEnvFile).href);
 
 export async function freeLoopbackPort() {
   const server = net.createServer();
@@ -62,7 +66,8 @@ export async function smokePayload(payload, deps = {}) {
   const probe = deps.probe ?? probeHealth;
   const sleep = deps.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
   const now = deps.now ?? Date.now;
-  const port = await (deps.freePort ?? freeLoopbackPort)();
+  let port;
+  do { port = await (deps.freePort ?? freeLoopbackPort)(); } while ([1337, 1339, 1340].includes(port));
   const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "devhub-payload-smoke-"));
   const token = randomBytes(32).toString("hex");
   let server;
@@ -77,6 +82,8 @@ export async function smokePayload(payload, deps = {}) {
       HOSTNAME: "127.0.0.1",
       NODE_ENV: "production",
       DEVHUB_DESKTOP: "1",
+      DEVHUB_CORE_SERVER: "1",
+      DEVHUB_UI_DIST: path.join(payload, "server", "ui", "dist"),
       DEVHUB_BOOTSTRAP_TOKEN: token,
       DEVHUB_SCHEDULER: "0",
       DEVHUB_MCP_HTTP: "0",
@@ -91,7 +98,7 @@ export async function smokePayload(payload, deps = {}) {
       env[name.toUpperCase() + "_DIR"] = path.join(scratch, name);
       fs.mkdirSync(path.join(scratch, name), { recursive: true });
     }
-    server = start(path.join(payload, "runtime", "node"), [path.join(payload, "server", "server.js")], {
+    server = start(path.join(payload, "runtime", "node"), [path.join(payload, "server", "core-server.mjs")], {
       cwd: path.join(payload, "server"), env, log: deps.log,
     });
     const deadline = now() + (deps.timeoutMs ?? 35_000);

@@ -11,8 +11,8 @@ related:
 
 # Working on the desktop app
 
-Everything under `desktop/`. The dashboard is unchanged — it is still a Next.js
-app, still served over loopback, and no product logic lives in Rust.
+The desktop shell lives under `apps/desktop/`. It serves the core HTTP server
+and Vite UI over loopback; product logic stays outside Rust.
 
 ## Prerequisites
 
@@ -23,7 +23,7 @@ npm run desktop:doctor
 Tells you what is missing and the command to fix it. In short: Rust
 (<https://rustup.rs>), the Tauri CLI
 (`cargo install tauri-cli --version "^2" --locked`), Xcode command line tools,
-and `npm install` having been run in `dashboard/`.
+and `npm install` having been run from the repo root.
 
 ## Running against your checkout
 
@@ -35,8 +35,8 @@ for health, then attaches. The app restarts against that server and keeps the
 choice until **View → Use Packaged Server** is selected. Switching either way
 is automatic: Attach stops the packaged sidecar before starting development;
 Use Packaged Server stops a shell-managed development process, or a verified
-DevHub checkout listener (matching the checkout's `dashboard/` cwd and known
-Next/DevHub script), then waits for ports 1337 and 1339 before restarting.
+DevHub checkout listener (matching the checkout's `apps/ui/` cwd and known
+DevHub supervisor script), then waits for ports 1337 and 1339 before restarting.
 Unknown listeners are left alone and produce a clear failure instead of killing
 some unrelated server because it had the bad luck to choose the same port.
 
@@ -52,7 +52,7 @@ boot page, the folder picker, or the update banner.
 Attach first opens a small checkout-owned page that unregisters DevHub's
 service worker and deletes its `devhub-*` caches before loading the app. This
 matters because Packaged and Attach share `localhost:1337`: production static
-assets are immutable and cacheable, but webpack development asset URLs are not.
+assets are immutable and cacheable, but Vite development asset URLs are not.
 Without this handoff, a cached stylesheet could make Attach show an older
 working tree.
 
@@ -60,6 +60,18 @@ There is no bootstrap token in attach mode, so the bridge routes report browser
 mode and the terminal falls back to origin checking. That is the same posture
 `npm run dev` already has in a browser tab, which is why it does not weaken
 anything.
+
+On macOS, Windows, Linux and WSL, an unsupervised checkout `npm run dev` defaults to dashboard port
+1437, terminal port 1439 and MCP port 1440, so it can run beside the installed app on 1337 and
+1339/1340. The checkout is secondary by default: its scheduled jobs and shared
+dashboard discovery are off, leaving the installed app as the primary. Existing
+environment and `.env.local` overrides take precedence. With no other DevHub
+instance running, set `DEVHUB_SCHEDULER=1` when starting the checkout if it
+should own background work.
+
+Shell-supervised Attach keeps its existing ports. The Windows app may select a
+different port when availability changes. A changed WebView origin leaves unsent
+task drafts and focus sessions at the old origin; they are not migrated.
 
 Dashboard TypeScript, CSS, and `public/` assets hot reload in attach mode; no
 desktop rebuild is needed. Rust shell, menu, boot-page, bundled Node/runtime,
@@ -78,7 +90,7 @@ The directory contains bounded, rotating logs (the previous 2 MiB file ends in
 `.log.1`):
 
 - `shell.log` — desktop startup, window, and menu events.
-- `sidecar.log` — packaged dashboard/service output, or output from a dev
+- `sidecar.log` — packaged apps/ui/service output, or output from a dev
   server the shell started while attaching.
 - `renderer.log` — dashboard-to-Tauri bridge events, including external-link
   interception and `openInBrowser` detection, invocation, and failures.
@@ -106,14 +118,13 @@ npm run desktop:verify    # the pre-signing gate (leak checks, manifest)
 npm run desktop:install   # replace /Applications/DevHub.app, safely
 ```
 
-Staging takes a couple of minutes because it runs a full Next production build.
+Staging builds the core server and the Vite UI.
 If you are only changing Rust, stage once and then use `cargo` directly in
 `desktop/src-tauri/`.
 
 `desktop:stage` also runs `desktop/scripts/stage-icons.mjs`. The bundled icon
-always uses the core DevHub Shift Dock mark (`dashboard/public/icon-master.png`). Plugin
-branding is staged separately as `plugin.png` for the runtime overlay. Generated
-icons go into the gitignored `desktop/staging/icons/` directory.
+always uses the core DevHub Shift Dock mark (`apps/ui/public/icon-master.png`).
+The staged `plugin.png` is the core fallback. Generated icons go into the gitignored `desktop/staging/icons/` directory.
 
 ```bash
 cd desktop/src-tauri
@@ -134,7 +145,7 @@ This works around [Tauri's test-loader issue](https://github.com/tauri-apps/taur
    either is occupied it **stops and says so** — it never kills a listener.
 3. It mints a random 32-byte bootstrap token and spawns
    `services/supervisor.mjs` with the bundled Node, in its own process group.
-4. The supervisor loads `DEVHUB_ENV_FILE`, starts the Next standalone server
+4. The supervisor loads `DEVHUB_ENV_FILE`, starts the core HTTP server
    and the PTY server, and emits one JSON line per state change on stdout.
 5. Rust polls `/api/desktop/health` **with the token** until it answers. A port
    that merely accepts connections is not enough — that is how you get a white
@@ -162,33 +173,35 @@ next to the code — so a denylist would be one forgotten pattern away from
 shipping somebody's notes in a public installer. It also writes
 `MANIFEST.json` with a digest per file.
 
-**`stage-dashboard.mjs`** builds Next with `output: "standalone"` (gated on
-`DEVHUB_DESKTOP_BUILD=1`), flattens the output, copies `.next/static` and
-`public`, bundles the PTY server with esbuild, and stages the matching
-`node-pty` prebuild.
+**`stage-dashboard.mjs`** builds the core HTTP server and Vite UI once, then
+stages their runtime dependencies, the terminal server, the matching `node-pty`
+prebuild and the terminal WASM. The server serves `server/ui/dist` directly.
+The build does not materialise plugin sources. Checkout inputs must be committed and
+match the Git index; unknown files and skip-worktree inputs stop staging. Installed packages must match the workspace
+lockfile's version and cached archive integrity, and each used file must match the
+archive. The generated provenance records input and output digests, and
+`--no-build` verifies them before reuse.
 
-Three things it does that are not obvious, and they exist because they were real
-failures in a bundle that otherwise looked perfect:
+The installed rebuild uses an isolated core snapshot and rejects older Next
+releases instead of changing them in place. WSL payloads are versioned and
+previous releases remain available for rollback. User data stays outside the
+payload. The installed rebuild logs the retained server, services and resource
+backups; the local installer also keeps its previous app backup.
 
-- **It deletes every `.env*` from the standalone output.** Next bundles those
-  and loads them at boot. Correct for a server deployment; here it meant
-  `dashboard/.env.local` — live Jira, Datadog, Google and AI credentials —
-  ended up inside the `.app`.
-- **It builds against an empty content tree.** Next prerenders static routes
-  using the build machine's data, so `/notes` shipped as HTML listing the
-  developer's actual notes.
-- **It includes Playwright runtime data used by agent QA.** `ensureExternalRuntimeFiles` restores `browsers.json` when Next’s file tracer omits it.
+The Linux Docker builder stages the same layout inside its isolated dependency
+volumes. Windows packages the Linux payload for WSL and keeps WebView2 on the
+shell-selected loopback origin. The release workflow verifies each staged payload
+before signing; it does not replace earlier release artifacts.
 
 ## The pre-signing gate
 
 `npm run desktop:verify` runs before anything is signed, in CI and locally:
 
-1. Every staged resource file is in the manifest, and digests match.
-2. No personal-data directory (`notes/`, `tasks/`, `collections/`, `upstarts/`).
-3. The packaged identity is the generic default, not somebody's real one.
-4. No credential-shaped files anywhere in the bundle.
-5. No build-machine content in prerendered HTML.
-6. Every staged `playwright-core` copy includes `browsers.json` (or none is staged).
+1. Core/Vite provenance and staged payload digests match.
+2. Every staged resource is in the manifest and its digest matches.
+3. No personal-data paths, plugin copies or credential-shaped files are staged.
+4. The packaged identity and writing style are generic.
+5. Native binaries and symlinks are suitable for the target.
 
 A signed public release cannot be taken back. That is the whole reason this
 runs before signing rather than after.
@@ -290,7 +303,7 @@ machine.
 Two implementations of one contract, because Rust owns process startup and
 TypeScript owns everything after it:
 
-- `dashboard/lib/desktop/runtime-paths.ts`
+- `apps/ui/lib/desktop/runtime-paths.ts`
 - `desktop/src-tauri/src/paths.rs`
 
 `sidecar_env()` is the single seam between them. If you add a path, add it in
@@ -325,13 +338,13 @@ Practical consequences when adding a feature:
   stop only a listener verified as this checkout's DevHub development server.
   Startup classifies holders via `lsof` + ancestor command lines (packaged app
   bundle marker vs checkout dev markers), not via `GET /api/desktop/health` —
-  browser `next start` answers `{ devhub: true, desktop: false }` and must not
+  a browser server answers `{ devhub: true, desktop: false }` and must not
   trigger "Another DevHub is already using port 1337".
 
 ## Testing
 
 ```bash
-npm run verify                                    # lint, typecheck, ~1280 tests, build
+npm run verify                                    # lint, typecheck and tests; CI builds
 npm run test:e2e --prefix dashboard               # Chromium + WebKit
 npx playwright test --project=webkit --prefix dashboard
 cd desktop/src-tauri && cargo test

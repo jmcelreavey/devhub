@@ -26,7 +26,7 @@ npm run agents:install
 
 Or **Agents → Connection → Set up Paseo**. Works on **macOS** (launchd) and **Linux, including WSL2** (a `systemd --user` service, `devhub-paseo.service`; in WSL enable `systemd=true` in `/etc/wsl.conf`). The installer:
 
-- installs the pinned `@getpaseo/cli` (`scripts/paseo-release.json`) through Safe-Chain into `~/.local/share/devhub/paseo`
+- installs the pinned `@getpaseo/cli` (`scripts/paseo-release.json`) with npm into `~/.local/share/devhub/paseo`
 - registers the `devhub.paseo.daemon` launch agent (macOS) or `devhub-paseo.service` (Linux) on `127.0.0.1:6767`, in the **foreground** — a detached daemon breaks Cursor's ACP agent ("Failed to initialize session services")
 - sets the daemon password from the **Agents password** in Setup (`DEVHUB_PASEO_PASSWORD`; the legacy `OPENCHAMBER_UI_PASSWORD` still works), stored as a bcrypt hash, turns voice off (it otherwise downloads ~1 GB of speech models) and registers Cursor as an ACP provider when `cursor-agent` is installed
 - keeps your other `config.json` edits, your default agent and your phone-access choice across reinstalls
@@ -62,11 +62,11 @@ Shows daemon health, which agents are ready (and why not), the default agent for
 
 ## Known gaps
 
-- **Claude model list.** Paseo ships its own hardcoded list of Claude models (`model-manifest.js`), so a model released after the pinned Paseo version is missing from its picker even when your Claude Code CLI supports it. Opus 5.5 and Sonnet 5.5 needed Paseo 0.10. When a new model is absent, bump `scripts/paseo-release.json` and `@getpaseo/client` in `dashboard/package.json` together, then **Agents → Connection → Update**. (Models named in `~/.claude/settings.json` are also merged in, but that changes what `sonnet`/`opus` mean in every Claude Code session.)
+- **Claude model list.** Paseo ships its own hardcoded list of Claude models (`model-manifest.js`), so a model released after the pinned Paseo version is missing from its picker even when your Claude Code CLI supports it. Opus 5.5 and Sonnet 5.5 needed Paseo 0.10. When a new model is absent, bump `scripts/paseo-release.json` and `@getpaseo/client` in `apps/ui/package.json` together, then **Agents → Connection → Update**. (Models named in `~/.claude/settings.json` are also merged in, but that changes what `sonnet`/`opus` mean in every Claude Code session.)
 
 - Agent availability depends on the installed CLI and its authentication. Initializing or failed providers are not selectable. A provider catalog check is not an end-to-end model request; launch failures appear on the task and in Paseo.
 - Paseo packaging (still true at 0.10.1): `@getpaseo/relay` points its import conditions at unshipped `.ts` files, so `next.config.ts` externalises `@getpaseo/*`; cancel uses the SDK's internal daemon client.
-- Safe-Chain may delay a newly published release until it meets the package-age policy; a failed update keeps the installed version.
+- A failed update keeps the installed version.
 
 ## Chats and setup
 
@@ -80,15 +80,9 @@ Shared skills and specialist agents use the existing native-tool sync. Persona s
 
 ## Updates
 
-DevHub checks the npm stable release when opened and hourly while open. The banner appears only when Safe-Chain can install the update. Connection still shows a published release during its safety window and keeps checking. Paseo updates wait for active chats to finish and keep chat data, providers, plugins and personal settings.
+Agents → Connection checks the latest npm release when opened and hourly while open. It offers an update only after the release is at least 24 hours old, matching the default age policy in Safe-Chain 1.1.10. Missing or invalid publish times prevent an update. This is an age check, not a malware scan or a check of custom Safe-Chain settings; the installer invokes npm directly. Updates install the version shown, wait for active chats to finish, and keep chat data, providers, plugins and personal settings.
 
-The primary DevHub process also checks supported agent CLIs daily. It updates native Claude, Cursor and OpenCode installations with their own updater and npm-installed Claude, OpenCode, Copilot and Codex through Safe-Chain. It waits until Paseo chats are idle and retries later if Paseo is unavailable or a chat starts during the pass. Codex from the ChatGPT app follows the app's updates. Updates to other installation methods remain with their package manager. Set `DEVHUB_AGENT_AUTO_UPDATE=0` to disable DevHub's agent CLI updater; results are written to the scheduler log.
-
-## Idle chats and capacity
-
-Paseo keeps every loaded chat alive until it is archived: an idle Codex chat holds its `codex app-server` and every MCP server that process started. DevHub therefore archives chats **it started** once they have sat idle for 15 minutes (`DEVHUB_PASEO_IDLE_RELEASE_MINUTES`; `0` turns this off). Archiving only moves them to Paseo's History; Continue, Reopen or a plan revision unarchives the same conversation. Chats that still need attention, have pending permissions, or belong to an active DevHub run are left loaded.
-
-A start can look like "six agents are running" when two are, if runs ended without DevHub hearing about it (the agent was closed or deleted in Paseo, an idle agent with no result, or a start Paseo never acknowledged). DevHub marks those finished when it reads them — on every check, at startup, and again just before it refuses a start. If a start is still refused, the launch sheet lists which agents are holding the limit (`GET /api/agent/runs/capacity`) and lets you **clear** one DevHub can no longer follow (`POST /api/agent/runs/<id>/clear`). Clearing does not stop anything in Paseo; a live run has to be cancelled.
+The primary DevHub process also checks supported agent CLIs daily. It updates native Claude, Cursor and OpenCode installations with their own updater and npm-installed Claude, OpenCode, Copilot and Codex through Safe-Chain. It runs whether or not chats are active. Native installs keep the running binary; an npm reinstall can interrupt a chat that's mid-run on that CLI. Codex from the ChatGPT app follows the app's updates. Updates to other installation methods remain with their package manager. Set `DEVHUB_AGENT_AUTO_UPDATE=0` to disable DevHub's agent CLI updater; results are written to the scheduler log.
 
 ## Troubleshooting
 
@@ -99,4 +93,3 @@ A start can look like "six agents are running" when two are, if runs ended witho
 | Chats keeps asking for a connection | Use **Direct connection**, host `localhost`, port `6767`, and the Agents password from Setup (`DEVHUB_PASEO_PASSWORD`). Chats only auto-connects when DevHub is opened on this Mac. |
 | A provider is missing or greyed out | The CLI isn't installed or signed in. Fix it in a terminal (`claude`, `codex`, `cursor-agent`, `opencode`), then refresh Connection. |
 | A task run is stuck on "running" | Open the chat from the task chip. Paseo owns the session; DevHub reconciles the record from its timeline. |
-| Launch says the agent limit is full | The sheet lists runs holding `DEVHUB_AGENT_MAX_RUNS`. Clear a `clearable` row (needs-attention or reconnecting) rather than a live chat. |

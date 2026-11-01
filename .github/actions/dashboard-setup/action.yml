@@ -15,26 +15,7 @@ runs:
       with:
         node-version-file: ${{ inputs.node-version-file }}
         cache: npm
-        cache-dependency-path: |
-          dashboard/package-lock.json
-          mcp-servers/devhub-server/package-lock.json
-          gateway/package-lock.json
-
-    - name: Cache dashboard node_modules
-      id: node-cache
-      uses: actions/cache@v4
-      with:
-        path: dashboard/node_modules
-        key: dashboard-node-modules-${{ runner.os }}-${{ hashFiles('dashboard/package-lock.json') }}
-
-    # The dashboard's vitest run also collects mcp-servers/devhub-server tests,
-    # which import the MCP SDK from that package's own node_modules.
-    - name: Cache MCP server node_modules
-      id: mcp-cache
-      uses: actions/cache@v4
-      with:
-        path: mcp-servers/devhub-server/node_modules
-        key: mcp-server-node-modules-${{ runner.os }}-${{ hashFiles('mcp-servers/devhub-server/package-lock.json') }}
+        cache-dependency-path: package-lock.json
 
     - name: Setup safe-chain
       shell: bash
@@ -42,32 +23,14 @@ runs:
         npm i -g @aikidosec/safe-chain@1.1.10
         safe-chain setup-ci
 
-    - name: Cache gateway node_modules
-      id: gateway-cache
-      uses: actions/cache@v4
-      with:
-        path: gateway/node_modules
-        key: gateway-node-modules-${{ runner.os }}-${{ hashFiles('gateway/package-lock.json') }}
-
-    - name: Install gateway dependencies
+    - name: Install workspace dependencies
       shell: bash
-      if: steps.gateway-cache.outputs.cache-hit != 'true'
-      run: npm ci --prefix gateway --ignore-scripts
-
-    - name: Install dashboard dependencies
-      shell: bash
-      if: steps.node-cache.outputs.cache-hit != 'true'
-      run: npm ci --prefix dashboard
-
-    - name: Install MCP server dependencies
-      shell: bash
-      if: steps.mcp-cache.outputs.cache-hit != 'true'
-      run: npm ci --prefix mcp-servers/devhub-server
+      run: npm ci
 
     - name: Configure DevHub content paths
       shell: bash
       run: |
-        # next build prerenders /notes and /docs; bundled server code cannot infer repo root from __dirname.
+        # Point the checkout server at the fixture content paths.
         {
           echo "REPO_ROOT=${{ github.workspace }}"
           echo "NOTES_DIR=${{ github.workspace }}/notes"

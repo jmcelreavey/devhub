@@ -2,6 +2,23 @@
 
 User-visible changes, newest first. Versioned sections describe the public releases; Unreleased, when present, is work that has not shipped yet.
 
+## 2.2.2 — 2026-11-01
+
+### Added
+
+- Notifications replace Today and the morning briefing, with a global alert bar. Datadog alerts appear while you're on call.
+- Review plugin permissions in the new Trust UI. Hollow is included as a built-in theme.
+
+### Changed
+
+- Slim down the core and remove the retired `dashboard/` layout.
+- Let update notes use the full available width.
+
+### Fixed
+
+- Limit the agent attention scan to recent runs and skip stray files.
+- Keep Git locking compatible with Node 26.
+
 ## 2.2.1 — 2026-10-21
 
 ### Added
@@ -48,7 +65,7 @@ User-visible changes, newest first. Versioned sections describe the public relea
 - Home's My tasks list now puts Running / in-progress work right under Needs action (newest first), then Next / To do, so the collapsed preview shows what is actually moving.
 - Storyboard uses the full content width. Columns grow to fill the window (272px minimum), and the board only scrolls horizontally when they no longer fit.
 - A collapsed Morning briefing is one tight row. Today's weather (icon, now, condition, high and low) sits in the header next to the title instead of leaving a blank band underneath, and the card drops from 80px to 50px. The condition and then the range drop out as the card narrows, and nothing shows if there's no forecast.
-- Moving a Jira ticket is one click again. The status chip changes straight away (spinner on the chip only), then a toast says "PTF-5106 moved to Done" with **Undo** and **Details**, and the "Action completed" dialog is gone. Your own click is the approval and still lands in Recent actions. Anything an agent, MCP tool or chat asks for keeps the review step, which now has one heading, the ticket, a From → To change and the account by name, with ids behind **Details**. It's quicker too: one Jira read instead of three, about 0.9 s down to 0.25 s against a fixture Jira with 120 ms per call. `jira_ticket_transition` and `jira_ticket_create` now say "Proposed, not applied" instead of claiming the change was made.
+- Moving a Jira ticket is one click again. The status chip changes straight away (spinner on the chip only), then a toast says "ABC-5106 moved to Done" with **Undo** and **Details**, and the "Action completed" dialog is gone. Your own click is the approval and still lands in Recent actions. Anything an agent, MCP tool or chat asks for keeps the review step, which now has one heading, the ticket, a From → To change and the account by name, with ids behind **Details**. It's quicker too: one Jira read instead of three, about 0.9 s down to 0.25 s against a fixture Jira with 120 ms per call. `jira_ticket_transition` and `jira_ticket_create` now say "Proposed, not applied" instead of claiming the change was made.
 
 ## 2.1.1 - 2026-10-11
 

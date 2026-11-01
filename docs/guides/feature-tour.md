@@ -13,13 +13,13 @@ related:
 
 # Feature tour
 
-The [README](../../README.md) covers installing DevHub and the main areas: Today, Work, PRs, Notes, Agents and Skills. This page is the rest of it. Each section ends with the guide that has the detail.
+The [README](../../README.md) covers installing DevHub and the main areas: Notifications, Work, PRs, Notes, Agents and Skills. This page is the rest of it. Each section ends with the guide that has the detail.
 
 DevHub keeps your persona, skills, agents, MCP configuration and notes together as files, in a git repo if you link one. It syncs tool configuration into Claude Code, Codex, Cursor, OpenCode and Antigravity, and agents reach shared notes through MCP. Around that sits a dashboard for the rest of the day: tasks, notes, PRs, repos, a git client, a database client, and agents that can work a ticket from plan to pull request.
 
 It runs on your machine and keeps notes, tasks and configuration in local files. Use a private mirror for personal data. Integrations and model providers receive the requests you send them.
 
-The dashboard recordings on this page use disposable fixture data (`npm run demos:record` and `npm run demos:walkthroughs`). Usage meters and convention rules are seeded examples. The ticket-to-PR flow is a labelled illustration.
+The dashboard recordings on this page use disposable fixture data. Usage meters and convention rules are seeded examples. The ticket-to-PR flow is a labelled illustration.
 
 ## Ticket to PR, with you in the loop
 
@@ -79,7 +79,7 @@ Docs: [Task checks and review persistence](task-checks-and-reviews.md)
 
 ## Code discussions beside the diff
 
-Select lines in **Repos → Changes → Send to AI** and review the captured snapshot before sending it. Continue an idle same-checkout conversation or start an explanation without another worktree. An optional Cursor/VS Code add-on sends unsaved selections; the separately installed code-server editor is there if you want editing inside DevHub.
+Select lines in **Repos → Changes → Send to AI** and review the captured snapshot before sending it. Continue an idle same-checkout conversation or start an explanation without another worktree. An optional Cursor/VS Code add-on sends unsaved selections.
 
 ![Reviewing captured code before choosing an assistant](../assets/demos/editor-ask-ai.gif)
 
@@ -157,9 +157,9 @@ Docs: [Token budget](../architecture/token-budget.md) · [Recall](../architectur
 
 ![The setup stepper walking through GitHub, Google Calendar and Jira, with only the integrations you choose](../assets/demos/integrations.gif)
 
-GitHub, Jira, Google Calendar, Datadog, Figma and Slack, plus 1Password for secrets. Nothing's required: pages stay hidden until their integration is set up. Google Calendar feeds Today and the morning briefing, and a meeting gets a note in one click. Slack is configured on **Setup → Slack** (no public URL); it can post Needs you, agent progress including ready-for-review, and run DevHub tools from the channel.
+GitHub, Jira, Google Calendar, Datadog and Figma, plus 1Password for secrets. Nothing's required: pages stay hidden until their integration is set up. Google Calendar has its own page and nav badge, and a meeting gets a note in one click.
 
-Docs: [Setup](../getting-started/setup.md) · [Slack](integrations.md) · [Jira](../integrations/jira.md) · [Google Calendar](../integrations/google-calendar.md) · [Datadog](../integrations/datadog.md) · [Figma](../integrations/figma.md)
+Docs: [Setup](../getting-started/setup.md) · [Jira](../integrations/jira.md) · [Google Calendar](../integrations/google-calendar.md) · [Datadog](../integrations/datadog.md) · [Figma](../integrations/figma.md)
 
 ## A terminal that stays out of the way
 
@@ -169,12 +169,12 @@ Docs: [Terminal and agent CLI](terminal-and-agent-cli.md)
 
 ## Plugins for your own workflows
 
-Company-specific work doesn't belong in the core. A plugin is a separate repo that adds skills, agents, MCP servers, dashboard pages, database connections and branding, and DevHub merges them in on start. Point `/db` at your production databases, add an ops page for your cluster, ship runbooks as skills. The core stays generic, and the plugin stays private to your team.
+Company-specific work doesn't belong in the core. A plugin is a separate repo that adds skills, agents, MCP servers, dashboard pages, database connections and branding, and DevHub loads reviewed runtime features without rebuilding. Point `/db` at your production databases, add an ops page for your cluster, ship runbooks as skills. The core stays generic, and the plugin stays private to your team.
 
 ```mermaid
 graph LR
   core["DevHub core"] --> dash["Dashboard"]
-  plugin["Your plugin repo<br/><i>pages, DB connections, skills,<br/>agents, MCP servers</i>"] -- "materialised on start" --> dash
+  plugin["Your plugin repo<br/><i>pages, DB connections, skills,<br/>agents, MCP servers</i>"] -- "reviewed runtime" --> dash
   plugin --> sync["Sync engine"]
   core --> sync
   sync --> tools["Claude Code · Codex · Cursor · OpenCode"]
@@ -184,15 +184,15 @@ Docs: [Plugin system](../architecture/plugins.md) · [Creating plugins](../contr
 
 ## MCP tools for agents
 
-The dashboard is for you, MCP is for your agents, and they share the same code. Tools cover notes, tasks, repos and git, PRs, databases, diagrams, calendar, agents, scheduled jobs and more. Coverage isn't complete; setup, the desktop shell and some UI helpers stay in the dashboard. Run `npm run mcp:inventory` for the current list. Slack reads that same list.
+The dashboard is for you, MCP is for your agents, and they share the same code. There are 190+ tools across notes, tasks, repos and git, PRs, databases, diagrams, calendar, agents, scheduled jobs and more. Coverage isn't complete; setup, the desktop shell and some UI helpers stay in the dashboard. Run `npm run mcp:inventory` for the current list.
 
 Docs: [MCP server](../architecture/mcp-server.md)
 
-## Reach it from anywhere in the house
+## Reach your agents remotely
 
-Turn on LAN mode and the dashboard opens from your phone or tablet on the same Wi-Fi. Install it as a PWA for a proper icon and a home-screen launch. Away from home, **Pair a phone** reaches your agents through Paseo's end-to-end-encrypted relay instead of exposing anything. The terminal is never proxied, and mutating routes need a same-origin request or a shared secret.
+Use **Pair a phone** to reach your agents through Paseo's encrypted relay. The dashboard stays local.
 
-Docs: [LAN access](../getting-started/setup.md#localhost-vs-lan-access) · [PWA](pwa.md) · [Desktop app](../getting-started/desktop-app.md)
+Docs: [Agents (Paseo)](paseo-agents.md) · [Desktop app](../getting-started/desktop-app.md)
 
 ## Private by design
 
@@ -210,11 +210,7 @@ Docs: [Fork workflow](../contributing/fork-workflow.md)
 
 ## Resize from any edge
 
-Today's cards and floating agent, terminal, learning and note panels can be resized from all four edges and corners, not just the bottom-right grip. Corners resize diagonally. Minimum sizes keep controls usable; Today snaps to its grid and saves the layout. Narrow Today layouts keep cards full-width, so collapse the sidebar or widen the window before shrinking them horizontally. Drag a panel's header to move it, and its edge to resize it.
-
-![Resizing a Today card from its left, top and corner handles](../assets/demos/resize.gif)
-
-*Recorded on the real Today grid with disposable tasks. The same edge/corner model is used by floating panels.*
+Floating agent, terminal, learning and note panels can be resized from all four edges and corners. Minimum sizes keep controls usable. Drag a panel's header to move it, and its edge to resize it.
 
 ## Honourable mentions
 
@@ -228,13 +224,11 @@ The bits that didn't get their own section but earn their keep.
 | **Focus** | One timer per day. Starting a task stops the last one. | [Dashboard](../architecture/dashboard.md#focus-timer) |
 | **Profiles** | Separate task lists for home and work in one repo, switched per machine. | [Task profiles](task-profiles.md) |
 | **Capture** | `⇧↵` turns a thought, a Slack message or a Datadog alert into a draft task with related notes, PRs and alerts attached. | [Plan loop](plan-loop.md#1-capture-a-draft) |
-| **Briefings** | A morning digest on Today: weather, headlines, local events and what's ready for an agent. | [Dashboard](../architecture/dashboard.md#morning-briefing) |
-| **Today layouts** | Rearrange Today's cards on a grid and save presets, or switch to the calmer Focus view. A banner tells you what failed while you were away. | [Dashboard](../architecture/dashboard.md#today-workspace) |
 | **Tabs** | Keep a repo, a note and a PR open in workspace tabs, with recent history one click away. | [Dashboard](../architecture/dashboard.md) |
 | **Standup** | A Markdown standup from git commits, Jira, PRs, tasks due and your daily note. | [Standup](standup.md) |
 | **Weekly review** | The week in numbers, plus a list of tasks that rolled over three days or more. A retro proposes skill edits from what actually landed. | [Dashboard](../architecture/dashboard.md#weekly-review) · [Plan loop](plan-loop.md#8-retro) |
 | **Daily review reps** | One AI-free PR review a day, with a streak. Then compare your findings with the agent's and grade yourself. | [Dashboard](../architecture/dashboard.md#daily-review-reps) |
-| **1:1 and appraisal** | A 1:1 prep template, and a self-appraisal hub that collects dated evidence through the year. | [Appraisal](appraisal.md) |
+| **1:1 and appraisal** | The optional Career plugin adds a 1:1 prep template and a self-appraisal hub that collects dated evidence through the year. | [Appraisal](appraisal.md) |
 
 ![The command palette jumping to a note, then full-text search](../assets/demos/command-palette.gif)
 
@@ -261,15 +255,14 @@ The bits that didn't get their own section but earn their keep.
 | --- | --- | --- |
 | **Agent race** | Send one task to two to four assistants, each in its own worktree, then compare the diffs and write up a verdict. | [MCP server](../architecture/mcp-server.md) |
 | **Pipeline investigate** | A CI glance on every PR row. *Investigate pipeline* tells a flake from a real failure, reproduces it, and fixes it on a branch. It only pushes when you confirm. | [Pipeline investigate](pipeline-investigate.md) |
-| **Datadog** | On-call roster, an alert strip on Today, and an *Investigate* button that starts an agent. New alerts can become draft tasks. | [Datadog](../integrations/datadog.md) |
+| **Datadog** | On-call roster, a global alert bar while on call, and an *Investigate* button that starts an agent. New alerts can become draft tasks. | [Datadog](../integrations/datadog.md) |
 | **Scheduled jobs** | Run a script or an agent prompt on a cron. Catches up after sleep and can wake the Mac. | [Scheduled jobs](scheduled-jobs.md) |
-| **Slack** | Needs you, agent progress (including ready-for-review) and DevHub tools from one allowlisted channel. No public URL. Team Slack is a shared gateway. | [Slack](integrations.md) · [Team Slack gateway](../slack-gateway.md) |
 | **MCP history** | A redacted trace of calls through DevHub's MCP server, with a per-day summary. History reads are excluded. | [MCP server](../architecture/mcp-server.md#trace-what-agents-did) |
 | **Specialist agents and skills** | A CI investigator, a reviewer that hunts over-engineering, a second-opinion skill, and fixers for merge conflicts and git hooks. | [Shared agents](agents.md) · [Skills](skills.md) |
 | **Project graveyard** | What did you abandon, and why? | [Vendored skills](vendored-skills.md) |
 | **Scope-creep detector** | Run before a PR to see what grew beyond the ticket. | [Vendored skills](vendored-skills.md) |
 | **Commit archaeologist** | Why does this code exist? Rebuilt from local git history. | [Vendored skills](vendored-skills.md) |
-| **Fresh agent CLIs** | DevHub updates the supported agent CLIs daily, once no chat is running. | [Agents (Paseo)](paseo-agents.md#updates) |
+| **Fresh agent CLIs** | DevHub updates the supported agent CLIs daily. | [Agents (Paseo)](paseo-agents.md#updates) |
 
 **Repos and git**
 
@@ -284,7 +277,7 @@ The bits that didn't get their own section but earn their keep.
 
 | | What it does | Docs |
 | --- | --- | --- |
-| **Desktop app** | A native Tauri shell for macOS and Linux, and for Windows through WSL2. On macOS and Windows a menu-bar or tray icon keeps scheduled jobs running with the window closed; Linux has no tray, so closing the window quits DevHub. There's a recovery guide for when it won't start. | [Desktop app](../getting-started/desktop-app.md) · [Recovery](desktop-recovery.md) |
+| **Desktop app** | A native Tauri shell for macOS and Linux, and for Windows through WSL2. A menu-bar or tray icon keeps scheduled jobs running with the window closed. There's a recovery guide for when it won't start. | [Desktop app](../getting-started/desktop-app.md) · [Recovery](desktop-recovery.md) |
 | **One-shot ship** | `repo_ship` commits local work, reconciles public-core changes, pushes your private mirror, ports a leak-scanned patch to public, and pushes your plugins. It previews unless you confirm; a confirmed public push goes straight to `main`, without a PR. | [Fork workflow](../contributing/fork-workflow.md) |
 | **Safer installs** | The full bootstrap requires Aikido Safe-Chain, and secrets can come from 1Password instead of `.env` files. | [Installation](../getting-started/installation.md) |
 | **Calm motion** | Shimmer for content that's arriving, a spinner only for something you just clicked, and one switch (⌘P, *Toggle animations*) that turns it all off. | [Motion](../contributing/motion.md) |
@@ -307,7 +300,7 @@ The three vendored-skill demos below are terminal recordings against a synthetic
 | `agents/`       | Shared subagents                                     | [Agents](agents.md)                         |
 | `mcp/`          | Which MCP servers each tool gets                     | [MCP server](../architecture/mcp-server.md)           |
 | `notes/`        | Notes and learnings, the shared memory               | [Memory](../architecture/memory.md)                   |
-| `dashboard/`    | The local Next.js dashboard                          | [Dashboard](../architecture/dashboard.md)             |
+| `apps/ui/`    | The local Vite dashboard                          | [Dashboard](../architecture/dashboard.md)             |
 
 Edit any of those, sync, and every tool gets the change, from the dashboard or from the CLI:
 

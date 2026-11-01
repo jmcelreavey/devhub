@@ -22,25 +22,27 @@ This file does **not** inline L0/L1 — Cursor already has them via `~/.cursor/r
 
 | Service | Command | Port | Notes |
 |---------|---------|------|-------|
-| Next.js Dashboard | `npm run dev` (repo root) | 1337 default | File-based storage, no DB. **If packaged DevHub.app holds 1337 (`next start`), checkout changes won't appear there. Use a free port and `DEVHUB_DIST_DIR` to test them.** |
+| Core + Vite dashboard | `npm run dev` (repo root) | 1437 checkout; 1337 shell-supervised | File-based storage; SQLite holds agent runs. Packaged DevHub.app also uses 1337; existing `PORT` overrides take precedence. |
 | Agents (Paseo) | Separate launchd/systemd user daemon (`npm run agents:install`) | 6767 | Backs `/agents`; managed separately, with setup/restart controls in Agents → Connection |
-| Terminal peer | Started by `npm run dev` | 1339 | Docked PTY; localhost only |
+| Terminal peer | Started by `npm run dev` | 1439 checkout; 1339 shell-supervised | Docked PTY; localhost only. Existing `TERMINAL_PORT` overrides take precedence. |
 
 ### Running the app
 
-- `npm run dev` from the repo root starts the dashboard (and attempts companions). The `predev` health check auto-creates `dashboard/.env.local` if missing.
-- Core env vars (`NOTES_DIR`, `REPO_ROOT`, `PORT`) are auto-configured by `postinstall`.
+- `npm run dev` from the repo root starts the dashboard (and attempts companions). The `predev` health check auto-creates `apps/ui/.env.local` if missing.
+- Core paths (`NOTES_DIR`, `REPO_ROOT`) are auto-configured by `postinstall`; `PORT` can override the checkout default.
 - Optional integrations (Google Calendar, Jira, Datadog) are configured via the `/setup` page; they are not required for the app to function.
-- Optional **notes in-editor AI** uses `AI_API_KEY` (any OpenAI-compatible provider; `AI_BASE_URL`/`AI_MODEL` default to z.ai) in `dashboard/.env.local` (see `dashboard/.env.example`); not configured via `/setup`.
-- `/chamber` and `/opencode` redirect to `/agents`. Without Paseo, Agents shows a connection error and the rest of the dashboard still works. OpenCode is only lazy-started (ephemeral port) for session recap.
+- Optional **notes in-editor AI** uses `AI_API_KEY` (any OpenAI-compatible provider; `AI_BASE_URL`/`AI_MODEL` default to z.ai) in `apps/ui/.env.local` (see `apps/ui/.env.example`); not configured via `/setup`.
+- Without Paseo, Agents shows a connection error and the rest of the dashboard still works. OpenCode is only lazy-started (ephemeral port) for session recap.
 
 ### Lint / Typecheck / Test
+
+- **Tests are deliberately few.** Read `docs/contributing/testing.md` before adding one: only data loss, security boundaries, awkward parsers and shipped regressions get tests. No component render, copy or CSS tests. Delete a test that pins implementation detail rather than updating it.
 
 All from the repo root:
 - `npm run lint` — ESLint
 - `npm run typecheck` — TypeScript (`tsc --noEmit`)
 - `npm run test` — Vitest (dashboard unit tests)
-- `npm run verify` — checks MCP types, runs dashboard lint/typecheck/tests in parallel, then checks vendored skills and builds
+- `npm run verify` — runs tests; CI separately runs lint, typecheck and the production build
 
 ### UI / UX Review
 
@@ -54,18 +56,10 @@ All from the repo root:
 
 ### Plugin Architecture — CRITICAL FOR EDITING
 
-DevHub uses a **tier-2 plugin system**. Private modules (team operations, automation scripts, etc.) live in **separate plugin repos**, not in this repo. On `npm run dev`, the `predev` → `sync_plugins` step **materializes** plugin files into the core dashboard tree via `fs.cpSync`.
-
-**This means:**
-- Files like `dashboard/lib/team-ops.ts`, `dashboard/components/TeamScriptsCard.tsx`, `dashboard/app/api/team-tools/**` are **copies** — they get overwritten on every server restart.
-- **Always edit the plugin source**, never the materialized copy. The materializer will silently destroy your changes.
-- Plugin registry: `~/.config/devhub/plugins.json` — lists plugin name + path.
-- Plugin `team-tools` source: `~/Developer/team-tools/dashboard/` — edit files there.
-- New files that don't exist in the plugin should be created in the plugin repo, not in core.
-- Core-owned tracked files are protected unless the plugin manifest explicitly lists a tracked overlay. Check those overlays too; their materialised copies must not be edited.
-- After editing plugin source, restart the dev server (or the materializer will re-copy on next `predev`).
-
-**Quick check:** Before editing any `dashboard/` file, run `git ls-files -- <path>`. If it returns empty, the file is plugin-owned — edit the plugin repo instead.
+Private modules live in separate plugin repos. Runtime plugins are loaded from the
+reviewed plugin registry; dev, build and start do not materialise dashboard files.
+Edit plugin source in its own repo. Before editing `apps/ui/`, check that the file
+is tracked and is not a plugin overlay. See `docs/architecture/plugins.md`.
 
 ### Gotchas
 
@@ -83,7 +77,6 @@ DevHub uses a **tier-2 plugin system**. Private modules (team operations, automa
 - **Cloud VMs without sudo:** install Safe-Chain to a user prefix and put it on `PATH` before `npm install`: `npm install -g @aikidosec/safe-chain@1.1.10 --prefix "$HOME/.npm-global"` then `export PATH="$HOME/.npm-global/bin:$PATH"`. The VM update script does this automatically.
 - **Tasks vs notes paths:** daily tasks live under repo-root `tasks/YYYY-MM-DD.json` (not under `notes/`). Notes vault files are under `notes/`.
 - The 1Password CLI integration (`op`) is optional and logs warnings if absent — not a real error.
-- Git hooks are in `.githooks/` (configured via `core.hooksPath`); `pre-push` runs `npm run verify`.
-- **`npm run dev` uses webpack**, not Turbopack — required so `../shared/` vault imports resolve without widening Turbopack's project root (which watches the whole repo and can exhaust RAM).
-- **Cold start:** first request after `npm run dev` can take ~30s while webpack compiles; subsequent navigations are fast.
-- **Protect the packaged app's port.** When DevHub.app holds 1337 (`cwd` under `/Applications/DevHub.app/Contents/Resources/server`), checkout edits are invisible there. Verify UI on a free port with `DEVHUB_DIST_DIR` set (see `devhub-dashboard-verify`). Do not stop the packaged app unless asked.
+- Git hooks are in `.githooks/` (configured via `core.hooksPath`); `pre-push` runs `npm run prepush` checks.
+- **`npm run dev` supervises core, Vite and the terminal.** The checkout uses ports 1437, 1439 and 1440; scheduled jobs are opt-in.
+- **Protect the packaged app's port.** When DevHub.app holds 1337 (`cwd` under `/Applications/DevHub.app/Contents/Resources/server`), checkout edits are invisible there. Verify UI on a free checkout port (see `devhub-dashboard-verify`). Do not stop the packaged app unless asked.

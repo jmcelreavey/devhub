@@ -1,0 +1,44 @@
+{
+  "name": "@devhub/core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./events/*": "./src/domains/events/*.ts",
+    "./tasks/*": "./src/domains/tasks/*.ts",
+    "./storage/*": "./src/domains/storage/*.ts",
+    "./scheduler/*": "./src/domains/scheduler/*.ts",
+    "./calendar/*": "./src/domains/calendar/*.ts",
+    "./lib/*": "./src/lib/*.ts",
+    "./local/terminal/*": "./src/local/terminal/*.ts",
+    "./local/*": "./src/local/*.ts",
+    "./http/*": "./src/http/*.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.1",
+    "@types/pg": "^8.20.0",
+    "@types/ws": "^8.18.1",
+    "playwright": "^1.58.2",
+    "typescript": "^5",
+    "vitest": "^4.1.5"
+  },
+  "dependencies": {
+    "@ai-sdk/openai": "^3.0.104",
+    "@ai-sdk/openai-compatible": "^2.0.47",
+    "@ai-sdk/provider": "^3.0.0",
+    "@blocknote/xl-ai": "^0.50.0",
+    "@devhub/qa": "0.1.5",
+    "@devhub/shared-actions": "file:../../packages/shared",
+    "@getpaseo/client": "0.10.1",
+    "adm-zip": "0.6.0",
+    "ai": "^6.0.190",
+    "cron-parser": "^5.5.0",
+    "googleapis": "^171.4.0",
+    "mongodb": "^6.21.0",
+    "node-pty": "^1.2.0-beta.12",
+    "pg": "^8.21.0",
+    "tsx": "^4.22.3",
+    "ws": "^8.21.0",
+    "zod": "4.4.3"
+  }
+}

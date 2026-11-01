@@ -21,13 +21,13 @@ if [[ -d "$REPO_ROOT/.githooks" ]] && command -v git &>/dev/null; then
 fi
 
 # --- 2. Install dashboard dependencies ---
-DASHBOARD_DIR="$REPO_ROOT/dashboard"
+DASHBOARD_DIR="$REPO_ROOT/apps/ui"
 if ! command -v npm &>/dev/null; then
     warn "npm not found — install Node.js 22 (>=22.14) and npm 10, then run nvm use before continuing."
     exit 1
 fi
 if [[ ! -f "$DASHBOARD_DIR/package.json" ]]; then
-    warn "dashboard/package.json missing — bad checkout?"
+    warn "apps/ui/package.json missing — bad checkout?"
     exit 1
 fi
 
@@ -40,18 +40,17 @@ if ! command -v safe-chain &>/dev/null; then
     exit 1
 fi
 
-log "Installing dashboard dependencies..."
-npm ci --prefix "$DASHBOARD_DIR" --silent || {
-    warn "npm ci failed — falling back to npm install"
-    npm install --prefix "$DASHBOARD_DIR" --silent || {
-        warn "Dependency install failed — run manually: npm install (repo root) or cd dashboard && npm install"
-        exit 1
-    }
-}
+log "Installing workspace dependencies..."
+if [[ -f "$REPO_ROOT/package-lock.json" ]]; then
+    npm ci --prefix "$REPO_ROOT" --silent
+else
+    warn "Root package-lock.json missing — run npm install at the repo root."
+    exit 1
+fi
 
 # --- 3. Everything else: sync, MCP, notes-server, build, validate (TypeScript) ---
 log "Running bootstrap (TypeScript)..."
-(cd "$DASHBOARD_DIR" && npx --no-install tsx scripts/bootstrap-install.ts) || {
+(cd "$DASHBOARD_DIR" && npx --no-install tsx ../core/src/scripts/bootstrap-install.ts) || {
     warn "Bootstrap failed — see output above. Fix the error and re-run bash scripts/install.sh."
     exit 1
 }
@@ -60,12 +59,12 @@ echo ""
 echo "=== Installation Complete ==="
 echo ""
 echo "Dashboard:"
-echo "  Dev (hot reload): npm run dev   (repo root) or cd dashboard && npm run dev"
-echo "  Production:       npm run start (repo root) or cd dashboard && npm run start"
-echo "  Open:             http://localhost:1337"
+echo "  Dev (hot reload): npm run dev   (repo root) or cd apps/ui && npm run dev"
+echo "  Production:       npm run start (repo root) or cd apps/ui && npm run start"
+echo "  Open:             use the local URL printed by the server"
 echo ""
 echo "Next steps:"
-echo "  1. Open http://localhost:1337/setup to configure optional integrations"
+echo "  1. Open /setup on that URL to configure optional integrations"
 echo "  2. Start an AI session and verify skills are loaded"
 echo "  3. Use 'devhub-recap' after your first significant task if you want a session note"
 echo "  4. Run 'optimize' skill weekly to self-improve based on learnings"

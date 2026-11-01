@@ -1,6 +1,6 @@
 ---
 title: Dashboard
-description: "The Next.js app you use day to day: routes, data loading, storage boundaries, and where features hook in."
+description: "The dashboard UI and core server: routes, storage boundaries, and where features hook in."
 order: 2
 icon: LayoutDashboard
 tags: [architecture, dashboard]
@@ -13,14 +13,28 @@ related:
 
 # Dashboard Architecture
 
-The dashboard is the main DevHub interface. It is a local Next.js app with pages for tasks, notes, skills, actions, status, and setup.
+The dashboard is the main DevHub interface, with pages for tasks, notes, skills, actions, status, and setup.
+
+The React UI and existing route adapters live in `apps/ui`; server domains and the core HTTP server live in `apps/core/src`, with shared contracts and filesystem modules in `packages/shared`. The desktop shell is in `apps/desktop` and the MCP server is in `packages/mcp`. Content roots such as `notes/` and `tasks/` have not moved.
+
+The core/Vite checkout is still opt-in: `DEVHUB_CORE_SERVER=1 npm run dev` supervises Vite, core and the terminal. Vite listens on 1437 and proxies `/api` to a loopback core listener; the terminal uses 1439. The core server can serve built UI assets from `apps/ui/dist` on the same origin, after its API routes. See `apps/core/src/http/BLOCKED.md` for routes that still return 501.
+
+For a staged core, set `DEVHUB_CORE_SERVER=1`, `DEVHUB_RESOURCE_ROOT` to the read-only resource directory and `DEVHUB_APP_DATA` to a writable directory outside it. The Vite output defaults to `ui/dist` under the resource root; set `DEVHUB_UI_DIST` to use a different location. A checkout defaults both roots to the checkout and serves `apps/ui/dist`. The server only binds to loopback. Route ownership is generated with `scripts/gen-core-routes.mjs`, so startup does not need Git or source files.
+
+The default `npm run dev`, `npm run build` and desktop staging still use Next. The core/Vite production cutover and desktop candidate are not complete; `DEVHUB_DESKTOP_VITE_CANDIDATE=1` is rejected by staging. Do not treat a Next build or a browser WebKit run as proof of the new desktop layout.
+
+## Build and target checks
+
+From the repo root, `npm run build` currently builds the Next UI. `npm run desktop:build` stages that server and builds the native bundle; `npm run desktop:verify` checks the staged resources, and `npm run desktop:selftest` checks startup, authentication and a file round-trip. The WSL payload and Linux builder use the same desktop staging pipeline under `apps/desktop/scripts/`.
+
+The final core/Vite build must stage core with the UI assets, preserve the `server.js` sidecar entry and health handshake, and pass the self-test against that staged layout. Until that pipeline and the core routes are ready, target results for it are unverified. The disposable-clone procedures and results template are in [Desktop target checks](../../scripts/targets/README.md).
 
 ## What The Dashboard Provides
 
 | Area         | Purpose                                                                                                     |
 | ------------ | ----------------------------------------------------------------------------------------------------------- |
-| Today        | Daily workspace with tasks, notes, calendar, tickets, PRs, standup tools, and a morning briefing widget     |
-| Briefing     | Full-page personal start-of-day digest (weather, news, events, research, and more). Linked from Today and ⌘P |
+| Work | Home screen for tasks, Jira and history |
+| Notifications | Updates needing attention, unread count and a global urgent alert bar |
 | Notes        | BlockNote editing, file tree, folder-scoped master checklists, optional OpenAI-compatible in-editor AI      |
 | Docs         | Read-first docs site with article view, TOC, backlinks, search, Mermaid, and BlockNote edit mode            |
 | Tasks        | Daily task management, drag reorder for open items, weekly review, and history                              |
@@ -28,23 +42,16 @@ The dashboard is the main DevHub interface. It is a local Next.js app with pages
 | Actions      | Safe script runner for maintenance tasks                                                                    |
 | Settings     | Health checks for repo, services, MCP, sync health, merge conflicts, and network access (`/status`)         |
 | Agents       | Paseo workspace: chats, usage, connection (`/agents`)                                                       |
-| Setup        | Environment and integration configuration (Calendar, Jira, Datadog, GitHub, Slack). There is no separate Integrations or Browser screen. |
+| Setup        | Environment and integration configuration                                                                   |
 | Repos        | Sibling git checkout discovery, per-repo **work hub**, GitHub clone/search, Cursor/GitKraken/CLI launch, compose-up, Repo Learning, and owned-repo radar (`?view=owned`) |
 | Databases    | In-app client for PostgreSQL, MongoDB, and SQLite (`/db`) — see [Database client](database-client.md)       |
-| Editor       | Selection chat beside a diff, plus optional in-app code-server (`/editor`). See [Editor](../guides/editor.md) |
-| Workflows    | Durable checks, reviews and publication proposals (`/workflow`). See [Task checks](../guides/task-checks-and-reviews.md) |
+| Integrations | Calendar, Jira, Datadog, GitHub and Slack |
+| Editor       | Selection chat beside a diff, plus Cursor/VS Code pairing (`/editor`). See [Editor](../guides/editor.md) |
+| Workflows    | Durable checks, reviews and publication proposals (Storyboard task panel → Evidence). See [Task checks](../guides/task-checks-and-reviews.md) |
 
 ## Walkthroughs
 
-Recorded against disposable demo data with `npm run demos:walkthroughs` — see [Recording demos](../contributing/recording-demos.md).
-
-### Today workspace
-
-[Today: tasks, plans and progress](../assets/demos/today.mp4)
-
-When allowlisted script runs failed since your last visit, Today shows a dismissible **While you were away** banner (`WhileYouWereAway` → `GET /api/since?ts=<epoch-ms>`). The client stores the last-visit timestamp in `localStorage` (`devhub:last-visit`) and stamps it on unmount so opening the page does not immediately mark failures as seen. Successes are counted in the payload but do not surface a banner — only failures earn the alert. Default lookback is 12 hours when no prior visit is recorded.
-
-Finished agent/PR worktrees get a **non-dismissible** one-line count (`WorktreeCleanupNudge` → `GET /api/repos/worktree-cleanup`) linking to `/prs?tab=cleanup`. It disappears when those folders are gone. See [GitHub — Finished worktrees](../integrations/github.md#finished-worktrees).
+Recorded against disposable demo data.
 
 ### Tasks, history and weekly review
 
@@ -66,15 +73,15 @@ Notes, search and the command palette have their own clips in [Notes system](not
 
 ## Navigation
 
-The sidebar is driven by `dashboard/lib/nav.ts` — **12** core sidebar destinations in `NAV_ITEMS` (plugin items such as Ops merge in separately, making 13), grouped into **Workspace**, **Library**, **Tools** (the `infra` group id), and **System**. Integration-gated items stay hidden until `GET /api/setup/status` reports the matching flag. Plugin destinations (e.g. Ops) merge in via `groupSidebarNav`.
+The sidebar is driven by `apps/ui/lib/nav.ts` — **12** core sidebar destinations in `NAV_ITEMS` (plugin items such as Ops merge in separately, making 13), grouped into **Workspace**, **Library**, **Tools** (the `infra` group id), and **System**. Integration-gated items stay hidden until `GET /api/setup/status` reports the matching flag. Plugin destinations (e.g. Ops) merge in via `groupSidebarNav`.
 
-Two names changed in the October 2026 clean-up and their URLs did not: **Work** is now **Tasks** (`/work`) and **System** is now **Settings** (`/status`). Briefing, QA, Review and Skills left the sidebar but keep their URLs: they are linked from Today, Tasks → History and Settings, and ⌘P still finds them by their old names (`keywords` in `nav.ts`).
+**Work** (`/work`) is the home screen. **Notifications** replaces Today in the sidebar, and command-palette searches for Today still find it. QA, Review and Skills keep their existing destinations.
 
-Coding chats live on **Agents** (`/agents`). `/chamber` and `/opencode` redirect there; `/agent-activity` redirects to `/agents`. There are no sidebar rows that open a Claude / Cursor / ChatGPT / Antigravity terminal tab.
+Coding chats live on **Agents** (`/agents`). There are no sidebar rows that open a Claude / Cursor / ChatGPT / Antigravity terminal tab.
 
 | Sidebar    | Route       | Notes                                                                                         |
 | ---------- | ----------- | --------------------------------------------------------------------------------------------- |
-| Today      | `/`         | Daily hub. Quiet **Briefing** link beside Yesterday in the header                             |
+| Notifications | `/notifications` | Bell badge shows unread items; urgent items also appear in the global bar |
 | Storyboard | `/storyboard` | Tasks followed through their notes and agent runs                                           |
 | Tasks      | `/work`     | Tasks + Jira + History tabs (see below). The URL predates the name; ⌘P still finds it as "Work" |
 | PRs        | `/prs`      | Gated on `github`. Tabs: Mine / Review requested / Recently reviewed / Skipped / Worktrees (`?tab=cleanup`) |
@@ -95,7 +102,7 @@ Coding chats live on **Agents** (`/agents`). `/chamber` and `/opencode` redirect
 | Tab     | Content                          | API                                              |
 | ------- | -------------------------------- | ------------------------------------------------ |
 | Tasks   | Today's open queue               | `/api/tasks`                                     |
-| Jira    | Ticket list (same as `/tickets`) | Jira routes; tab hidden until Jira is configured |
+| Jira    | Ticket list | Jira routes; tab hidden until Jira is configured |
 | History | Per-day task summaries           | `GET /api/tasks/history?includeTasks=1`          |
 
 All three tabs share the same borderless `InlineSearch` row. **Tasks** filters on
@@ -104,7 +111,7 @@ body text, Jira key, due date, abandon reason, and linked-entity labels/ids.
 **History** uses the same control for day summaries and links to the **Weekly
 review** (`/review`). Whitespace-separated terms are AND-ed on every tab.
 
-**Library** and **Settings** use `SectionTabs` in the top bar on sibling routes such as `/docs` and `/setup`. Library tabs are **Notes**, **Docs**, **Diagrams**, **Live links** (gated on GitHub), and **Radar**. Search and Databases have sidebar destinations. Appraisal, Research, My Voice and Conventions remain reachable through **⌘P**.
+**Library** and **Settings** use `SectionTabs` in the top bar on sibling routes such as `/docs` and `/setup`. Library tabs are **Notes**, **Docs**, **Diagrams**, **Live links** (gated on GitHub), and **Radar**. Search and Databases have sidebar destinations. Research, My Voice and Conventions remain reachable through **⌘P**. The optional Career plugin adds Appraisal and 1:1 to the palette when enabled.
 
 Settings tabs are **Status**, **Logs** (desktop), **Actions** (desktop), **Plugins** and **Setup**. Agent skills and the QA lab are links under the Settings title rather than tabs, because the top-bar strip is already as wide as the bar allows. **Tools** is a sidebar group (id `infra`): Ops comes from the infrastructure plugin, Datadog and Databases from core.
 
@@ -128,9 +135,11 @@ After an update, a once-per-version **What's new** panel reads `GET /api/release
 
 ### Legacy routes
 
-Older URLs still work and remain reachable via **⌘P** (`LEGACY_NAV_ITEMS` in `nav.ts`): `/briefing`, `/review` (**Weekly review**), `/review/rep` (**Daily rep**), `/qa` (**QA lab**), `/skills` (**Agent skills**), `/own`, `/appraisal`, `/one-on-one`, `/recall`, `/radar`, `/research`, `/learnings`, `/voice`, `/conventions`, `/diagrams`, `/docs`, `/shared`, `/actions`, `/logs`, `/setup`. A page that lost its row names the row it lives under (`parent` in `nav.ts`), so the sidebar still shows where you are: `/briefing` lights Today, `/review` lights Tasks, `/qa` and `/skills` light Settings. The tab title, workspace tab and ⌘P entry for every page come from the same registry. Library tabs cover `/radar`, `/diagrams`, `/docs`, and `/shared`; the other Library tools stay in the palette. `/own` redirects to `/repos?view=owned`. `/tasks` and `/tickets` redirect to `/work` and are not in `ALL_NAV_DESTINATIONS`. `/ops` (plugin), `/datadog` and `/db` live under the **Tools** sidebar group. `/chamber` and `/opencode` redirect to `/agents`; `/agent-activity` redirects to `/agents`.
+Older URLs still work and remain reachable via **⌘P** (`LEGACY_NAV_ITEMS` in `nav.ts`): `/review` (**Weekly review**), `/review/rep` (**Daily rep**), `/qa` (**QA lab**), `/skills` (**Agent skills**), `/recall`, `/radar`, `/learnings`, `/voice`, `/conventions`, `/diagrams`, `/docs`, `/shared`, `/actions`, `/logs`, `/setup`. A page that lost its row names the row it lives under (`parent` in `nav.ts`), so the sidebar still shows where you are: `/review` lights Tasks, `/qa` and `/skills` light Settings. The tab title, workspace tab and ⌘P entry for every page come from the same registry. Library tabs cover `/radar`, `/diagrams`, `/docs`, and `/shared`; the other Library tools stay in the palette. Owned repos live at `/repos?view=owned`; tasks and Jira at `/work`. `/ops` (plugin), `/datadog` and `/db` live under the **Tools** sidebar group.
 
-On mobile, the bottom shelf is Today, Notes and **Tasks** (`/work`), and it highlights the same row the sidebar would.
+Career exposes `/appraisal`, `/one-on-one` and `/api/appraisal/*` through reviewed runtime aliases and navigation.
+
+Mobile navigation uses the same Notifications badge as the desktop sidebar.
 
 ### Repo-aware links
 
@@ -185,7 +194,7 @@ This keeps the app understandable and makes most features independent.
 
 ## Tasks
 
-A task is one file under `tasks/items/` (or `tasks/<profile>/items/`). It stays visible from `startDate` through `endDate`, or through today while it is open. [Task profiles](../guides/task-profiles.md) select the directory. The model, import, and two-machine update order are in [Tasks](tasks.md). **Today** and **Tasks** read and mutate items through `/api/tasks`.
+A task is one file under `tasks/items/` (or `tasks/<profile>/items/`). It stays visible from `startDate` through `endDate`, or through today while it is open. [Task profiles](../guides/task-profiles.md) select the directory. The model, import, and two-machine update order are in [Tasks](tasks.md). **Work** reads and mutates items through `/api/tasks`.
 
 | Behavior | Detail |
 | -------- | ------ |
@@ -213,7 +222,7 @@ When Jira is configured, the task menu offers **Generate Jira ticket…** and **
 
 ### Implement with agent
 
-Task overflow **Implement with Agent…** (Today, Work, and the repo hub) opens the Agents handoff sheet and starts a Paseo agent with the `devhub-implement-task` skill. It does not start until you pick an assistant.
+Task overflow **Implement with Agent…** (Work and the repo hub) opens the Agents handoff sheet and starts a Paseo agent with the `devhub-implement-task` skill. It does not start until you pick an assistant.
 
 The agent curls `GET /api/tasks/implement/plan?taskId=&date=` first — tags, linked notes/repos, Jira ticket, and a depth-2 entity graph. Repo choice comes from the **task's own** `kind: "repo"` links (a back-link from another repo must not steal the checkout). Hub rows pass the hub's `cwd` so the agent stays in that tree.
 
@@ -266,7 +275,7 @@ On `/prs`, if today's unfinished rep is a review-requested PR, that row's **Revi
 
 ## Agent CLI
 
-In-app generation uses the CLI or HTTP provider selected under **/setup → AI Provider**. The resolver lives in `dashboard/lib/ai/preference.ts`; the settings API is `GET/PUT /api/agent-cli`.
+In-app generation uses the CLI or HTTP provider selected under **/setup → AI Provider**. The resolver lives in `apps/ui/lib/ai/preference.ts`; the settings API is `GET/PUT /api/agent-cli`.
 
 Coding work — implementation, PR review, schedules and MCP `agent_dispatch` — goes through **Paseo** (`POST /api/agent/runs`). `launchAgentJob` opens the Agents handoff sheet for those jobs; ordinary terminal commands use the propose chip.
 
@@ -274,7 +283,7 @@ See [Terminal and agent CLI — Agent CLI selection](../guides/terminal-and-agen
 
 ## Pull Request Reviews
 
-**PRs** (`/prs`, gated on `github`) and the Today GitHub panel read `GET /api/github/prs` — authored PRs, review-requested PRs, and recently reviewed PRs (archived repos filtered from active queues; up to 100 rows per active bucket). Tabs: **Mine**, **Review requested**, **Recently reviewed**, **Skipped**, and **Worktrees** (`?tab=cleanup`). The screen search box filters those buckets client-side or pins a pasted PR URL; unmatched phrases fall back to `GET /api/github/prs/search` (**Elsewhere on GitHub**). See [GitHub — Search and pin](../integrations/github.md#search-and-pin) and [Finished worktrees](../integrations/github.md#finished-worktrees).
+**PRs** (`/prs`, gated on `github`) reads `GET /api/github/prs` — authored PRs, review-requested PRs, and recently reviewed PRs (archived repos filtered from active queues; up to 100 rows per active bucket). Tabs: **Mine**, **Review requested**, **Recently reviewed**, **Skipped**, and **Worktrees** (`?tab=cleanup`). The screen search box filters those buckets client-side or pins a pasted PR URL; unmatched phrases fall back to `GET /api/github/prs/search` (**Elsewhere on GitHub**). See [GitHub — Search and pin](../integrations/github.md#search-and-pin) and [Finished worktrees](../integrations/github.md#finished-worktrees).
 
 The **Review with agent** row action does **not** call a GitHub review API. It opens the Agents handoff sheet (`launchAgentJob` → `openAgentHandoff` → `POST /api/agent/runs`) and starts a Paseo agent with the `pr-explain-review` skill. The skill pulls conversation, inline review threads, and the linked Jira/GitHub ticket, then saves a note at `pr-reviews/<owner-repo-slug>-<pr-number>` via notes MCP. The **Notes** link polls `GET /api/notes/pr-reviews/<slug>` every few seconds until the note exists. There is no dashboard **Request review** action.
 
@@ -284,12 +293,12 @@ PR review notes include a `## Links` EntityRef back to the PR (same contract as 
 
 ## Cross-entity linking
 
-Tasks, calendar events, PRs, and notes share hop-around links through the `EntityRef` contract (`shared/entity-note/`). UI entry points:
+Tasks, calendar events, PRs, and notes share hop-around links through the `EntityRef` contract (`packages/shared/entity-note/`). UI entry points:
 
 | Area                          | Actions                                                                                                                                                |
 | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | **Work → Tasks**              | **Note** opens or creates `task-notes/…`; **Link** opens searchable pickers for PR/calendar/note/repo/Jira/task refs; type `@` in the composer to search the same lists and attach a chip (calendar events are left out of `@`); overflow holds secondary actions |
-| **Calendar** / Today briefing | Meeting **Note** button; link chips on events                                                                                                          |
+| **Calendar** | Meeting **Note** button; link chips on events                                                                                                          |
 | **PRs**                       | Review note action; link chips on PR rows                                                                                                              |
 | **Notes** editor              | Relations panel; **Open with** / **Apply Cursor changes** when the note links a local repo (persistent Markdown working copies)                         |
 
@@ -302,14 +311,14 @@ Stable path conventions, `## Links` format, API, and MCP tools: [Notes System �
 | Surface         | Route / tool                                                                                                                      | Behavior                                                                                                                                                                |
 | --------------- | --------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Capability scan | `GET /api/capability/radar`, MCP `capability_radar`                                                                               | Latest snapshot, diff (added/spread/removed/drift), knowledge-drift rows. **Seen** / **Undo** on drift rows uses the same watermark store as Release Radar — rows hide at or below the acknowledged magnitude and resurface when they spread further. |
-| Personal strip  | `GET /api/radar/personal`                                                                                                         | Parses `notes/radar/personal-radar.md` into adopt / trial / assess / hold items; when any owned repo needs attention, also lists **Owned repositories** rows (`ownedRepoAttention`) linking into `/own` |
+| Personal strip  | `GET /api/radar/personal`                                                                                                         | Parses `notes/radar/personal-radar.md` into adopt / trial / assess / hold items; when any owned repo needs attention, also lists **Owned repositories** rows (`ownedRepoAttention`) linking into `/own/<owner>/<name>` |
 | Scan action     | `POST /api/capability/scan`, MCP `capability_scan`                                                                                | Full scan; writes dated snapshot under `notes/.cache/capability/`                                                                                                       |
 | Weekly digest   | `POST /api/capability/digest`, job `capability_digest`                                                                            | Generate or return digest markdown                                                                                                                                      |
 | Build lab       | Agent CLI + `capability-lab` skill (`GET /api/capability/journey/plan` → terminal handoff → `POST /api/capability/journey/adopt`) | Generation runs in the terminal; `POST /api/capability/journey` and MCP `capability_get_lab` only **fetch** an existing lab. Notes land under `notes/learnings/labs/…`. |
 
 ### Personal radar file
 
-The top strip on `/radar` is **not** generated by the capability scan. Edit `notes/radar/personal-radar.md` (or follow the in-app link) using four `##` headings — **Adopt**, **Trial**, **Assess**, **Hold** — with bullet items under each. The parser is case-insensitive on headings and accepts `-` or `*` bullets. An empty or missing file shows the empty-state prompt unless owned-repo attention rows are present — then the **Owned repositories** strip still renders. Today may deep-link here when knowledge drift is detected and the file exists.
+The top strip on `/radar` is **not** generated by the capability scan. Edit `notes/radar/personal-radar.md` (or follow the in-app link) using four `##` headings — **Adopt**, **Trial**, **Assess**, **Hold** — with bullet items under each. The parser is case-insensitive on headings and accepts `-` or `*` bullets. An empty or missing file shows the empty-state prompt unless owned-repo attention rows are present — then the **Owned repositories** strip still renders.
 
 See [Capability Radar plan](../archive/capability-radar-plan.md) for scan architecture and lab workflow.
 
@@ -334,62 +343,21 @@ The context pack (`GET /api/context-pack`) also calls `recall` internally when r
 
 ## Own (repo ownership)
 
-Ownership radar lives on **Repos** (`/repos?view=owned`, gated on GitHub). `/own` still works and **redirects** there; per-repo pages stay at `/own/<owner>/<name>`. Mark repos owned from a Repos card or the owned index; state lives in `.devhub/ownership/repos.json` (not hand-edited). Full workflow: [Repo ownership](../guides/repo-ownership.md).
+Ownership radar lives on **Repos** (`/repos?view=owned`, gated on GitHub). Per-repo pages stay at `/own/<owner>/<name>`. Mark repos owned from a Repos card or the owned index; state lives in `.devhub/ownership/repos.json` (not hand-edited). Full workflow: [Repo ownership](../guides/repo-ownership.md).
 
-## Morning Briefing
+## Notifications and the alert bar
 
-The morning briefing is a personal start-of-day digest, not a work standup. It appears as a widget on **Today** and as a full page at `/briefing`.
+Home (`/`) redirects to Work (`/work`). Notifications (`/notifications`) has a bell and unread count in the sidebar. `/today` and `/briefing` redirect there; recognised legacy queries and hashes on `/` and `/today` still map to their existing destinations first.
 
-| Surface       | Route                                 | Behavior                                                                                                                                                                                            |
-| ------------- | ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Today widget  | `GET /api/dashboard/morning-briefing` | Compact card in the Today grid (structured sections + rendered `text` summary). Weather uses a dedicated React hero (`DashboardBriefingWeather`) — separate from the AI canvas HTML on `/briefing`. |
-| Briefing page | `/briefing`                           | Full-page **AI-authored canvas** in a same-origin iframe (`GET /api/briefing/canvas`). Reshape via **Design** chat; refresh data without losing layout.                                             |
-| MCP           | `briefing_get`                        | Returns the same rendered text through the dashboard-backed MCP tool.                                                                                                                               |
+Notifications groups PR reviews and changes, failing CI, agent runs needing input or failing, Datadog alerts, plugin items and plugin trust issues by urgency. Read, Dismiss and Restore apply to the current item version: changed content can surface again. The **Only repos I own** setting keeps the existing `needsYouOwnedReposOnly` preference. Unknown ownership shows everything.
 
-### Canvas page (`/briefing`)
+The global alert bar sits above page content on every route and polls every 60 seconds. It shows the first undismissed urgent item, an Open link, Dismiss, and a link to the remaining items. Datadog is queried only when configured and confirmed on call. Meetings remain on Calendar and its nav badge; they are not notifications.
 
-The full briefing page is no longer a fixed React layout. Instead:
+Each source is best-effort and reports `ok`, `degraded` or `off`, so an unavailable integration is labelled rather than treated as an empty inbox. The feed is derived on read. Read and dismissal versions live per profile in `~/.config/devhub/notifications.json`, beside `ui-prefs.json`; writes prune entries unseen for 30 days and retain at most 500 per profile.
 
-1. **Data assembly** — `lib/briefing/assemble.ts` builds a `BriefingContext` from prefs, feeds, calendar, owned-repo attention (`ownedRepoAttention` — top repos by obligation/PR score from `loadOwnershipSummary()`), and optional AI enrichment. Cached once per calendar day under `notes/.cache/briefing/`; `?refresh=1` bypasses the cache.
-2. **Canvas document** — A complete HTML/CSS/JS page persisted in `notes/.config/briefing-canvas.json` (`lib/briefing-canvas.ts`). The default ships in-repo; AI edits stick until you redesign.
-3. **Iframe shell** — `app/briefing/client.tsx` embeds `/api/briefing/canvas?theme=…` so arbitrary canvas CSS cannot touch app chrome. The canvas runs same-origin and reads injected `window.__BRIEFING__` (and may call `/api/briefing/data`).
-4. **Design chat** — `POST /api/briefing/design` plans and applies layout edits through the configured CLI or HTTP AI provider. The response includes a deterministic status line (`✓ Done — the canvas has been redrawn…`) so it is obvious whether the iframe reloaded; prefs-only edits append **Preferences saved.** **Fresh look** requests (new visual identity — anime, neon, retro terminal, etc.) set `freshLook` and persist `customAesthetic: true` in `notes/.config/briefing-canvas.json`, which **replaces** the house palette rules in the generation prompt (not layered on top). The canvas regenerates from scratch instead of revising in place. Content-only tweaks (move/hide a section) keep the current document and house theme. Custom aesthetics stick across later edits until you ask to **reset**, which restores the shipped default canvas and clears `customAesthetic`. When `skills/shared/taste-skill` is installed, `lib/briefing-taste.ts` distills its anti-slop rules for the default (house) aesthetic; the skill itself targets landing pages, so only a compact subset is fed into briefing generation.
-5. **Share** — `GET/POST/DELETE /api/briefing/share` reads, publishes, or removes a secret gist snapshot of the rendered canvas.
-6. **Research** — Background digs on demand:
-   - **Interests** in briefing prefs trigger `runLast30DaysForInterests` during assembly (skips topics with a fresh file in the research dir unless `?refresh=1`).
-   - **Design chat** and `POST /api/briefing/tasks` queue one-off topics via `createResearchTask` — Last30Days when the script is installed, otherwise an AI-written brief when `AI_API_KEY` is set.
-   - Task state persists in `notes/.cache/briefing/tasks.json`; results land under `LAST30DAYS_MEMORY_DIR` (default `notes/research/`).
-   - **Research** (`/research`, reachable through **⌘P**) lists saved digests. **Re-scan** reloads the folder; start new digs from Briefing.
-7. **AI imagery** — When image generation is configured, the canvas can reference `GET /api/briefing/image?prompt=…&size=1536x1024` for same-origin PNG backgrounds and card art. Prompts are cached on disk per model/size; a 404 hides the image cleanly via `<img>` fallbacks.
+Enabled plugins contribute through `plugin-needs/<plugin>.json`. Items may set `severity` to `info` (the default), `action` or `urgent`. Only enabled, trusted runtimes without `needs_attention` can contribute urgent items to the bar, capped at three per plugin. Other urgent contributions become action items in Notifications. DevHub's own plugin-trust alerts are separate.
 
-Theme is bridged from the app shell (`lib/briefing-theme.ts`) so a dark-mode canvas does not sit on a light chrome (and vice versa).
-
-### Sections and preferences
-
-Preferences live in `notes/.config/briefing-prefs.json` and sync with the repo like other notes config. There is no dedicated prefs API — edit the JSON directly, or ask **Design** chat (`POST /api/briefing/design`) to patch fields (location, feeds, section toggles, interests). Prefs control **what data** the canvas receives, not the canvas layout itself.
-
-| Section             | Default | Source                                                             |
-| ------------------- | ------- | ------------------------------------------------------------------ |
-| Weather             | on      | Open-Meteo forecast for `location` (`name`, `lat`, `lon`) in prefs |
-| News                | on      | RSS feeds from prefs                                               |
-| Events              | on      | Local event search around `eventSearchAreas`                       |
-| Trending Repos      | on      | GitHub trending by `repoLanguages`                                 |
-| Hacker News         | on      | HN top stories                                                     |
-| Gaming              | off     | Gaming RSS feeds                                                   |
-| On This Day         | on      | Historical events                                                  |
-| Family Days Out     | off     | Nearby attractions when `hasKids` is enabled                       |
-| Background Research | on      | Cached Last30Days briefs for configured interests                  |
-| Interests           | off     | AI snippets for configured hobbies (requires a configured AI provider)         |
-
-The Today widget weather hero (`DashboardBriefingWeather`) is separate from the `/briefing` canvas — it uses thermal/atmosphere bands derived from Open-Meteo codes and does not reload when you redesign the canvas.
-
-AI enrichment is additive: the briefing still loads with deterministic content when no provider is configured or generation fails. Interests and design chat use the selected CLI or HTTP provider; the research fallback still requires `AI_API_KEY`. See [Environment Variables](../reference/environment-variables.md#notes-repo-learning-and-briefing-ai-optional).
-
-### Shared AI provider
-
-Repo Learning, briefing design and interest snippets use `dashboard/lib/ai/generate.ts`, which resolves the configured CLI or HTTP provider on each call. BlockNote's in-editor AI and the briefing research fallback use the HTTP model directly.
-
-`dashboard/lib/ai/provider.ts` reads `AI_API_KEY`, `AI_BASE_URL` and `AI_MODEL` per call. OpenAI endpoints use the OpenAI Vercel AI SDK adapter; other endpoints use the compatible adapter. GLM-specific options are added when the URL or model matches z.ai/GLM.
+Briefing generation, research, canvas, share and image APIs are removed. The `briefing_get` and `briefing_tasks` MCP tools are deleted without replacement.
 
 ## Repo Status And Content Sync
 
@@ -400,7 +368,7 @@ The dashboard keeps Git sync state visible without making every page own Git log
 - On the packaged desktop app, content sync (`sync_notes_tasks_push`), `update_and_sync`, and `sync_skills` read git state from the **linked checkout**, not app-data. Without a linked checkout they fail with "No linked git checkout". Attach via **View → Attach to Dev Server…** or see [Scripts — Linked checkout requirement](../reference/scripts.md#linked-checkout-requirement).
 - The warning triangle opens the **Repo Git workspace** for non-content dirty files and merge conflicts, or runs `update_and_sync` when only **origin** commits are waiting (clean tree). Pre-push hook failures surface a **GitHookFailureDialog** with log excerpts and a copyable agent fix-it prompt.
 - **Origin vs public core:** `update_and_sync` pulls/rebases from `origin` (your private mirror remote). Porting changes from the public template uses `pull_core` / `pull_core_preview` via `POST /api/scripts` → `scripts/devhub-update.sh`. **Backport** (`scripts/devhub-backport.sh`) is intentionally CLI/skill-only — there is no dashboard API. See [Fork workflow](../contributing/fork-workflow.md) and [Scripts](../reference/scripts.md).
-- The Status page is the runbook surface. It shows repo branch, dirty content vs other dirty paths, ahead/behind counts, latest failed sync logs, conflict resolution, skill sync health, service status, MCP runtime status, and LAN access.
+- The Status page is the runbook surface. It shows repo branch, dirty content vs other dirty paths, ahead/behind counts, latest failed sync logs, conflict resolution, skill sync health, service status and MCP runtime status.
 - The MCP panel (`GET /api/status/mcp`) lists each server under `mcp/shared/` only — not plugin or personal catalog entries. It reports whether each server's launch command resolves and how many matching processes are running. Bare command names such as `npx`, `tsx`, or `uvx` count as present when they resolve on `PATH`; only absolute or relative command paths must exist on disk. Idle servers are normal — MCP clients start stdio servers on demand. Plugin and personal MCP servers sync to Cursor/Claude/etc. but do not appear here; troubleshoot those via the AI client's MCP logs and `npm install` inside the plugin's `mcp-servers/<name>/` package. **Catalog editing** (`/api/mcp*`) is separate from runtime status — use **Agents → MCP** to add or edit repo/personal entries.
 
 ### Status page runbook
@@ -410,15 +378,13 @@ The Status page (`/status`) aggregates Git, sync, services, and infra into one o
 | Section                | What it shows                                                                                                                        | Primary actions                                                                                                                                                                                                                                                                                                             |
 | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Health summary         | Aggregates stopped peer services, non-content dirty paths, behind count, merge conflicts, missing MCP binaries, and last failed sync | Banner turns amber when any item is present                                                                                                                                                                                                                                                                                 |
-| Plugin materialization | `GET /api/status/materialized` — compares plugin-owned dashboard copies to plugin source                                             | Amber banner when core copies diverge from the plugin checkout (edits there are lost on `sync_plugins` / `predev`)                                                                                                                                                                                                          |
 | Repo                   | Branch, content vs other dirty counts, ahead/behind, last commit                                                                     | **Sync** runs `update_and_sync` on a clean tree; **Commit & sync…** chains `commit_dirty_push` then `update_and_sync` when dirty                                                                                                                                                                                            |
 | Merge conflicts        | Files with conflict markers under scoped content paths                                                                               | Inline edit via `ConflictResolverPanel`                                                                                                                                                                                                                                                                                     |
 | Skill sync             | `GET /api/sync-health` plus preview diffs when unhealthy                                                                             | Links to Agents library; see [Skills guide](../guides/skills.md#sync-preview-before-sync)                                                                                                                                                                                                                                   |
 | Services               | **Agents workspace** card: whether the Paseo daemon answers (`GET /api/status/services`)                                              | Connected / not connected; restart from **Agents → Connection**                                                                                                                                                                                                                                                              |
 | MCP                    | Runtime scan of `mcp/shared/` only                                                                                                   | Idle = normal; missing binary = warning                                                                                                                                                                                                                                                                                     |
 | External commands      | `GET /api/status/exec` — in-flight `execExternal` calls, slow recent ones, and in-flight DB queries                                  | Hidden when idle. An **overdue** row names the command (or query) holding things up. MCP: `status_exec`. See below.                                                                                                                                                                                                         |
-| LAN access             | Wi‑Fi IPv4 badge + QR                                                                                                                | Client builds `http://<ip>:<port>…` for phone access on the same network                                                                                                                                                                                                                                                    |
-| Dashboard rebuild      | `GET/POST /api/status/dashboard/rebuild`                                                                                             | **Rebuild & restart** runs `npm run restart` in the linked checkout (production build + relaunch). Unavailable when the desktop shell supervises the server (`DEVHUB_SHELL_SUPERVISED=1`) or in a packaged app — use **View → Rebuild Dashboard…** or **Check for Updates** instead. Reopening DevHub does **not** rebuild. |
+| Dashboard rebuild      | `GET/POST /api/status/dashboard/rebuild`                                                                                             | **Rebuild & restart** builds Vite in the linked checkout and restarts core through the supervisor. Unavailable when the desktop shell supervises the server (`DEVHUB_SHELL_SUPERVISED=1`) or in a packaged app — use **View → Rebuild Dashboard…** or **Check for Updates** instead. Reopening DevHub does **not** rebuild. |
 
 Failed sync runs surface from `GET /api/scripts/history` with log detail from `GET /api/scripts/runs/<runId>`. The **Agent prompt** button copies a fix-it prompt from the last 120 log lines for verify/pre-push failures.
 
@@ -426,7 +392,7 @@ Failed sync runs surface from `GET /api/scripts/history` with log detail from `G
 
 On desktop, **Settings → Logs** (`/logs`, also in ⌘P) tails the rotating log files under the OS app-data directory (`~/Library/Application Support/DevHub/logs/` on macOS). The page polls `GET /api/status/logs` every two seconds while **Live** is on, with filters for `shell`, `sidecar`, and `renderer` sources. **Open folder** calls the Tauri `open_logs` bridge when available. For startup failures before the dashboard loads, see [Desktop recovery](../guides/desktop-recovery.md).
 
-The page reloads on manual refresh and polls Git/services/MCP/LAN every 30 seconds in the background.
+The page reloads on manual refresh and polls Git, services and MCP every 30 seconds in the background.
 
 Merge conflict recovery lives on Status through `ConflictResolverPanel`. It reads `GET /api/git/conflicts`, lets the user edit the conflicted file, and saves with `POST /api/git/conflicts`; the backend writes the resolved content and stages the file only after conflict markers are removed. The full content-sync runbook is in [Notes System -> Content sync workflow](notes-system.md#content-sync-workflow).
 
@@ -503,7 +469,7 @@ Root `diagrams/` is included in scoped content sync alongside diagrams in the no
 | Problem                                | What to do                                                                                                                                                                                                                                                                                                                                                                                              |
 | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `index.lock` / "could not write index" | Another git process may be running, or a prior command left `.git/index.lock`. DevHub never deletes the lock for you — confirm no git is active, remove the lock manually, retry.                                                                                                                                                                                                                       |
-| Pre-push verify failed                 | Read the hook output in **GitHookFailureDialog** or Status → failed sync logs. Full output is also written to `.git/devhub-hook-failure.log` in the repo. Fix lint/tests/build locally (`npm run verify`), or use **Agent prompt** / the `git-hook-fix` terminal handoff for an agent fix. Emergency bypass: `DEVHUB_SKIP_VERIFY=1 git push` (see [Scripts](../reference/scripts.md#git-hooks)). |
+| Pre-push verify failed                 | Read the hook output in **GitHookFailureDialog** or Status → failed sync logs. Full output is also written to `.git/devhub-hook-failure.log` in the repo. Fix lint, typecheck or test failures locally (`npm run verify`), or use **Agent prompt** / the `git-hook-fix` terminal handoff for an agent fix. CI checks the build separately. Emergency bypass: `DEVHUB_SKIP_VERIFY=1 git push` (see [Scripts](../reference/scripts.md#git-hooks)). |
 | Stash apply left conflicts             | The terminal drawer opens with the `git-conflict-resolve` skill preloaded. Resolve markers, then retry apply/pop from the Stash tab.                                                                                                                                                                                                                                                                    |
 | Interactive rebase conflicted          | Conflicts tab opens (`409 stash_conflict`, `action: "rebase"`). Ours is the target branch; theirs is the commit being replayed. Abort or continue from that tab.                                                                                                                                                                                                                                      |
 | Undo chip missing                      | Expected: only actions DevHub performed in this tab are undoable, and the stack is `sessionStorage` (gone in private mode). Use Reflog for anything else.                                                                                                                                                                                                                                              |

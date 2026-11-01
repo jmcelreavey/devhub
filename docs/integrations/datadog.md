@@ -15,7 +15,7 @@ The Datadog integration gives quick access to alert-related views, on-call statu
 ## What It Enables
 
 - Datadog navigation item (`/datadog`).
-- Today alert strip and morning-briefing on-call section.
+- Notifications and a global alert bar, shown only while Datadog confirms you are on call.
 - Deep links to useful monitor and event views.
 - On-call roster matching via the Datadog On-Call API.
 - Recent alert events for on-call and team Slack channels.
@@ -40,7 +40,7 @@ Without a schedule ID, DevHub auto-discovers on-call schedules (up to 100) and c
 
 ## On-Call Detection
 
-`GET /api/datadog/oncall` asks Datadog who is on call and whether your configured email is carrying the pager. The check is **fail-closed**: missing config or upstream errors return `ok: false` with a code so the Today strip and briefing stay quiet rather than guessing.
+`GET /api/datadog/oncall` asks Datadog who is on call and whether your configured email is carrying the pager. The check is **fail-closed**: missing config or upstream errors return `ok: false` with a code so Notifications reports the source as unavailable and does not guess who is on call.
 
 | `code` (when `ok: false`) | Meaning |
 | ------------------------- | ------- |

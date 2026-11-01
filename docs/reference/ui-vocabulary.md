@@ -11,7 +11,7 @@ related:
 
 # UI Vocabulary
 
-On-demand reference. Read it **before** writing new UI in `dashboard/`, then
+On-demand reference. Read it **before** writing new UI in `apps/ui/`, then
 grep for the one you picked.
 
 It exists because "reuse before you add" is unusable as advice on its own: an
@@ -21,7 +21,7 @@ error row. Both produce a working change that quietly makes the UI less
 consistent, and both cost far more to discover than to look up.
 
 Not exhaustive — it covers the generic primitives. Feature-scoped classes
-(`repo-*`, `briefing-*`, `today-*`, `terminal-*`, `entity-*`) belong to their
+(`repo-*`, `notification-*`, `terminal-*`, `entity-*`) belong to their
 own areas; grep those directly.
 
 ## Before you add anything
@@ -31,13 +31,13 @@ own areas; grep those directly.
 3. Is there a hook in `lib/hooks/` for it?
 4. Only then write something new — and put it beside its neighbours.
 
-## Components (`dashboard/components/ui/`)
+## Components (`apps/ui/components/ui/`)
 
 | Need | Use |
 | --- | --- |
 | Loading placeholder shaped like the content | `SkeletonRows`, `PageSkeleton`, `LoadingLine` |
 | A fetch failed, offer retry | `FetchError` (`bare` when already inside a `.card`) |
-| Nothing to show | `EmptyState`, `EmptyStateRow` |
+| Nothing to show | `EmptyState` |
 | Route-level error / loading boundary | `RouteError`, `RouteLoading` |
 | List that handles its own loading/error/empty | `AsyncListSection`, `ListFetchStates`, `ConditionalList` |
 | Section wrapper with a header | `CardSection` |
@@ -51,7 +51,7 @@ own areas; grep those directly.
 | Field-level validation message | `FieldError` |
 | Icon chooser | `IconPicker`, `IconGridPopover` |
 
-## CSS primitives (`dashboard/app/globals.css`)
+## CSS primitives (`apps/ui/app/globals.css`)
 
 Generic only. Everything else is feature-scoped.
 
@@ -71,7 +71,7 @@ Colours come from tokens (`var(--text)`, `--text-subtle`, `--text-muted`,
 `--bg-surface`). Never hard-code a hex. Run `npm run check:contrast` after
 touching colour.
 
-## Hooks (`dashboard/lib/hooks/`)
+## Hooks (`apps/ui/lib/hooks/`)
 
 | Need | Use |
 | --- | --- |
@@ -79,7 +79,7 @@ touching colour.
 | Is this panel visible? | `usePanelVisible` |
 | Persist a small UI choice | `useStoredState`, `useStoredChoice`, `useStoredFraction` |
 | Toast | `useToast` |
-| Viewport / mobile | `useIsMobile`, `useMediaQuery`, `useGridSize`, `useMobileShelf` |
+| Viewport / mobile | `useIsMobile`, `useMediaQuery` |
 | Debounced search input | `useDebouncedSearch` |
 | Long list performance | `useVirtualRows` |
 | Avoid SSR/client mismatch | `useClientMounted` |
@@ -102,6 +102,6 @@ touching colour.
   triggered.** See `docs/contributing/motion.md`.
 - **Every surface needs empty, loading and error states**, including the ones
   that only occur when an integration is down.
-- **Check `git ls-files -- <path>` before editing anything in `dashboard/`.**
+- **Check `git ls-files -- <path>` before editing anything in `apps/ui/`.**
   No output means the file is plugin-owned and will be overwritten on restart —
   edit the plugin repo instead.

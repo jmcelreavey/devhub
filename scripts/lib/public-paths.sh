@@ -12,18 +12,18 @@
 # and skills/vendor are local tool installs and must never hitch a ride.
 # skills/vendor is third-party code redistributed under its own licence (see
 # skills/vendor/NOTICE.md); public docs, demos and verify-vendor depend on it.
-PUBLIC_PATHS=(.gitattributes .githooks .github .gitignore .nvmrc AGENTS.md
-              CHANGELOG.md CONTRIBUTING.md LICENSE README.md ROADMAP.md package.json
-              agents/shared dashboard desktop docs extensions gateway packages paseo.json templates/runtime-plugin mcp/shared mcp-servers
+PUBLIC_PATHS=(.gitattributes .githooks .github .gitignore .gitleaksignore .nvmrc AGENTS.md
+              CHANGELOG.md CONTRIBUTING.md LICENSE README.md ROADMAP.md package.json package-lock.json
+              agents/shared apps desktop docs extensions gateway packages paseo.json templates/runtime-plugin mcp/shared mcp-servers
               opencode/shared persona/shared-persona.md scripts shared skills/shared skills/vendor
-              ':!dashboard/.env.local' ':!scripts/make-public-seed.sh'
+              ':!apps/ui/.env.local' ':!scripts/make-public-seed.sh'
               ':!skills/shared/my-voice/writing-style.md' ':!skills/shared/my-voice/learned-voice.md'
-              ':!docs/private' ':!scripts/private')
+              ':!docs/private' ':!scripts/private' ':(exclude,glob)docs/codebase-review-*.md')
 
 # Personal data that lives happily in this mirror and must never be pushed to
 # public core.
 PERSONAL_PATHS=(notes tasks reps collections upstarts diagrams private
-                dashboard/.env.local persona/identity.txt
+                apps/ui/.env.local persona/identity.txt
                 skills/shared/my-voice/writing-style.md skills/shared/my-voice/learned-voice.md
                 TEMPLATE_AND_PLUGIN_PLAN.md scripts/make-public-seed.sh
                 MCP_PARITY_AUDIT.md ONE_TIME_SHARE_PLAN.md)

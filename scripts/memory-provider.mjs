@@ -79,13 +79,14 @@ export function setPersonalMcp(mode, home) {
 }
 
 function syncStep(ctx, flags, label) {
-  const tsx = path.join(ctx.repoRoot, "dashboard", "node_modules", ".bin", "tsx");
+  const tsx = path.join(ctx.repoRoot, "node_modules", "tsx", "dist", "cli.mjs");
   return {
     label,
     exec: [
+      process.execPath,
       tsx,
       "--tsconfig",
-      path.join(ctx.repoRoot, "dashboard", "tsconfig.json"),
+      path.join(ctx.repoRoot, "apps/ui", "tsconfig.json"),
       path.join(ctx.repoRoot, "scripts", "install_mcp_configs.ts"),
       ...SYNC_TOOLS.flatMap((tool) => ["--tool", tool]),
       ...flags,

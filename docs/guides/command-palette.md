@@ -20,7 +20,7 @@ Open it with **⌘P** (Ctrl+P on Linux/Windows), or click the **Search…** box 
 
 ## What It Searches
 
-- Pages, including the ones with no sidebar row (Briefing, Weekly review, QA lab, Agent skills). Pages that were renamed still answer to their old name: **Work** finds Tasks, **System** finds Settings, **Review** finds Weekly review, **QA** finds QA lab, **Skills** finds Agent skills.
+- Pages, including the ones with no sidebar row (Weekly review, QA lab, Agent skills). Pages that were renamed still answer to their old name: **Work** finds Tasks, **System** finds Settings, **Review** finds Weekly review, **QA** finds QA lab, **Skills** finds Agent skills.
 - Notes (by title/path).
 - Diagrams (tldraw files in the notes tree).
 - Tasks.

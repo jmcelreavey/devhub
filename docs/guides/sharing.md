@@ -121,7 +121,7 @@ the local list.
 
 | Setting | Default |
 | ------- | ------- |
-| `PRIVATEBIN_URL` in `dashboard/.env.local` | `https://privatebin.net` |
+| `PRIVATEBIN_URL` in `apps/ui/.env.local` | `https://privatebin.net` |
 
 Point it at a self-hosted instance if you'd rather not depend on the public one's uptime.
 Because content is encrypted client-side, this is a choice about *availability*, not

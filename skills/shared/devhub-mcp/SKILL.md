@@ -3,21 +3,21 @@ name: devhub-mcp
 description: DevHub MCP tools for notes, tasks, docs, diagrams, jobs and dashboard actions. Use when working with DevHub notes, tasks or jobs, or when a DevHub tool errors or seems missing.
 ---
 
-DevHub ships a **stdio MCP server** at `mcp-servers/devhub-server`, wired from
+DevHub ships a **stdio MCP server** at `packages/mcp`, wired from
 `mcp/shared/devhub.json`. The dashboard's sync/bootstrap substitutes `REPO_ROOT` and writes
 per-tool configs. `NOTES_DIR`/`TASKS_DIR`/`DOCS_DIR` default under `REPO_ROOT`. The
 dashboard is discovered per request from `~/.config/devhub/dashboard.json` (written by
 the primary dashboard, never a `DEVHUB_SCHEDULER=0` dev server beside it), falling back
 to `http://localhost:1337`; `DEVHUB_BASE_URL` pins it instead.
 
-Domain-specific tools live in separate plugin-contributed servers. Read the installed plugin's skill for its access policy; core does not inherit or weaken those controls.
+Domain tools (Datadog in the BI plugin, appraisal and 1:1s in the career plugin, Slack in the team plugin) live in plugin-contributed servers. Read the installed plugin's skill for its access policy; core does not inherit or weaken those controls.
 
 ## Two tiers of tools
 
 1. **Filesystem-backed** (work headless, no dashboard needed) — notes, docs, tasks,
-   diagrams, appraisal. These talk straight to disk.
+   diagrams and scheduler logs. These talk straight to disk.
 2. **Dashboard-backed** (proxy the discovered dashboard; need it running) —
-   status, scripts/sync, briefing, calendar, work/PRs, repos, search. If the dashboard is
+   status, scripts/sync, calendar, work/PRs, repos, search. If the dashboard is
    down they return a clear "start it with `npm run dev`" error — that's expected, not a
    bug. Start the dashboard and retry.
 
@@ -34,15 +34,13 @@ errors. Tool **descriptions** are the source of truth for args; this skill carri
 `notes_create_pr` scaffolds `pr-reviews/<repo>-<n>` with PR + repo `## Links` EntityRefs; `notes_write` on `pr-reviews/` upserts the same links.
 `notes_write_asset` writes image bytes (jpg, png, gif, webp); reference them as
 `![caption](garden/project/assets/photo-1.jpg)`. Toggles: `::toggle <title>` … `::end-toggle`.
-`notes_devhub_open` opens an existing note in a new workspace tab when DevHub is running (desktop app or browser dashboard); it fails cleanly instead of pretending when no client is connected. `ui_open` does the same for any internal page (/work, /briefing, /repos/<name>, …).
+`notes_devhub_open` opens an existing note in a new workspace tab when DevHub is running (desktop app or browser dashboard); it fails cleanly instead of pretending when no client is connected. `ui_open` does the same for any internal page (/, /work, /repos/<name>, …).
 
 **Docs** — `docs_*` over the full `docs/` Markdown tree (list/search cover everything,
 unlike the filtered notes slice).
 
-**Tasks** — `tasks_list/create/update/delete/history`. One file per task under `tasks/items/`; a task is visible from `startDate` through `endDate` or today. The first call imports any leftover `tasks/YYYY-MM-DD.json` day files. Pass an old id and the surviving item is used. Jira keys in text (e.g. `DAD-1234`)
-are auto-detected. **Appraisal** —
-`appraisal_record/set_goal/list_goals/read/list/people/summarize/delete` for performance
-review notes.
+**Tasks** — `tasks_list/create/update/delete/history`. One file per task under `tasks/items/`; a task is visible from `startDate` through `endDate` or today. The first call imports any leftover `tasks/YYYY-MM-DD.json` day files. Pass an old id and the surviving item is used. Jira keys in text (e.g. `XYZ-1234`)
+are auto-detected.
 
 **Diagrams** — `diagrams_*` over tldraw JSON. Never hand-write `diagrams_update`
 payloads: tldraw snapshots must carry both `store` and `schema`, and `index` must be a
@@ -71,12 +69,10 @@ the latest audit as markdown; run new audits from Repos → **DX Audit**.
 - **Status** — `status_services` (Agents daemon), `status_git`, `status_mcp`, `status_exec`.
 - **Scripts/sync** — `scripts_list`, then `scripts_run` (mutating scripts need `confirm:true`;
   returns a `runId`), `scripts_run_status`, `scripts_history`. MCP can't stream — poll.
-- **Briefing/calendar** — `briefing_get`, `calendar_week`, `calendar_list`.
+- **Calendar** — `calendar_week`, `calendar_list`.
 - **Work** — `prs_list`, `prs_open_in_cursor` (stash + `gh pr checkout` + launch Cursor; `confirm`),
   `jira_tickets`, `jira_ticket_get`, `jira_ticket_transition`
   (lists transitions, then applies with `confirm`), `standup_markdown`, `tasks_weekly`.
-- **On-call** — `datadog_oncall`, `datadog_recent_alerts`, `datadog_investigate`
-  (starts an OpenCode investigation session).
 - **Repos** — `repos_list`, `repos_open`, `repos_reveal`, `repos_clone`, `repo_learn`,
   `repo_conventions` (team conventions mined from PR review comments — call before
   reviewing a PR in a repo or opening one), and `conventions_list` / `conventions_mine` /
@@ -108,8 +104,7 @@ the latest audit as markdown; run new audits from Repos → **DX Audit**.
   A dispatched agent cannot dispatch further (`DEVHUB_AGENT_MAX_DEPTH`).
 - **Plans** — `tasks_capture` (draft task + context snapshot), `tasks_set_stage` (draft ↔ ready; ready runs the
   checklist), `tasks_plan_status` (what needs a fix / is merged / is running / is ready), `tasks_plan_markdown`
-  (portable plan), `tasks_pr_watch` (check agent PRs now, or dismiss a PR alert), `tasks_alert_drafts`
-  (new on-call alerts → drafts, off by default), `tasks_retro_inputs` (for `devhub-retro`). Loop:
+  (portable plan), `tasks_pr_watch` (check agent PRs now, or dismiss a PR alert), `tasks_retro_inputs` (for `devhub-retro`). Loop:
   capture → `devhub-plan-write` → ready → implement → PR watched → complete → retro.
 - **Scheduled jobs** — `jobs_list`, `jobs_get`, `jobs_create`, `jobs_update`, `jobs_delete`, `jobs_run`, `jobs_log`.
   **Use these, not your harness's own cron (`CronCreate`, `/loop`, `/schedule`, scheduled tasks, crontab),
@@ -136,7 +131,7 @@ the latest audit as markdown; run new audits from Repos → **DX Audit**.
   (redacted args, duration, outcome, client, dispatching agent run; filter by `tool: "agent_*"`,
   `errorsOnly`, `agentRunId`); `mcp_history_summary` rolls a day up into totals, actions taken and
   failures — use it for end-of-day recaps and standups instead of reconstructing from memory.
-  The dashboard's **Agent activity** page (`/agent-activity`) shows the same history plus agent
+  The dashboard's **Agents** page (`/agents`) shows the same history plus agent
   runs, and the standup gains an "Agent activity" section from it.
 - **Events** — `events_wait` blocks until something happens instead of you polling: `kind: "pr"`
   (`repo`, `number`, `until: checks_done | review | merged_or_closed | any_change`), `script_run` /
@@ -157,5 +152,5 @@ and stops. **Run polling:** start an action → get a `runId` → poll the match
 - For surgical edits to a structured BlockNote note, verify the backing JSON under
   `REPO_ROOT/notes/<path>.json`; rendered `notes_read` output confirms text exists but not
   exact block placement.
-- If MCP tools aren't in the session, fall back to the dashboard/API/fs per task — this
+- If MCP tools aren't in the session, fall back to the apps/ui/API/fs per task — this
   skill documents a configured MCP, it doesn't replace one.

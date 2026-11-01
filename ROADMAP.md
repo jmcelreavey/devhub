@@ -11,6 +11,7 @@ and moves to the archive when it ships.
 
 | Plan | What it fixes |
 | ---- | ------------- |
+| [Slim core refactor](docs/plans/slim-core-refactor.md) | Cuts side features, moves career/team/vendor pages to plugins, merges pages and reworks the runtime around a core daemon. Checklist. |
 | [Notes and learnings refactor](docs/plans/notes-and-learnings.md) | Notes already have area landing pages and grouped navigation. Renderer consolidation, note metadata, backlinks and a shared index across docs, notes and learnings remain unfinished. |
 | [Terminal sessions that survive a rebuild](docs/plans/terminal-session-persistence.md) | A rebuild restarts the PTY peer and kills every parked shell. Moves PTY ownership out of the dev loop. |
 

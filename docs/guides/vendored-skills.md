@@ -7,7 +7,6 @@ icon: PackagePlus
 tags: [guides, skills, security]
 related:
   - guides/skills
-  - contributing/recording-demos
 ---
 
 # Vendored skills
@@ -191,7 +190,7 @@ nothing about whether they still **work**. A re-vendor that quietly breaks
 rename-following in the archaeologist, or drops the payments-wall cause from the
 graveyard, passes every other check in this repo.
 
-`dashboard/lib/skills/vendor-evals.test.ts` runs each script against a synthetic
+`apps/ui/lib/skills/vendor-evals.test.ts` runs each script against a synthetic
 repository and asserts on its JSON. They're vitest files, so they run in
 `npm test` and in CI with no extra wiring:
 

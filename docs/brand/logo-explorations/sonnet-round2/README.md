@@ -14,7 +14,7 @@ Seven marks built from the three things you liked: Astra's Folio, Grok's Shift, 
 
 ![All seven marks in dark and light](contact-sheet.png)
 
-Shift Dock is the mark DevHub ships. The installed assets are drawn by `dashboard/scripts/render-brand-icons.mjs`, which adds a softer lime tint on the middle row, a faint lime halo around the hub and a 16px pixel grid. The SVGs in this folder are the original exploration drafts.
+Shift Dock is the mark DevHub ships. The installed assets are drawn by `apps/ui/scripts/render-brand-icons.mjs`, which adds a softer lime tint on the middle row, a faint lime halo around the hub and a 16px pixel grid. The SVGs in this folder are the original exploration drafts.
 
 ## Ranked recommendation
 

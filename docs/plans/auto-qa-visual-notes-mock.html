@@ -27,10 +27,10 @@ label{color:var(--sub);font-size:12px;display:block;margin-bottom:4px}select,tex
 <button data-s="s1" class="on">1 · Launch Implement</button><button data-s="s2">2 · Auto run</button><button data-s="s3">3 · Draft PR checkpoint</button><button data-s="s4">4 · Jev QA</button><button data-s="s5">5 · Ready for review</button><button data-s="s6">6 · Task note</button>
 <small>Static mock for <code>docs/plans/auto-qa-visual-notes.md</code>. Nothing here is wired.</small></nav>
 <main>
-<section id="s1" class="on"><h2>Implement · VB-14 Second stage: first vow</h2><p class="lead">Launched from the task row. The model set comes from your saved defaults.</p>
+<section id="s1" class="on"><h2>Implement · APP-123 Improve the dashboard</h2><p class="lead">Launched from the task row. The model set comes from your saved defaults.</p>
 <div class="card"><div class="grid">
 <div><label>Mode</label><select><option>Auto: commits and pushes on its branch, stops at a draft PR</option><option>Manual</option></select></div>
-<div><label>Board</label><select><option>Vowbreak (Gaming)</option><option>New board…</option></select></div></div></div>
+<div><label>Board</label><select><option>Example app</option><option>New board…</option></select></div></div></div>
 <div class="card"><div class="row" style="justify-content:space-between"><b>Model set</b><span class="chip c-a">Saved default · used 6 times</span></div><p class="lead" style="margin:4px 0 12px">Jev picks a tier at each step and records why.</p>
 <div class="grid">
 <div><label>Fast · summaries, notes</label><select><option>Haiku 5</option></select><select style="margin-top:6px"><option>Effort: low</option></select></div>
@@ -40,52 +40,52 @@ label{color:var(--sub);font-size:12px;display:block;margin-bottom:4px}select,tex
 <div class="row" style="margin-top:12px"><label style="margin:0"><input type="checkbox" checked style="width:auto"> Save as default</label><label style="margin:0"><input type="checkbox" checked style="width:auto"> Record a before demo (touches UI)</label></div></div>
 <button class="btn next" data-go="s2">Start on Auto →</button></section>
 
-<section id="s2"><h2>On auto · implementing</h2><p class="lead">Runs in a worktree on <code>auto/vb-14-first-vow</code>. Never touches main.</p>
+<section id="s2"><h2>On auto · implementing</h2><p class="lead">Runs in a worktree on <code>auto/app-123-dashboard</code>. Never touches main.</p>
 <div class="steps"><div class="step done">Before demo</div><div class="step done">Plan</div><div class="step now">Implement</div><div class="step">Checks</div><div class="step">Draft PR</div><div class="step">Your feedback</div><div class="step">Ready</div></div>
 <div class="card log">
 <div><span class="chip c-ok">done</span> <b>Before demo</b> recorded, 0:42 <span class="chip">Jev</span></div>
 <div><span class="chip c-ok">done</span> <b>Plan</b> 5 steps, written to the note <span class="chip">Sonnet 5.5 · medium</span></div>
-<div><span class="chip c-i">routing</span> Jev chose <b>Heavy</b> for step 3: 14 files, new boss state machine <span class="chip">Opus 5 · high</span></div>
-<div><span class="chip c-a">running</span> <b>Implement</b> step 3 of 5: vow room hazards</div>
-<div><span class="chip">note</span> Decision added: "Hazards as tile layer, not entities"</div></div>
+<div><span class="chip c-i">routing</span> Jev chose <b>Heavy</b> for step 3: 14 files, new dashboard state <span class="chip">Opus 5 · high</span></div>
+<div><span class="chip c-a">running</span> <b>Implement</b> step 3 of 5: dashboard controls</div>
+<div><span class="chip">note</span> Decision added: "Reuse the shared controls"</div></div>
 <div class="row"><button class="btn g">Switch to manual</button><button class="btn g">Pause</button><button class="btn next" data-go="s3">Skip ahead →</button></div></section>
 
-<section id="s3"><h2>Draft PR ready · needs you</h2><p class="lead">PR <code>#212</code> is open as a draft. Answer or give feedback, then approve.</p>
-<div class="card"><div class="row" style="justify-content:space-between"><b>#212 Second stage: first vow</b><span class="chip c-w">Draft</span></div><p class="lead" style="margin:4px 0">+1,204 −88 · 23 files · CI passing · e2e 34/34</p></div>
+<section id="s3"><h2>Draft PR ready · needs you</h2><p class="lead">PR <code>#123</code> is open as a draft. Answer or give feedback, then approve.</p>
+<div class="card"><div class="row" style="justify-content:space-between"><b>#123 Improve the dashboard</b><span class="chip c-w">Draft</span></div><p class="lead" style="margin:4px 0">+1,204 −88 · 23 files · CI passing · e2e 34/34</p></div>
 <div class="card"><b>Questions</b>
-<div class="q" style="margin-top:10px">Should the vow room reuse the atrium music, or wait for a new track? <div class="row" style="margin-top:8px"><button class="btn g">Reuse atrium</button><button class="btn g">Leave silent for now</button></div></div></div>
-<div class="card"><label>Feedback for another round (optional)</label><textarea rows="3">Make the floor hazard telegraph half a second longer.</textarea>
+<div class="q" style="margin-top:10px">Should the dashboard reuse the existing layout? <div class="row" style="margin-top:8px"><button class="btn g">Reuse layout</button><button class="btn g">Create a new layout</button></div></div></div>
+<div class="card"><label>Feedback for another round (optional)</label><textarea rows="3">Make the loading state clearer.</textarea>
 <div class="row" style="margin-top:10px"><button class="btn g">Send feedback, keep as draft</button><button class="btn" data-go="s4">See Jev QA →</button></div></div></section>
 
 <section id="s4"><h2>Jev QA · review</h2><p class="lead">Same demo script on main (before) and on the branch (after).</p>
 <div class="grid"><div class="card"><label>Before · main</label><div class="shot"><span class="tag chip">0:42</span><div class="play">▶</div></div></div>
-<div class="card"><label>After · auto/vb-14</label><div class="shot"><span class="tag chip c-a">1:10</span><div class="play">▶</div></div></div></div>
+<div class="card"><label>After · auto/app-123</label><div class="shot"><span class="tag chip c-a">1:10</span><div class="play">▶</div></div></div></div>
 <div class="card"><b>Bugs found · 2</b>
-<div class="bug" style="margin-top:10px"><span class="chip c-b">blocker</span> Player can walk through the east wall after the second hazard cycle. <code>repro: 3 steps</code> · sent back to implement once, fixed in <code>a41c2e0</code></div>
-<div class="bug"><span class="chip c-w">low</span> Pause menu text overlaps the vow counter at 1280×720.</div></div>
-<div class="grid"><div class="shot">Screenshot · vow room</div><div class="shot">Screenshot · hazard telegraph</div><div class="shot">Screenshot · overlap bug</div></div>
+<div class="bug" style="margin-top:10px"><span class="chip c-b">blocker</span> Dashboard controls stop responding after refresh. <code>repro: 3 steps</code> · sent back to implement once, fixed in <code>a41c2e0</code></div>
+<div class="bug"><span class="chip c-w">low</span> Menu text overlaps at 1280×720.</div></div>
+<div class="grid"><div class="shot">Screenshot · dashboard</div><div class="shot">Screenshot · controls</div><div class="shot">Screenshot · overlap bug</div></div>
 <button class="btn next" data-go="s5">Approve → ready for review</button></section>
 
-<section id="s5"><h2>Ready for review</h2><p class="lead"><code>gh pr ready 212</code> ran. Copy the review request and send it yourself.</p>
+<section id="s5"><h2>Ready for review</h2><p class="lead"><code>gh pr ready 123</code> ran. Copy the review request and send it yourself.</p>
 <div class="steps"><div class="step done">Before demo</div><div class="step done">Plan</div><div class="step done">Implement</div><div class="step done">Checks</div><div class="step done">Draft PR</div><div class="step done">Your feedback</div><div class="step now">Ready</div></div>
 <div class="card"><div class="row" style="justify-content:space-between"><b>PR review request</b><button class="btn g">Copy</button></div>
-<pre style="white-space:pre-wrap;background:var(--elev);border:1px solid var(--bdm);border-radius:6px;padding:12px;margin:10px 0 0;font:12px/1.5 ui-monospace,Menlo,monospace;color:var(--tx)">Hey team, could I get a review on PR #212 (VB-14 Second stage: first vow)?
-https://github.com/jmcelreavey/vowbreak/pull/212
-23 files · CI passing · Jev QA: 1 low bug open (pause text overlap at 720p)</pre></div>
+<pre style="white-space:pre-wrap;background:var(--elev);border:1px solid var(--bdm);border-radius:6px;padding:12px;margin:10px 0 0;font:12px/1.5 ui-monospace,Menlo,monospace;color:var(--tx)">Hey team, could I get a review on PR #123 (APP-123 Improve the dashboard)?
+https://github.com/example/app/pull/123
+23 files · CI passing · Jev QA: 1 low bug open (menu text overlap at 720p)</pre></div>
 <button class="btn next" data-go="s6">Open task note →</button></section>
 
 <section id="s6"><div class="card note">
-<div class="row" style="justify-content:space-between"><h3>Second stage: first vow</h3><div class="row"><span class="chip c-ok">Ready for review</span><span class="chip c-i">PR #212</span><span class="chip">$3.84</span></div></div>
-<h4>Summary</h4><p>Adds the first vow room after the atrium: a flooded hall with a timed floor hazard and the vow seal as a mini-boss. Letter 3 setup now pays off. One minor UI overlap left.</p>
-<h4>Status</h4><p><span class="chip c-a">Next</span> Review PR #212. Optional: new music track.</p>
-<h4>Questions for John</h4><div class="q">Vow room music: answered "Leave silent for now".</div>
+<div class="row" style="justify-content:space-between"><h3>Improve the dashboard</h3><div class="row"><span class="chip c-ok">Ready for review</span><span class="chip c-i">PR #123</span><span class="chip">$3.84</span></div></div>
+<h4>Summary</h4><p>Updates the dashboard controls and loading state. One minor UI overlap remains.</p>
+<h4>Status</h4><p><span class="chip c-a">Next</span> Review PR #123.</p>
+<h4>Questions</h4><div class="q">Layout: answered "Reuse the existing layout".</div>
 <h4>Decisions</h4>
-<div class="dec"><b>Hazards as a tile layer, not entities.</b> Cheaper collision and easier to telegraph. Rejected: per-tile sprites.</div>
+<div class="dec"><b>Reuse shared controls.</b> Keeps the interface consistent.</div>
 <div class="dec"><b>Opus for step 3.</b> 14 files and a new state machine. Jev routing.</div>
-<h4>Screenshots and video</h4><div class="grid"><div class="shot"><span class="tag chip">before</span><div class="play">▶</div></div><div class="shot"><span class="tag chip c-a">after</span><div class="play">▶</div></div><div class="shot">Vow room</div></div>
-<h4>Bugs</h4><div class="bug"><span class="chip c-ok">fixed</span> Walk-through east wall</div><div class="bug"><span class="chip c-w">open</span> Pause text overlap at 720p</div>
-<h4>Points of interest</h4><p><code>src/stages/vow1/hazards.ts</code>: timing constants · <code>src/boss/sealState.ts</code>: new state machine</p>
-<h4>Waypoints</h4><p>✓ Plan · ✓ Room layout · ✓ Hazards · ✓ Seal mini-boss · ✓ Letter hook</p>
+<h4>Screenshots and video</h4><div class="grid"><div class="shot"><span class="tag chip">before</span><div class="play">▶</div></div><div class="shot"><span class="tag chip c-a">after</span><div class="play">▶</div></div><div class="shot">Dashboard</div></div>
+<h4>Bugs</h4><div class="bug"><span class="chip c-ok">fixed</span> Controls stop responding</div><div class="bug"><span class="chip c-w">open</span> Menu text overlap at 720p</div>
+<h4>Points of interest</h4><p><code>src/dashboard/controls.ts</code>: shared controls · <code>src/dashboard/state.ts</code>: state management</p>
+<h4>Waypoints</h4><p>✓ Plan · ✓ Layout · ✓ Controls · ✓ Checks</p>
 <details><summary style="color:var(--sub);cursor:pointer">Log (14 entries)</summary><p style="color:var(--sub)">Agents append here; the sections above are rewritten as work moves on.</p></details>
 </div><button class="btn g" data-go="s1">↺ Start over</button></section>
 </main>

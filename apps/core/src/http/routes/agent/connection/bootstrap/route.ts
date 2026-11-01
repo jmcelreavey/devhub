@@ -1,0 +1,43 @@
+import { requireDashboardAuth } from "../../../../../lib/api-utils";
+import { httpAction } from "../../../../../lib/actions/http";
+import { agentBootstrap } from "../../../../../../../../packages/shared/actions/agents";
+import { paseoPassword, paseoWebOrigin } from "../../../../../lib/paseo/client";
+
+
+function localRequest(req: Request): boolean {
+  const host = req.headers.get("host");
+  if (!host) return false;
+  try { return ["localhost", "127.0.0.1", "[::1]"].includes(new URL(`http://${host}`).hostname); } catch { return false; }
+}
+
+/** Only DevHub's local Chats frame needs the plaintext secret already used by its Paseo client. */
+export async function POST(req: Request) {
+  const auth = requireDashboardAuth(req);
+  if (!auth.ok) return auth.response;
+  if (!localRequest(req)) {
+    return Response.json({ error: "Open DevHub on this Mac to connect Paseo." }, { status: 403 });
+  }
+  return httpAction(agentBootstrap, {
+    input: () => ({}),
+    context: () => ({ execute: bootstrap }),
+    response: (response) => response as Response,
+  })(req);
+}
+
+async function bootstrap() {
+  const password = paseoPassword();
+  if (!password) return new Response(null, { status: 204 });
+  try {
+    const origin = paseoWebOrigin();
+    const response = await fetch(`${origin}/api/status`, {
+      headers: { Authorization: `Bearer ${password}` },
+      cache: "no-store", redirect: "error", signal: AbortSignal.timeout(5_000),
+    });
+    if (!response.ok) throw new Error(`Paseo returned HTTP ${response.status}.`);
+    const { serverId } = (await response.json()) as { serverId?: unknown };
+    if (typeof serverId !== "string" || !/^srv_[A-Za-z0-9_-]+$/.test(serverId)) throw new Error("Paseo returned an invalid server id.");
+    return Response.json({ serverId, password }, { headers: { "Cache-Control": "no-store", "Pragma": "no-cache" } });
+  } catch (error) {
+    return Response.json({ error: error instanceof Error ? error.message : "Could not connect to Paseo." }, { status: 502, headers: { "Cache-Control": "no-store" } });
+  }
+}

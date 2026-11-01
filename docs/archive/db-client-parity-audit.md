@@ -11,8 +11,8 @@ tags: [archive, database]
 What DevHub's `/db` workspace does vs what a full desktop database client (TablePlus,
 DataGrip, Postico, Compass) does.
 
-Method: every route under `dashboard/app/api/db/**` compared against the panels in
-`dashboard/components/db/`, then against TablePlus's documented feature set. Written
+Method: every route under `apps/ui/app/api/db/**` compared against the panels in
+`apps/ui/components/db/`, then against TablePlus's documented feature set. Written
 2026-08-29, at the point the feature first shipped — so unlike the Git audit's first
 revision, nothing here is arguing for work that was already finished.
 

@@ -96,7 +96,7 @@ daily driver. Verify checkout changes on a free port instead.
 ## Fixing what you find
 
 Every external command must go through `execExternal`
-(`dashboard/lib/exec-external.ts`), which applies a default ceiling and feeds
+(`apps/ui/lib/exec-external.ts`), which applies a default ceiling and feeds
 `status_exec`. There is deliberately no way to request "no timeout"; pass a
 larger `timeoutMs` for genuinely slow work.
 

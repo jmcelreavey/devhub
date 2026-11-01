@@ -1,0 +1,22 @@
+{
+  "name": "devhub-desktop",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Tauri shell, staging pipeline, and Node sidecar for the DevHub desktop app.",
+  "type": "module",
+  "scripts": {
+    "stage": "node scripts/stage-all.mjs",
+    "stage:dashboard": "node scripts/stage-dashboard.mjs",
+    "stage:node": "node scripts/stage-node-runtime.mjs",
+    "stage:resources": "node scripts/stage-resources.mjs",
+    "doctor": "node scripts/doctor.mjs",
+    "stage:wsl": "node scripts/stage-wsl-payload.mjs"
+  },
+  "dependencies": {
+    "acorn": "^8.15.0",
+    "adm-zip": "0.6.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2"
+  }
+}

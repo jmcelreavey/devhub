@@ -1,0 +1,437 @@
+"use client";
+
+import { useState, useEffect, useRef, useCallback } from "react";
+import { BlockNoteEditor } from "@/components/BlockNoteEditor";
+import {
+  X,
+  CalendarDays,
+  ExternalLink,
+  FileText,
+  RefreshCw,
+  Plus,
+} from "lucide-react";
+import { EMPTY_NOTE_BLOCKS } from "@/components/notes/note-helpers";
+import { dailyNotePath, formatDayLabel, todayISO } from "@/lib/utils";
+import { NewNotePathModal } from "@/components/NewNotePathModal";
+import { useRouter } from "@/lib/navigation";
+import { useToast } from "@/lib/hooks/use-toast";
+import { isDiagramStoragePath } from "../../../../packages/shared/ui-lib/diagrams/utils";
+import { isMobileViewport } from "@/lib/hooks/use-is-mobile";
+import { notesApiPathFromSlug, notesPageHref } from "@/lib/notes/path";
+import { SidePanel } from "@/components/shell/SidePanel";
+import { CopyLocationButton } from "@/components/ui/CopyLocationButton";
+import { FileTree } from "@/components/FileTree";
+import { SearchInput } from "@/components/ui/SearchInput";
+import { HoverTip } from "@/components/ui/HoverTip";
+import type { DevHubPartialBlock } from "@/lib/blocknote/schema";
+import { VaultEditorPage } from "@/components/vault/VaultEditorPage";
+
+interface SearchResult {
+  path: string;
+  line: number;
+  text: string;
+}
+
+interface FileGroup {
+  path: string;
+  matches: SearchResult[];
+  score: number;
+}
+
+interface NoteOverlayProps {
+  open: boolean;
+  onClose: () => void;
+  /** Increments each time something asks the panel to jump to today's daily note. */
+  todayNoteRequest?: number;
+  /** A note another surface asked to open here; a new id reopens even the same path. */
+  notePathRequest?: { path: string; id: number } | null;
+}
+
+export function NotesOverlay({ open, onClose, todayNoteRequest = 0, notePathRequest = null }: NoteOverlayProps) {
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<SearchResult[]>([]);
+  const [activeNote, setActiveNote] = useState<{
+    path: string;
+    blocks: DevHubPartialBlock[];
+  } | null>(null);
+  /** Requested notes use the full-page editor embedded, so task notes keep their task view. */
+  const [embeddedPath, setEmbeddedPath] = useState<string | null>(null);
+  const [searching, setSearching] = useState(false);
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const saveQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const noteVersionsRef = useRef(new Map<string, number | null>());
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [fileTreeKey, setFileTreeKey] = useState(0);
+  const router = useRouter();
+  const toast = useToast();
+  const [newNoteModalOpen, setNewNoteModalOpen] = useState(false);
+
+  useEffect(() => {
+    if (!open) {
+      setQuery("");
+      setResults([]);
+      setActiveNote(null);
+      setEmbeddedPath(null);
+      return;
+    }
+
+    setFileTreeKey((k) => k + 1);
+  }, [open]);
+
+  const handleRefresh = useCallback(async () => {
+    if (searchTimer.current) {
+      clearTimeout(searchTimer.current);
+      searchTimer.current = null;
+    }
+    setIsRefreshing(true);
+    try {
+      setFileTreeKey((k) => k + 1);
+      const q = query.trim();
+      if (q) {
+        setSearching(true);
+        try {
+          const r = await fetch(
+            `/api/search?q=${encodeURIComponent(q)}`,
+          );
+          const data = await r.json();
+          const flat = (data.files ?? []).flatMap((f: FileGroup) =>
+            f.matches.map((m) => ({ ...m, path: f.path })),
+          );
+          setResults(flat.filter((m: SearchResult) => !isDiagramStoragePath(m.path)));
+        } catch {
+          setResults([]);
+        } finally {
+          setSearching(false);
+        }
+      }
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [query]);
+
+  useEffect(() => {
+    if (!query.trim()) {
+      setResults([]);
+      return;
+    }
+    if (searchTimer.current) clearTimeout(searchTimer.current);
+    setSearching(true);
+    searchTimer.current = setTimeout(() => {
+      fetch(`/api/search?q=${encodeURIComponent(query)}`)
+        .then((r) => r.json())
+        .then((data) => {
+          const flat = (data.files ?? []).flatMap((f: FileGroup) =>
+            f.matches.map((m: SearchResult) => ({ ...m, path: f.path })),
+          );
+          setResults(flat.filter((m: SearchResult) => !isDiagramStoragePath(m.path)));
+        })
+        .catch(() => setResults([]))
+        .finally(() => setSearching(false));
+    }, 300);
+  }, [query]);
+
+  const openNote = useCallback(
+    (notePath: string, allowMissing = false) => {
+      const cleanPath = notePath.replace(/\.json$/, "");
+      // Phones use the full-page editor; the notes layout files panel handles browsing.
+      if (isMobileViewport()) {
+        onClose();
+        router.push(notesPageHref(cleanPath));
+        return;
+      }
+      fetch(`/api/notes/${notesApiPathFromSlug(cleanPath)}`)
+        .then((r) => {
+          // Daily notes aren't written until you type, so a 404 means "blank page", not an error.
+          if (r.status === 404 && allowMissing) return { content: EMPTY_NOTE_BLOCKS };
+          if (!r.ok) throw new Error("Not found");
+          return r.json();
+        })
+        .then((data: { content: DevHubPartialBlock[]; modified?: number }) => {
+          noteVersionsRef.current.set(
+            cleanPath,
+            typeof data.modified === "number" ? data.modified : null,
+          );
+          setEmbeddedPath(null);
+          setActiveNote({ path: cleanPath, blocks: data.content });
+        })
+        .catch((e) => {
+          console.error("open note:", e);
+          toast.error("Couldn't open note.");
+        });
+    },
+    [toast, onClose, router],
+  );
+
+  const openTodayNote = useCallback(() => openNote(dailyNotePath(), true), [openNote]);
+
+  useEffect(() => {
+    if (open && todayNoteRequest > 0) openTodayNote();
+    // Fire once per request; re-running on `open`/`openTodayNote` churn would clobber navigation.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [todayNoteRequest]);
+
+  useEffect(() => {
+    if (!notePathRequest) return;
+    const cleanPath = notePathRequest.path.replace(/\.json$/, "");
+    if (isMobileViewport()) {
+      onClose();
+      router.push(notesPageHref(cleanPath));
+      return;
+    }
+    setActiveNote(null);
+    setEmbeddedPath(cleanPath);
+    // Fire once per request, like todayNoteRequest.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [notePathRequest?.id]);
+
+  const handleSave = useCallback(
+    (blocks: DevHubPartialBlock[]) => {
+      if (!activeNote) return;
+      const notePath = activeNote.path;
+      const save = saveQueueRef.current.then(async () => {
+        const hasVersion = noteVersionsRef.current.has(notePath);
+        const expectedModified = noteVersionsRef.current.get(notePath);
+        const response = await fetch(`/api/notes/${notesApiPathFromSlug(notePath)}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            content: blocks,
+            ...(hasVersion ? { expectedModified } : {}),
+          }),
+        });
+        if (!response.ok) throw new Error(await response.text());
+        const saved = (await response.json()) as { modified?: number };
+        if (typeof saved.modified === "number") {
+          noteVersionsRef.current.set(notePath, saved.modified);
+        }
+      });
+      saveQueueRef.current = save.catch(() => undefined);
+      void save.catch((e) => {
+        console.error("save note:", e);
+        toast.error(e instanceof Error && e.message.includes("changed elsewhere")
+          ? "This note changed elsewhere. Reopen it before saving."
+          : "Couldn't save note.");
+      });
+    },
+    [activeNote, toast],
+  );
+
+  const shownPath = embeddedPath ?? activeNote?.path ?? null;
+  const openFullPage = useCallback(() => {
+    if (shownPath) {
+      onClose();
+      router.push(embeddedPath ? notesPageHref(shownPath) : `/notes/${shownPath}`);
+    }
+  }, [shownPath, embeddedPath, onClose, router]);
+
+  return (
+    <SidePanel
+      open={open}
+      onClose={onClose}
+      storageKey="notes-panel-width"
+      defaultWidth={440}
+      ariaLabel={shownPath ? "Note editor" : "Notes search"}
+    >
+      <div
+        className="flex items-center gap-2 px-4 py-3 border-b shrink-0"
+        style={{ borderColor: "var(--border)" }}
+      >
+        {shownPath ? (
+          <>
+            <button
+              type="button"
+              onClick={() => { setActiveNote(null); setEmbeddedPath(null); }}
+              className="text-xs text-text-muted"
+              aria-label="Back to search"
+            >
+              &larr; Back
+            </button>
+            <span
+              className="text-sm font-medium truncate flex-1 text-text"
+            >
+              {shownPath.split("/").pop()}
+            </span>
+            <button
+              type="button"
+              onClick={() => setNewNoteModalOpen(true)}
+              className="shrink-0 rounded p-0.5 hover:bg-[var(--bg-elevated)]"
+              title="New note"
+              aria-label="New note"
+            >
+              <Plus
+                size={14} className="text-text-muted"
+                aria-hidden
+              />
+            </button>
+            <CopyLocationButton path={shownPath} size={14} />
+            <button
+              type="button"
+              onClick={openFullPage}
+              title="Open in full page"
+              aria-label="Open in full page"
+            >
+              <ExternalLink
+                size={14} className="text-text-muted"
+                aria-hidden
+              />
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Close notes panel"
+            >
+              <X
+                size={16} className="text-text-muted"
+                aria-hidden
+              />
+            </button>
+          </>
+        ) : (
+          <>
+            <label htmlFor="notes-search-input" className="sr-only">
+              Search notes
+            </label>
+            <SearchInput
+              id="notes-search-input"
+              value={query}
+              onChange={setQuery}
+              placeholder="Search notes…"
+              autoFocus
+              isLoading={searching}
+              wrapperClassName="min-w-0 flex-1"
+              inputClassName="h-8 text-sm"
+            />
+            <HoverTip label={isRefreshing ? "Refreshing…" : "Refresh notes list"}>
+              <button
+                type="button"
+                onClick={() => void handleRefresh()}
+                disabled={isRefreshing}
+                aria-label="Refresh notes list"
+                className="shrink-0 rounded p-0.5 disabled:opacity-50 hover:bg-[var(--bg-elevated)]"
+              >
+                <RefreshCw
+                  size={14}
+                  className={`${isRefreshing ? "animate-spin" : ""} text-text-muted`}
+                  aria-hidden
+                />
+              </button>
+            </HoverTip>
+            <button
+              type="button"
+              onClick={() => setNewNoteModalOpen(true)}
+              className="shrink-0 rounded p-0.5 hover:bg-[var(--bg-elevated)]"
+              title="New note"
+              aria-label="New note"
+            >
+              <Plus
+                size={14} className="text-text-muted"
+                aria-hidden
+              />
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Close notes panel"
+            >
+              <X
+                size={16} className="text-text-muted"
+                aria-hidden
+              />
+            </button>
+          </>
+        )}
+      </div>
+
+      <div className="flex-1 overflow-y-auto overscroll-contain">
+        {embeddedPath ? (
+          <div className="p-2" data-testid="notes-panel-embedded">
+            <VaultEditorPage key={`${embeddedPath}:${notePathRequest?.id ?? 0}`} vault="notes" path={embeddedPath.split("/")} embedded />
+          </div>
+        ) : activeNote ? (
+          <div className="p-2">
+            <BlockNoteEditor
+              key={activeNote.path}
+              initialContent={activeNote.blocks}
+              onChange={handleSave}
+              vaultId="notes"
+              contentSlug={activeNote.path}
+            />
+          </div>
+        ) : query.trim() ? (
+          <div className="p-2">
+            {results.length === 0 && !searching && (
+              <p
+                className="text-xs px-2 py-4 text-center text-text-subtle"
+              >
+                No results for &ldquo;{query}&rdquo;
+              </p>
+            )}
+            {results.map((r, i) => {
+              const refPath = r.path.replace(/\.json$/, "");
+              return (
+                <div
+                  key={`${r.path}-${r.line}-${i}`}
+                  className="group w-full text-left px-3 py-2 rounded text-xs hover:bg-[var(--bg-elevated)] flex items-start gap-2"
+                >
+                  <button
+                    type="button"
+                    className="flex-1 min-w-0 flex items-start gap-2 text-left"
+                    onClick={() => openNote(r.path)}
+                  >
+                    <FileText
+                      size={12}
+                      style={{
+                        color: "var(--text-subtle)",
+                        marginTop: "2px",
+                        flexShrink: 0,
+                      }}
+                      aria-hidden
+                    />
+                    <div className="flex-1 min-w-0">
+                      <div
+                        className="font-medium truncate text-text"
+                      >
+                        {refPath}
+                      </div>
+                      <div
+                        className="truncate text-text-muted"
+                      >
+                        {r.text}
+                      </div>
+                    </div>
+                  </button>
+                  <CopyLocationButton path={refPath} size={11} stopPropagation />
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <>
+            <div className="px-2 pt-2">
+              <button
+                type="button"
+                onClick={openTodayNote}
+                className="flex w-full min-w-0 items-center gap-2 rounded px-3 py-2 text-left text-xs hover:bg-[var(--bg-elevated)]"
+              >
+                <CalendarDays size={12} className="shrink-0 text-accent" aria-hidden />
+                <span className="font-medium text-text">Today&apos;s note</span>
+                <span className="ml-auto truncate text-text-subtle">{formatDayLabel(todayISO())}</span>
+              </button>
+            </div>
+            <FileTree key={fileTreeKey} onSelect={(path) => openNote(path)} />
+          </>
+        )}
+      </div>
+
+      {newNoteModalOpen && (
+        <NewNotePathModal
+          onClose={() => setNewNoteModalOpen(false)}
+          onCreated={(cleanPath) => {
+            openNote(cleanPath);
+            setFileTreeKey((k) => k + 1);
+          }}
+        />
+      )}
+    </SidePanel>
+  );
+}

@@ -249,5 +249,5 @@ GitHub activity can contribute to standup markdown, especially merged PRs and re
 | Worktrees tab is empty while folders remain | Expected when there is no merged PR and no finished agent run for that path (or the worktree is locked). Check the repo's Git **Worktrees** tab. |
 | **Finish your daily rep first**        | Expected when this PR is today's unfinished [daily review rep](../architecture/dashboard.md#daily-review-reps). Save findings on `/review/rep` first.                     |
 | **Notes** link never appears          | The agent job finished, the skill had notes MCP access, and it wrote to the exact `Notes MCP path` from the prompt.                                                       |
-| Review note landed in the wrong place | `NEXT_PUBLIC_REPO_ROOT` mirrors `REPO_ROOT` in `dashboard/.env.local`; restart DevHub so the agent run can pin `NOTES_DIR`.                                                |
+| Review note landed in the wrong place | `NEXT_PUBLIC_REPO_ROOT` mirrors `REPO_ROOT` in `apps/ui/.env.local`; restart DevHub so the agent run can pin `NOTES_DIR`.                                                |
 | Standup misses PRs                    | The PR was merged in the selected time window.                                                                                                                           |

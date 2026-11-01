@@ -1,0 +1,97 @@
+#!/usr/bin/env tsx
+/**
+ * `npx tsx scripts/run-action.ts <action> [flags]` — CLI entrypoint for the same
+ * sync/validate flows the dashboard runs in-process. Used by the repo-root scripts
+ * (devhub-update.sh) and for headless/CI use.
+ *
+ * Actions:
+ *   validate                 Repo integrity checks (lib/validate.ts)
+ *   sync                     Sync skills + agents + MCP + persona to local tools
+ *   update_and_sync          Full update+sync orchestrator (origin); flags: --push --force
+ *
+ * Common flags: --dry-run
+ */
+import { getCheckoutRoot } from "../lib/desktop/runtime-paths";
+import { validateRepo } from "../lib/validate";
+import { updateAndSync } from "../lib/sync/orchestrator";
+import { syncSkills } from "../lib/sync/skills";
+import { syncAgents } from "../lib/sync/agents";
+import { buildCoworkPlugin } from "../lib/sync/cowork";
+import { syncMcpServers } from "../lib/sync/mcp";
+import { syncPersona } from "../lib/sync/persona";
+
+
+const ACTIONS = ["validate", "sync", "update_and_sync", "worktree_cleanup"] as const;
+type Action = (typeof ACTIONS)[number];
+
+function isAction(value: string): value is Action {
+  return (ACTIONS as readonly string[]).includes(value);
+}
+
+async function runSync(repoRoot: string, dryRun: boolean): Promise<number> {
+  const emit = (line: string) => console.log(line);
+  let code = 0;
+  for (const step of [
+    () => syncSkills({ emit, repoRoot, dryRun }),
+    () => syncAgents({ emit, repoRoot, dryRun }),
+    () => syncMcpServers({ emit, repoRoot, dryRun }),
+    () => syncPersona({ emit, repoRoot, dryRun }),
+    // Cowork has no directory to sync into, so it is a build target rather than a copy
+    // target — see lib/sync/cowork.ts. Non-fatal: every other tool is already synced.
+    () =>
+      buildCoworkPlugin({ emit, repoRoot, dryRun })
+        .then((r) => {
+          if (r.code !== 0) {
+            emit(`WARNING: Cowork bundle build failed (exit ${r.code}).`);
+          }
+          return 0;
+        })
+        .catch((e: unknown) => {
+          emit(`WARNING: Cowork bundle build failed (${e instanceof Error ? e.message : String(e)}).`);
+          return 0;
+        }),
+  ]) {
+    code = await step() || code;
+  }
+  return code;
+}
+
+async function main(): Promise<void> {
+  const [action, ...rest] = process.argv.slice(2);
+  if (!action || !isAction(action)) {
+    console.error(`Usage: run-action.ts <${ACTIONS.join(" | ")}> [--dry-run] [--push] [--force]`);
+    process.exit(2);
+  }
+  const flags = new Set(rest);
+  const dryRun = flags.has("--dry-run");
+  const emit = (line: string) => console.log(line);
+  const repoRoot = getCheckoutRoot();
+  if (!repoRoot) {
+    throw new Error("This action requires a linked DevHub checkout.");
+  }
+
+  let code = 0;
+  if (action === "worktree_cleanup") {
+    if (rest.some((flag) => flag !== "--dry-run")) throw new Error("Worktree cleanup accepts only --dry-run; force removal is not supported.");
+    const { cleanupWorktrees } = await import("../lib/repos/worktree-report");
+    code = (await cleanupWorktrees(emit, { dryRun })).errors.length ? 1 : 0;
+  } else if (action === "validate") {
+    code = await validateRepo({ emit, repoRoot });
+  } else if (action === "sync") {
+    code = await runSync(repoRoot, dryRun);
+  } else {
+    code = await updateAndSync({
+      emit,
+      repoRoot,
+      dryRun,
+      push: flags.has("--push"),
+      force: flags.has("--force"),
+    });
+  }
+  process.exit(code);
+}
+
+main().catch((err) => {
+  console.error(err instanceof Error ? err.message : String(err));
+  process.exit(2);
+});

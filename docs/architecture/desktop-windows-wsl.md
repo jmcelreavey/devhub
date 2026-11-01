@@ -291,7 +291,7 @@ stays in the server log.
   stashed or reset. Install follows the lockfile (`npm ci` for a new payload,
   `npm install` for the live service). If the service install rewrites
   `package-lock.json`, that file is restored and the rebuild stops; the running
-  build stays up. The service builds into `dashboard/.next-rebuild` and swaps
+  build stays up. The service builds into `apps/ui/dist-rebuild` and swaps
   it in only after the new build answers, putting the previous build back if
   the restart fails. The packaged app assembles `runtime/local-<commit>` beside
   the installed payload and asks for a restart; the next launch uses it when it
@@ -313,7 +313,7 @@ stays in the server log.
   service works on the same content (its checkout is the app's linked repo); a
   fresh profile with its own data keeps its jobs. The service's checkout is its
   `WorkingDirectory`, read as `<repo>` (`npm start` at the root) or
-  `<repo>/dashboard`, and accepted only if it has `package.json` and `dashboard/`.
+  `<repo>/dashboard`, and accepted only if it has `package.json` and `apps/ui/`.
   If it can't be determined the app assumes the content is shared, which is the
   safe side (no duplicate jobs). The startup log records the decision and why, for
   example `secondary=false (the running service uses a different checkout
@@ -329,13 +329,9 @@ stays in the server log.
   `\\server\share` and `//server/share` paths say network shares are
   unsupported (`//wsl.localhost/…` and `//wsl$/…` are translated like their
   backslash forms).
-- The Today view (Focus or Dashboard) is saved on the machine in
-  `~/.config/devhub/ui-prefs.json` (`/api/ui-prefs/today-view`), not only in
-  browser storage, so it survives a change of port. localStorage stays as a fast
-  cache and fallback; a choice made before the server copy existed is uploaded
-  once. The file is per Linux user, so a `devhub.service` running under the same
-  user (and a checkout dev server) reads and writes the same choice: changing it
-  in one changes it in the others.
+- The Notifications "Only repos I own" choice is saved in
+  `~/.config/devhub/ui-prefs.json` (`PUT /api/notifications`), per Linux user, so
+  a `devhub.service` and a checkout dev server under the same user share it.
 - Release builds hide the stale-bundle checkout notice. That notice is separate
   from Rebuild from Checkout, which a linked source checkout can still run.
 - Two machines that both import tasks before either has pulled can conflict on

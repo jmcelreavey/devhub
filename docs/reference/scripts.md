@@ -22,11 +22,11 @@ Run these from the repo root.
 | `npm run dev`            | Start the dashboard in development mode                |
 | `npm run start`          | Start the dashboard in production mode                 |
 | `npm run build`          | Build the dashboard                                    |
-| `npm run verify`         | Lint, typecheck and tests in parallel, vendored-skill audit, production build, dynamic-route check (what `pre-push` runs) |
+| `npm run verify`         | Run the fast Vitest suite and Node tests               |
+| `npm run prepush`        | Run the pre-push checks                                |
 | `npm run lint`           | Run dashboard linting                                  |
 | `npm run typecheck`      | Run TypeScript checks                                  |
 | `npm run test`           | Run tests                                              |
-| `npm run restart`        | Production build of the dashboard, then restart it     |
 | `npm run doctor`         | Run diagnostics                                        |
 | `npm run agents:install` | Install or update the managed Paseo daemon (see [Agents (Paseo)](../guides/paseo-agents.md)) |
 | `npm run mcp:inventory`  | List every tool the DevHub MCP server registers       |
@@ -41,10 +41,12 @@ Run these from the repo root.
 | `npm run desktop:install`| Replace `/Applications/DevHub.app` safely            |
 | `npm run desktop:sign:identity`  | Create the stable local signing certificate (once per Mac) |
 | `npm run desktop:sign:installed` | Re-seal `/Applications/DevHub.app` after an in-place edit  |
-| `npm run demos:record`     | Record `docs/assets/demos/dashboard.gif` by driving the dashboard against a throwaway fixture |
-| `npm run demos:walkthroughs` | Record the feature walkthrough MP4s in `docs/assets/demos/` (needs ffmpeg) — see [Recording demos](../contributing/recording-demos.md) |
 | `npm run skills:demos`     | Re-record the vendored-skill GIFs in `docs/assets/demos/` against the synthetic fixture |
-| `npm run skills:verify-vendor` | Audit vendored skills (provenance and content checks) before they sync; part of `verify` |
+| `npm run skills:verify-vendor` | Audit vendored skills (provenance and content checks) before they sync; also runs in CI |
+
+`npm run dev` starts the core, Vite UI and terminal services from the root. Plugin UI features use reviewed runtimes.
+
+The root workspace install includes the MCP package. Team's gateway is tested in its plugin repository.
 
 The two signing scripts exist because macOS ties permission grants to the code
 signature: an unsealed or ad-hoc-signed bundle gets asked for Full Disk Access,
@@ -80,7 +82,6 @@ These call the CLI action runner, which is also usable directly:
 ```bash
 cd dashboard
 npx tsx scripts/run-action.ts validate                 # repo integrity checks
-npx tsx scripts/run-action.ts sync_plugins             # materialise plugin dashboard + branding files only
 npx tsx scripts/run-action.ts sync                     # skills + agents + MCP + persona → tools
 npx tsx scripts/run-action.ts update_and_sync --push   # full origin update + sync
 ```
@@ -93,8 +94,6 @@ The dashboard owns most operational scripts. They handle tasks such as:
 - Full diagnostics.
 - Post-install setup.
 - Action runner execution.
-- Plugin dashboard/branding materialisation before `dev`, `build`, `start`, and full sync.
-- Peer boot (`start-peer-services.ts`) is now a no-op note: Paseo runs under launchd, and OpenCode only lazy-starts for session recap.
 - 1Password secret fallback (`op-secrets.ts`) before services bind ports.
 - Standup diagnostics.
 - Shift Dock mark raster generation (favicons, PWA icons, desktop icons).
@@ -106,14 +105,14 @@ Useful dashboard-only scripts (`npm run <name> --prefix dashboard`):
 | Command | Purpose |
 | ------- | ------- |
 | `test:watch` | Vitest in watch mode, with desktop and content-dir env scrubbed |
-| `test:e2e`, `test:e2e:ui` | Playwright journeys (`PLAYWRIGHT_VIDEO=1` records them — see [Recording demos](../contributing/recording-demos.md)) |
+| `test:e2e`, `test:e2e:ui` | Playwright journeys (`PLAYWRIGHT_VIDEO=1` records them) |
 | `check:contrast` | WCAG contrast check across theme presets |
 | `check:dynamic-routes` | Fail if a content route would be prerendered at build time |
 | `icons:pwa`, `build:seasonal-icons` | Regenerate Shift Dock mark rasters, and the seasonal icon subset |
 
 ## In-Process Action Catalog
 
-Maintenance actions run in-process via `dashboard/lib/scripts-runner.ts` (not shell scripts). The Actions page, Status page, top-bar sync indicator, and scheduled jobs all call `POST /api/scripts` with one of these IDs.
+Maintenance actions run in-process via `apps/ui/lib/scripts-runner.ts` (not shell scripts). The Actions page, Status page, top-bar sync indicator, and scheduled jobs all call `POST /api/scripts` with one of these IDs.
 
 `GET /api/scripts` returns `{ scripts: string[], catalog: ScriptCatalogEntry[] }` where each catalog entry includes `id`, `label`, `description`, `mutates`, `effects[]`, and `cmd`.
 
@@ -200,22 +199,6 @@ Run from repo root (dashboard scripts):
 
 ## Git Hooks
 
-DevHub can install a pre-push hook that runs verification before pushing.
-
-The hook (`.githooks/pre-push`) runs `scripts/scan-leaks.sh tree`, scrubs polluted runtime env, then `npm run verify` (lint, typecheck, tests, production build with `DEVHUB_SKIP_NEXT_TYPECHECK=true`). It is wired during `dashboard/scripts/postinstall.ts` and `scripts/install.sh`.
-
-When the active shell's Node does not match `.nvmrc`, the hook sources `nvm.sh` and runs `nvm use` before verify — so pushes from IDEs or GUI clients do not false-fail under a system Node. Install the pinned version (`nvm install` from repo root) if you see a warning about a Node mismatch.
-
-Before verify, the hook unsets `NODE_ENV=production`, `PORT`, `NOTES_DIR`/`TASKS_DIR`/other content-dir overrides, most `DEVHUB_*` layout vars, `__NEXT_PRIVATE_*` keys, **and every `GIT_*` variable**. Desktop sidecars and IDE terminals often inherit the first set from a running app; without the scrub, `next build` inside verify can fail with opaque `TypeError: generate is not a function`. Git hands hooks `GIT_DIR` (absolute when pushing from a linked worktree) and `GIT_CONFIG_*` overrides — tests that build throwaway repos would otherwise commit, branch, or run hooks against **this** checkout. That is why verify can look like it passed locally and then fail (or mutate the real repo) on push.
-
-If `dashboard/node_modules` is missing, the hook prints a reminder and **exits 0** (push proceeds) — run `npm install` at the repo root to enable checks.
-
-After a successful verify, the hook runs `scripts/devhub-backport-status.sh --quiet`. When generic commits since the backport watermark still need porting to public core, it prints a reminder and **still allows the push** — see [Fork workflow — Backport watermark](../contributing/fork-workflow.md#backport-watermark).
-
-Emergency bypass — use sparingly, then run `npm run verify` locally before merging:
-
-```bash
-DEVHUB_SKIP_VERIFY=1 git push
-```
+The pre-push hook runs the same checks as `npm run prepush`: a leak scan, boundary check, root typecheck, ESLint on changed JavaScript and TypeScript files, and smoke tests for routing, contracts, atomic writes, content sync and terminal input. The manual command compares against `origin/main` and includes local changes; a push checks the commits being sent and local changes. The hook uses `.nvmrc` when available, and clears inherited Git, DevHub and content-folder variables before checks. Content sync sets `DEVHUB_PREPUSH=content` to skip everything except the leak scan when all pushed commits are content-only. `DEVHUB_SKIP_VERIFY=1` bypasses everything for emergencies. CI still runs the full test suite; use `npm run verify` to run it locally.
 
 See [Environment Variables](environment-variables.md#development-and-ci).

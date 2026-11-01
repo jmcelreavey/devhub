@@ -1,6 +1,6 @@
 ---
 title: Creating a plugin
-description: "Build a plugin repo from scratch: manifest, assets, dashboard modules, and registration."
+description: "Build a plugin repo from scratch: manifest, assets, runtime features, and registration."
 order: 3
 icon: PackagePlus
 tags: [plugins]
@@ -24,11 +24,17 @@ does not pick one. Code you contribute *to the core* is AGPL-3.0-only. See the
 
 ## 1. Scaffold the repo
 
-For installation in a packaged app without rebuilding, start with [`templates/runtime-plugin`](../../templates/runtime-plugin/README.md). It contains a page, API route and stateless MCP server. The checkout instructions below remain supported for source plugins.
+For installation in a packaged app without rebuilding, start with [`templates/runtime-plugin`](../../templates/runtime-plugin/README.md). It contains a page, API route and stateless MCP server. The asset sync instructions below also apply to local plugins.
 
-The runtime manifest declares `api`, `transport`, `entry`, `sha256`, `lockfile: { path, sha256 }`, `pages`, `routes`, `mcp` and `permissions: { env, network, exec }`. All file paths are relative, cannot traverse directories and cannot use symlinks. Bundle dependencies ahead of time and commit the prebuilt entry and npm lockfile. `requires.dashboardPackages` still describes checkout dependencies; runtime code cannot import packages from DevHub. Required commands are checked but never installed from manifest hints.
+The runtime manifest declares `api`, `transport`, `entry`, `sha256`, `lockfile: { path, sha256 }`, `pages`, `routes`, `mcp` and `permissions: { env, network, exec }`. All file paths are relative, cannot traverse directories and cannot use symlinks. Bundle dependencies ahead of time and commit the prebuilt entry and npm lockfile. Runtime code cannot import packages from DevHub. Required commands are checked but never installed from manifest hints.
 
-Use stdin/stdout JSON as shown in the example. Do not import core modules. Return HTML for pages, JSON for APIs and JSON-RPC for MCP requests. Each request has a fresh process and must finish within 30 seconds. Background work, SSE and WebSockets need a future server transport. Keep legacy `dashboard` and `branding` fields only for checkout compatibility; packaged installs use only the explicit runtime declarations.
+Values forwarded through `permissions.env` are treated as secrets and redacted from public provider responses. Use optional `permissions.publicEnv` only for reviewed settings that may appear in output, such as an AWS profile name or service domain. The review lists those names separately. Common credential names, runtime controls, duplicates and names also present in `env` are rejected. Changing either list requires fresh consent; never place credentials in `publicEnv`.
+
+The host resolves reviewed names from current saved settings before its process environment, so Setup changes apply without a worker restart. Injected test contexts use only their supplied environment. Plugins receive the reviewed values, never the host settings file or unreviewed names.
+
+Use stdin/stdout JSON as shown in the example. Do not import core modules. Return HTML for pages, JSON for APIs and JSON-RPC for MCP requests. Each request has a fresh process and must finish within 30 seconds. Background work, SSE and WebSockets need a future server transport. The `dashboard` field is no longer supported; use runtime declarations for UI features.
+
+Page requests include `body.query` with URL query parameters as strings. `page` is reserved for the host and omitted; repeated keys use their first value. The host rejects queries longer than 4096 characters. Treat these values as untrusted and escape them before inserting them into HTML.
 
 Optional runtime branding contains a label, `dark` and `light` maps with six-digit hex values for `bg`, `text`, `accent` and `border`, and hashed `logo`/`font` assets. Logos must be PNG or WebP; fonts must be WOFF2. Test colour contrast in both modes. Users choose the preset on the plugin page and can restore the default.
 
@@ -52,7 +58,7 @@ Add a manifest at the root, `devhub-plugin.json`:
 
 - `name` — lowercase slug (`[a-z0-9][a-z0-9_-]*`). Becomes the origin tag `plugin:myplugin`.
 - `devhubApi` — the contract version DevHub understands (currently `"1"`).
-- `contributes` / `dashboard` — filled in below.
+- `contributes` / `runtime` — filled in below.
 
 
 You can also generate the starter tree:
@@ -61,11 +67,10 @@ You can also generate the starter tree:
 npm run plugins -- new team-tools --out ~/dev/team-tools
 ```
 
-That writes the manifest, a skill, an agent, an inert MCP example under
+That writes the runtime page and pinned lockfile, a skill, an agent, an inert MCP example under
 `examples/mcp/`, and a README. It does not initialise git, register the plugin,
 or publish it. It refuses a destination that already exists. Add `--dry-run` to
-print the file list without writing. Add `--branding` only when you want a theme
-in a checkout manifest. Packaged runtime branding uses the data contract above.
+print the file list without writing. Runtime themes use the data contract above.
 
 ## 2. Add tier-1 assets (skills, agents, MCP)
 
@@ -98,6 +103,54 @@ an existing command, the JSON file is enough. If it ships its own stdio server, 
 that Node package under `mcp-servers/<server-name>/` with its own `package.json`;
 DevHub's bootstrap and health check install missing dependencies for enabled plugin
 server packages.
+
+### Use the built-in MCP host (checkout plugins)
+
+An enabled, local checkout plugin can also add tools to DevHub's own MCP server.
+Put `devhub-mcp-toolsets.json` beside its valid `devhub-plugin.json`:
+
+```json
+{
+  "version": 1,
+  "toolsets": [{
+    "name": "myplugin",
+    "module": "src/mcp-tools.mjs",
+    "export": "register",
+    "tools": ["myplugin_read"]
+  }]
+}
+```
+
+`name` is a unique selectable group. Set `"extends": "tasks"` to register
+alongside an existing core group instead; the extension's own name is then
+not selectable. `DEVHUB_MCP_TOOLSETS=myplugin` selects this group,
+`DEVHUB_MCP_TOOLSETS=tasks` selects a tasks extension, and `off` imports
+no plugin entry modules. Unset or `all` selects every group. The descriptor
+lists each entry module's tool names up front; names cannot collide with
+core or other plugins. Paths are relative to the plugin root and cannot use
+symlinks or escape it. List local source imports in the optional `dependencies` array.
+
+The named export must register synchronously with
+`register(server, context, api)`. The frozen `server` facade exposes only
+`registerTool`; `api` supplies `z`, `blocksToText`, `textToBlocks` and
+`withDashboardErrors`. Register every declared tool exactly once, with no
+extras. For example:
+
+```js
+export function register(server) {
+  server.registerTool("myplugin_read", { description: "Read plugin data" },
+    async () => ({ content: [{ type: "text", text: "ready" }] }));
+}
+```
+
+This is trusted executable code in the MCP process, with the user's access,
+not a sandbox. Only explicitly enabled, unmanaged local plugins load. Disabling
+a plugin blocks later calls in existing sessions; a running handler or import
+side effect cannot be undone. Restart the MCP peer after source or descriptor
+changes, a failed import, or re-enabling a changed plugin. The host fingerprints
+the manifest, descriptor, entry module and declared dependencies; it does not
+attest transitive imports, assets, environment values or all plugin source.
+This checkout host contract does not establish packaged-app parity.
 
 Use the `PLUGIN_ROOT` placeholder when the MCP command or args need to point back to
 the plugin checkout:
@@ -152,17 +205,16 @@ npm run plugins -- add-from-url https://github.com/acme/team-tools
 Plugins page is also linked from Setup and from an empty Skills or Agents catalog.
 The installer enables skills and agents as before. With a valid runtime bundle it
 also enables the explicitly declared runtime pages, APIs, MCP endpoints and branding.
-Source-only MCP servers, dashboard modules, branding and overlays still block activation.
+Source-only MCP servers and legacy branding still block activation; `dashboard` manifests are rejected.
 
 ## 4. Sync and verify
 
-Restart the dashboard after adding or enabling a plugin. `npm run dev` materialises
-its dashboard modules and installs missing plugin MCP dependencies. Then use
+After adding or enabling a plugin, use
 **Skills / Actions → Sync** to publish its skills, agents and MCP definitions to your
 AI tools. Or run the sync from the CLI:
 
 ```bash
-cd ~/dev/devhub/dashboard
+cd ~/dev/devhub/apps/ui
 npx tsx scripts/run-action.ts sync
 ```
 
@@ -170,78 +222,11 @@ Your skills/agents/MCP now appear in the catalog tagged `plugin:myplugin` (read-
 sync to your tools (Claude, Codex, Cursor, OpenCode). The Skills page shows a per-plugin
 badge.
 
-## 5. (Optional) Add a tier-2 dashboard module
+## 5. Add runtime dashboard features
 
-A plugin can ship Next.js pages, API routes, libs, and components. Mirror the core
-`dashboard/` layout inside the plugin:
-
-```
-devhub-myplugin/
-  dashboard/
-    app/myfeature/page.tsx
-    app/api/myfeature/route.ts
-    lib/myfeature.ts
-    components/MyCard.tsx
-```
-
-Declare them with a `dashboard` block (paths are relative to `dashboard/`):
-
-```json
-"dashboard": {
-  "root": "dashboard",
-  "paths": ["app/myfeature", "app/api/myfeature", "lib/myfeature.ts", "components/MyCard.tsx"]
-}
-```
-
-On sync (or `predev`/`prebuild`), the **materialiser** copies these into the core dashboard
-at the *same relative paths*, so your `@/lib/...` / `@/components/...` imports resolve
-unchanged and Next compiles them. The copies are git-ignored via `.git/info/exclude`.
-
-Materialise manually with:
-
-```bash
-cd ~/dev/devhub/dashboard && npx tsx scripts/run-action.ts sync_plugins
-```
-
-Rules to know:
-
-- The materialiser **refuses to overwrite a git-tracked core path** — pick paths core
-  doesn't already own. (If you're extracting from core, `git rm` them from core first.)
-- A page needs a sidebar entry. Declare it under `dashboard.nav` in `devhub-plugin.json`
-  (e.g. `{ href: "/ops", label: "Ops", icon: "ops", group: "infra" }`). Core materialises
-  these into the sidebar / ⌘P. Prefer an existing group (`infra`, `library`, `system`) so
-  the item lands under the right section header.
-- Database connections for `/db`: set `dashboard.connections` to a `lib/` module that
-  default-exports a `DbConnectionProvider`, and include that file in `dashboard.paths`.
-  See [Plugins — Database connections](../architecture/plugins.md#database-connections).
-
-## 5a. (Optional) Overlay a core stub (single file)
-
-When core already imports a component but the real implementation is plugin-specific,
-declare an **overlay** instead of a `paths` copy. Core keeps a committed no-op baseline
-(builds without your plugin); your plugin overwrites it locally.
-
-In core, commit a stub first (example: `dashboard/app/repos/RepoRadarSection.tsx` returns
-`null`). In the plugin manifest:
-
-```json
-"dashboard": {
-  "root": "dashboard",
-  "paths": ["app/repos/RepoRadarSection.tsx"],
-  "overlays": ["app/repos/RepoRadarSection.tsx"]
-}
-```
-
-`dashboard.paths` is required, and needs at least one file, whenever `dashboard`
-is set. A manifest with only `overlays` is invalid.
-
-Ship the real file at `dashboard/app/repos/RepoRadarSection.tsx` inside the plugin repo.
-On materialise, DevHub copies your file over the stub and marks the path
-`skip-worktree` so it never shows as local churn. Overlays must be **single files** —
-directories belong in `paths`.
-
-When you remove or disable the overlay, DevHub restores the committed baseline. See
-[Plugins › Overlays](../architecture/plugins.md#overlays-single-file-extensions).
+Use the [runtime plugin contract](../architecture/plugins.md#packaged-runtime-plugins)
+for pages, APIs, providers and branding. Dashboard source copies and overlays are
+not loaded by the core/Vite build.
 
 ## 5b. (Optional) Require machine tooling
 
@@ -260,52 +245,10 @@ never on a bare fork of the template:
 If the `command` isn't on `PATH`, `npm install` fails with your `install` hint. See
 [plugins.md › Requirements](../architecture/plugins.md#requirements).
 
-## 5c. (Optional) Whitelabel DevHub (tier-3 branding)
+## 5c. (Optional) Add branding and themes
 
-Ship a theme, font, logo and desktop app icon that switch on when your
-plugin is enabled. Lay the assets out under `branding/` in your plugin root:
-
-```
-my-plugin/
-  branding/
-    theme.css          # :root[data-theme="dark|light"][data-theme-preset="<id>"] { … }
-    presets.json       # [{ "id": "<id>", "label", "description", "darkSwatch", "lightSwatch" }]
-    fonts/             # *.woff2/*.woff — reference as url("/fonts-plugin/<file>") in theme.css
-    logo.svg           # square brand mark (sidebar chip / boot screen)
-    icon.png           # >=512px desktop app icon
-```
-
-Then declare a `branding` block in `devhub-plugin.json`:
-
-```json
-"branding": {
-  "themeCss": "branding/theme.css",
-  "presets": "branding/presets.json",
-  "defaultPreset": "<id>",
-  "defaultMode": "system",
-  "fonts": "branding/fonts",
-  "logo": { "src": "branding/logo.svg", "label": "ACME" },
-  "desktopIcon": "branding/icon.png"
-}
-```
-
-`desktopIcon` replaces the deprecated `electronIcon` field; the materialiser accepts
-either for one release cycle. The materialiser writes `dashboard/public/plugin-desktop-icon.png`
-locally; `desktop/scripts/stage-icons.mjs` copies it into `desktop/staging/icons/` at
-build time. This file is **gitignored in core** — do not commit it in the public
-template. When no plugin icon is present, the packaged app uses the core DevHub Shift Dock mark
-(`dashboard/public/icon-master.png`).
-
-Every field is optional — contribute only a palette, or only a logo, if that's all you
-need. Your `theme.css` must define the palette variables for **both** `data-theme="dark"`
-and `data-theme="light"` under your `data-theme-preset` id (copy the variable list from any
-core block in `dashboard/app/globals.css`). Run `sync_plugins` (or just `npm run dev`) and
-the new preset, default and logo appear. Everything is a *seed*: the
-theme picker, the dark/light/system toggle and the IconPicker still override it, and the
-user's saved choice is never clobbered. Disable the plugin and DevHub reverts to stock.
-
-See [plugins.md › Tier 3 — branding](../architecture/plugins.md#tier-3--branding-whitelabel)
-for how the generated files are wired in.
+Declare reviewed branding and theme assets in the runtime manifest. See
+[reviewed runtime theme assets](../architecture/plugins.md#reviewed-runtime-theme-assets).
 
 ## 6. Publish
 
@@ -318,8 +261,7 @@ it next to their DevHub and add it to *their* `plugins.json`.
 
 ## Checklist
 
-- [ ] `devhub-plugin.json` validates (run `npx tsx scripts/run-action.ts sync_plugins` —
-      a bad manifest is reported, not fatal).
+- [ ] `devhub-plugin.json` validates in Plugins.
 - [ ] Asset layout mirrors core (`skills/<n>/SKILL.md`, `agents/<n>.md`, `mcp/<n>.json`).
 - [ ] No secrets committed; no content you wouldn't want in that repo's visibility.
 - [ ] Registered in `~/.config/devhub/plugins.json` and appears in the Skills catalog.

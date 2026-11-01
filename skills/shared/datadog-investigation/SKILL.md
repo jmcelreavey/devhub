@@ -10,14 +10,12 @@ description: Investigate a Datadog alert or monitor and suggest mitigations. Use
 Turn a single Datadog alert into a concrete, prioritized investigation. The goal is to
 answer three questions fast: **what broke, what changed, and what to check next.**
 
-DevHub's Datadog page (`/datadog`) and Today strip surface recent `@oncall-dad` (urgent,
-paging) and `@slack-dad-team-alerts` (team channel, non-paging) alerts. The "Investigate"
-button creates an OpenCode session pre-loaded with the alert context and these steps.
+Use the alert context supplied by the configured Datadog integration or the user.
 
 ## When to Use
 
-- An `@oncall-dad` alert is paging and you need to triage it now.
-- A `@slack-dad-team-alerts` warning needs a root-cause pass.
+- A paging alert needs immediate triage.
+- A non-paging warning needs a root-cause pass.
 - You want to correlate an alert with a recent deploy or commit.
 
 ## How to Use
@@ -36,4 +34,4 @@ button creates an OpenCode session pre-loaded with the alert context and these s
 
 A concise summary: **what the alert means**, **the most likely cause** (with the change you
 suspect), **the exact next checks**, and **an immediate mitigation** if warranted.
-Prioritize `@oncall-dad` (urgent) over `@slack-dad-team-alerts` (non-paging).
+Prioritise paging alerts over non-paging warnings.

@@ -22,7 +22,7 @@ Gaps: 22 files hand-roll `animate-spin` spinners; zero `loading.tsx` route skele
 
 ## Phase 1 — Loaders (consistency first, ~1 day)
 
-1. **Route-level skeletons.** Add `loading.tsx` to the heavy routes (`/work`, `/prs`, `/tickets`, `/status`, `/repos`, `/skills`, `/calendar`) rendering 3–4 `SkeletonRows` inside the standard page chrome. Cheap (one ~10-line file each) and kills the blank-page flash — the single biggest perceived-speed win available.
+1. **Route-level skeletons.** Add `loading.tsx` to the heavy routes (`/work`, `/prs`, `/status`, `/repos`, `/skills`, `/calendar`) rendering 3–4 `SkeletonRows` inside the standard page chrome. Cheap (one ~10-line file each) and kills the blank-page flash — the single biggest perceived-speed win available.
 2. **One loading vocabulary.** Rule: _shimmer for content arriving, spin only for an action the user just triggered_ (refresh buttons keep `animate-spin`; data panels never spin). Sweep the 22 `animate-spin` call sites — most panel-level ones should become skeletons. Add the rule to AGENTS.md so new code follows it.
 3. **Skeletons match the content's shape.** `SkeletonRows` gets optional `avatar`/`badge` variants so PR lists, ticket cards, and calendar rows shimmer in their real silhouette instead of generic bars (the settle feels seamless when the shapes line up).
 4. **Button busy states.** A tiny `useBusy` helper + `.btn[data-busy]` style (label dims, inline 3-dot pulse) replaces ad-hoc `disabled` flips on async buttons (Standup, Context pack, sync actions).

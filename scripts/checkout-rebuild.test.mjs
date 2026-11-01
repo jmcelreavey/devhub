@@ -3,10 +3,15 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { runRebuild, assertNpm10, acquireLock, optionsFromArgs, afterPullArgs, REBUILD_CODE } from "./checkout-rebuild.mjs";
-import { lockfilesMatchIgnoringLibc, shouldRestoreTsconfig } from "../dashboard/lib/desktop/build-env.mjs";
+import { runRebuild, spawnRun, assertNpm10, acquireLock, optionsFromArgs, afterPullArgs, REBUILD_CODE } from "./checkout-rebuild.mjs";
 
 const FORBIDDEN_GIT = new Set(["reset", "stash", "clean", "rebase"]);
+
+test("git write runner works with the current Node runtime", async () => {
+  const result = await spawnRun("git", ["--version"], { cwd: process.cwd(), gitWrite: true });
+  assert.equal(result.code, 0, result.stderr);
+  assert.match(result.stdout, /^git version /);
+});
 
 
 test("handover neither keeps a dead child's lock nor overwrites a concurrent owner's status", async (context) => {
@@ -70,14 +75,14 @@ test("failed staged-payload health does not publish a marker or replace the exis
   const basePayloadDir = path.join(w.root, "base");
   fs.mkdirSync(path.join(basePayloadDir, "runtime"), { recursive: true });
   fs.writeFileSync(path.join(basePayloadDir, "runtime", "node"), "node");
-  fs.mkdirSync(path.join(w.checkout, "desktop", "wsl"), { recursive: true });
-  fs.writeFileSync(path.join(w.checkout, "desktop", "wsl", "devhub-wsl-launch.sh"), "#!/bin/sh\n");
+  fs.mkdirSync(path.join(w.checkout, "apps/desktop", "wsl"), { recursive: true });
+  fs.writeFileSync(path.join(w.checkout, "apps/desktop", "wsl", "devhub-wsl-launch.sh"), "#!/bin/sh\n");
   const recordFile = path.join(w.appData, "config", "local-payload.json");
   fs.mkdirSync(path.dirname(recordFile), { recursive: true });
   const original = '{"dir":"old","commit":"old","basePayloadId":"pay"}';
   fs.writeFileSync(recordFile, original);
   const { run } = runner(gitState(), { onBuild: () => {
-    for (const name of ["server", "services", "resources"]) fs.mkdirSync(path.join(w.checkout, "desktop", "staging", name), { recursive: true });
+    for (const name of ["server", "services", "resources"]) fs.mkdirSync(path.join(w.checkout, "apps/desktop", "staging", name), { recursive: true });
   } });
   let partial;
   const status = await runRebuild({ mode: "payload", checkout: w.checkout, stateDir: w.stateDir, pull: false, appData: w.appData, basePayloadDir, basePayloadId: "pay" }, serviceDeps(run, {
@@ -237,12 +242,12 @@ test("releasing the parent lock twice never removes the child's lock", () => {
 function world() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "devhub-rebuild-"));
   const checkout = path.join(root, "checkout");
-  const dashboard = path.join(checkout, "dashboard");
+  const dashboard = path.join(checkout, "apps/ui");
   fs.mkdirSync(path.join(checkout, ".git"), { recursive: true });
-  fs.mkdirSync(path.join(dashboard, ".next"), { recursive: true });
-  fs.writeFileSync(path.join(dashboard, ".next", "BUILD_ID"), "old\n");
-  fs.writeFileSync(path.join(dashboard, "package-lock.json"), "{}\n");
-  fs.mkdirSync(path.join(dashboard, "node_modules"), { recursive: true });
+  fs.mkdirSync(path.join(dashboard, "dist"), { recursive: true });
+  fs.writeFileSync(path.join(dashboard, "dist", "index.html"), "old\n");
+  fs.writeFileSync(path.join(checkout, "package-lock.json"), "{}\n");
+  fs.mkdirSync(path.join(checkout, "node_modules"), { recursive: true });
   return {
     root,
     checkout,
@@ -266,7 +271,7 @@ function gitState(over = {}) {
 function runner(git, { fail = {}, onBuild } = {}) {
   const calls = [];
   async function run(cmd, args, opts) {
-    calls.push({ cmd, args: [...args], env: opts?.env });
+    calls.push({ cmd, args: [...args], env: opts?.env, cwd: opts?.cwd });
     if (cmd === "git" && FORBIDDEN_GIT.has(args[0])) {
       throw new Error(`rebuild must not run git ${args[0]}`);
     }
@@ -322,9 +327,9 @@ function runner(git, { fail = {}, onBuild } = {}) {
 }
 
 function wroteRebuild(dashboard) {
-  const dist = path.join(dashboard, ".next-rebuild");
+  const dist = path.join(dashboard, "dist-rebuild");
   fs.mkdirSync(dist, { recursive: true });
-  fs.writeFileSync(path.join(dist, "BUILD_ID"), "new\n");
+  fs.writeFileSync(path.join(dist, "index.html"), "new\n");
 }
 
 function serviceDeps(run, extra = {}) {
@@ -350,8 +355,8 @@ test("a service rebuild leaves the live build alone when the build fails", async
   );
   assert.equal(status.state, "failed");
   assert.equal(status.rolledBack, false);
-  assert.equal(fs.readFileSync(path.join(w.dashboard, ".next", "BUILD_ID"), "utf8"), "old\n");
-  assert.equal(fs.existsSync(path.join(w.dashboard, ".next-rebuild")), false);
+  assert.equal(fs.readFileSync(path.join(w.dashboard, "dist", "index.html"), "utf8"), "old\n");
+  assert.equal(fs.existsSync(path.join(w.dashboard, "dist-rebuild")), false);
   assert.equal(calls.some((call) => call.cmd === "systemctl"), false);
   fs.rmSync(w.root, { recursive: true, force: true });
 });
@@ -370,7 +375,7 @@ test("a failed restart puts the previous build back", async () => {
   assert.equal(status.state, "failed");
   assert.equal(status.rolledBack, true);
   assert.match(status.error, /previous build was restored/);
-  assert.equal(fs.readFileSync(path.join(w.dashboard, ".next", "BUILD_ID"), "utf8"), "old\n");
+  assert.equal(fs.readFileSync(path.join(w.dashboard, "dist", "index.html"), "utf8"), "old\n");
   fs.rmSync(w.root, { recursive: true, force: true });
 });
 
@@ -383,48 +388,42 @@ test("a clean service rebuild switches to the new build and does not rewrite git
     serviceDeps(run),
   );
   assert.equal(status.state, "succeeded");
-  assert.equal(fs.readFileSync(path.join(w.dashboard, ".next", "BUILD_ID"), "utf8"), "new\n");
+  assert.equal(fs.readFileSync(path.join(w.dashboard, "dist", "index.html"), "utf8"), "new\n");
   assert.equal(calls.filter((call) => call.cmd === "git" && call.args[0] === "pull").length, 1);
   assert.equal(calls.some((call) => call.cmd === "git" && call.args[0] === "fetch"), true);
-  const build = JSON.parse(fs.readFileSync(path.join(w.dashboard, ".next", "devhub-build.json"), "utf8"));
+  const build = JSON.parse(fs.readFileSync(path.join(w.dashboard, "dist", "devhub-build.json"), "utf8"));
   assert.equal(build.commit, "pulledcommit12abcdef");
   const buildCall = calls.find((call) => call.cmd === "npm" && call.args[1] === "build");
-  assert.equal(buildCall.env.DEVHUB_DIST_DIR, ".next-rebuild");
-  assert.equal(buildCall.env.DEVHUB_VERIFY_BUILD, "");
+  assert.equal(buildCall.env.DEVHUB_DIST_DIR, "dist-rebuild");
   assert.deepEqual(
     calls.filter((call) => call.cmd === "npm" && call.args[0] === "install").map((call) => call.args),
-    [["install", "--include=dev", "--no-audit", "--no-fund"]],
+    [["install", "--no-save", "--include=dev", "--no-audit", "--no-fund"]],
   );
+  assert.equal(calls.find((call) => call.cmd === "npm" && call.args[0] === "install")?.cwd, w.checkout);
   assert.equal(calls.some((call) => call.args.includes("--no-package-lock") || call.args[0] === "ci"), false);
   assert.equal(calls.some((call) => call.cmd === "git" && call.args[0] === "checkout"), false);
   fs.rmSync(w.root, { recursive: true, force: true });
 });
 
-test("a service install that rewrites package-lock.json restores it and leaves the live build running", async () => {
+test("a lockfile changed during install is never overwritten", async (context) => {
   const w = world();
-  const git = gitState({
-    lockfiles: { "dashboard/package-lock.json": " M dashboard/package-lock.json\n" },
-  });
-  const { run, calls } = runner(git, { onBuild: () => wroteRebuild(w.dashboard) });
-  const status = await runRebuild(
-    { mode: "service", checkout: w.checkout, stateDir: w.stateDir, pull: false },
-    serviceDeps(run),
-  );
+  context.after(() => fs.rmSync(w.root, { recursive: true, force: true }));
+  const base = runner(gitState());
+  const run = async (cmd, args, opts) => {
+    if (cmd === "npm" && args[0] === "install") fs.writeFileSync(path.join(w.checkout, "package-lock.json"), "user edit\n");
+    return base.run(cmd, args, opts);
+  };
+  const status = await runRebuild({ mode: "service", checkout: w.checkout, stateDir: w.stateDir, pull: false }, serviceDeps(run));
   assert.equal(status.state, "failed");
-  assert.match(status.error, /package-lock.json is out of sync with package.json; commit a regenerated lockfile/);
-  assert.equal(fs.readFileSync(path.join(w.dashboard, ".next", "BUILD_ID"), "utf8"), "old\n");
-  assert.deepEqual(
-    calls.find((call) => call.cmd === "git" && call.args[0] === "checkout")?.args,
-    ["checkout", "--", "dashboard/package-lock.json"],
-  );
-  assert.equal(calls.some((call) => call.cmd === "npm" && call.args[1] === "build"), false);
-  assert.equal(calls.some((call) => call.cmd === "systemctl"), false);
-  fs.rmSync(w.root, { recursive: true, force: true });
+  assert.match(status.error, /package-lock.json changed/);
+  assert.equal(fs.readFileSync(path.join(w.checkout, "package-lock.json"), "utf8"), "user edit\n");
+  assert.equal(base.calls.some((call) => call.cmd === "git" && call.args[0] === "checkout"), false);
+  assert.equal(base.calls.some((call) => call.cmd === "systemctl"), false);
 });
 
 test("uncommitted work and a diverged branch are refused without git writes", async () => {
   const dirtyWorld = world();
-  const dirtyGit = gitState({ dirty: " M dashboard/lib/x.ts\n" });
+  const dirtyGit = gitState({ dirty: " M apps/ui/lib/x.ts\n" });
   const dirty = runner(dirtyGit);
   const dirtyStatus = await runRebuild(
     { mode: "service", checkout: dirtyWorld.checkout, stateDir: dirtyWorld.stateDir, pull: true },
@@ -464,18 +463,18 @@ test("a live lock is a refusal and does not overwrite the running rebuild's stat
   fs.rmSync(w.root, { recursive: true, force: true });
 });
 
-test("a payload rebuild records a local payload and does not build into the live .next", async () => {
+test("a payload rebuild records a local payload and does not build into the live dist", async () => {
   const w = world();
   const base = path.join(w.root, "base");
   fs.mkdirSync(path.join(base, "runtime"), { recursive: true });
   fs.writeFileSync(path.join(base, "runtime", "node"), "node");
-  fs.mkdirSync(path.join(w.checkout, "desktop", "wsl"), { recursive: true });
-  fs.writeFileSync(path.join(w.checkout, "desktop", "wsl", "devhub-wsl-launch.sh"), "#!/bin/sh\n");
+  fs.mkdirSync(path.join(w.checkout, "apps/desktop", "wsl"), { recursive: true });
+  fs.writeFileSync(path.join(w.checkout, "apps/desktop", "wsl", "devhub-wsl-launch.sh"), "#!/bin/sh\n");
   const git = gitState();
   const { run, calls } = runner(git, {
     onBuild: (opts) => {
-      assert.equal(opts.env.DEVHUB_DIST_DIR, ".next-rebuild");
-      const staging = path.join(w.checkout, "desktop", "staging");
+      assert.equal(opts.env.DEVHUB_DIST_DIR, undefined);
+      const staging = path.join(w.checkout, "apps/desktop", "staging");
       for (const name of ["server", "services", "resources"]) {
         fs.mkdirSync(path.join(staging, name), { recursive: true });
         fs.writeFileSync(path.join(staging, name, "marker"), name);
@@ -505,15 +504,15 @@ test("a payload rebuild records a local payload and does not build into the live
   assert.equal(record.commit, git.head);
   assert.equal(fs.existsSync(path.join(record.dir, ".complete")), true);
   assert.equal(fs.readFileSync(path.join(record.dir, "server", "marker"), "utf8"), "server");
-  assert.equal(fs.readFileSync(path.join(w.dashboard, ".next", "BUILD_ID"), "utf8"), "old\n");
+  assert.equal(fs.readFileSync(path.join(w.dashboard, "dist", "index.html"), "utf8"), "old\n");
   assert.equal(calls.some((call) => call.cmd === "systemctl"), false);
   assert.deepEqual(
     calls.filter((call) => call.cmd === "npm" && call.args[0] === "ci").map((call) => call.args),
     [
       ["ci", "--include=dev", "--no-audit", "--no-fund"],
-      ["ci", "--include=dev", "--no-audit", "--no-fund"],
     ],
   );
+  assert.equal(calls.find((call) => call.cmd === "npm" && call.args[0] === "ci")?.cwd, w.checkout);
   assert.equal(calls.some((call) => call.cmd === "npm" && call.args[0] === "install"), false);
   assert.equal(calls.some((call) => call.args.includes("--no-package-lock")), false);
   fs.rmSync(w.root, { recursive: true, force: true });
@@ -524,14 +523,14 @@ test("a payload rebuild fails closed when the installed Node runtime is missing"
   const git = gitState();
   const { run } = runner(git, {
     onBuild: () => {
-      const staging = path.join(w.checkout, "desktop", "staging");
+      const staging = path.join(w.checkout, "apps/desktop", "staging");
       for (const name of ["server", "services", "resources"]) {
         fs.mkdirSync(path.join(staging, name), { recursive: true });
       }
     },
   });
-  fs.mkdirSync(path.join(w.checkout, "desktop", "wsl"), { recursive: true });
-  fs.writeFileSync(path.join(w.checkout, "desktop", "wsl", "devhub-wsl-launch.sh"), "#!/bin/sh\n");
+  fs.mkdirSync(path.join(w.checkout, "apps/desktop", "wsl"), { recursive: true });
+  fs.writeFileSync(path.join(w.checkout, "apps/desktop", "wsl", "devhub-wsl-launch.sh"), "#!/bin/sh\n");
   const status = await runRebuild(
     {
       mode: "payload",
@@ -583,7 +582,7 @@ test("install and build children do not inherit the running server's env", async
   fs.rmSync(w.root, { recursive: true, force: true });
 });
 
-test("a failed service install restores the lockfile, puts devDependencies back, and does not restart", async () => {
+test("a failed service install preserves the lockfile, puts devDependencies back, and does not restart", async () => {
   const w = world();
   const git = gitState();
   const { run, calls } = runner(git, { fail: { install: 1 } });
@@ -595,57 +594,9 @@ test("a failed service install restores the lockfile, puts devDependencies back,
   assert.match(status.error, /npm install failed/);
   assert.equal(calls.some((call) => call.cmd === "systemctl"), false);
   assert.equal(calls.some((call) => call.cmd === "npm" && call.args[1] === "build"), false);
-  assert.ok(calls.some((call) => call.cmd === "git" && call.args[0] === "checkout"));
+  assert.equal(calls.some((call) => call.cmd === "git" && call.args[0] === "checkout"), false);
   assert.ok(calls.some((call) => call.cmd === "npm" && call.args.includes("--ignore-scripts")));
-  assert.equal(fs.readFileSync(path.join(w.dashboard, ".next", "BUILD_ID"), "utf8"), "old\n");
-  fs.rmSync(w.root, { recursive: true, force: true });
-});
-
-test("a libc-only lockfile rewrite is in sync; a version change is not", async () => {
-  const before = JSON.stringify({ name: "d", packages: { "": { version: "1.0.0", libc: ["glibc"] } } });
-  const libcOnly = JSON.stringify({ name: "d", packages: { "": { version: "1.0.0" } } });
-  const versionChanged = JSON.stringify({ name: "d", packages: { "": { version: "2.0.0", libc: ["glibc"] } } });
-  assert.equal(lockfilesMatchIgnoringLibc(before, libcOnly), true);
-  assert.equal(lockfilesMatchIgnoringLibc(before, versionChanged), false);
-  assert.equal(shouldRestoreTsconfig(true, " M dashboard/tsconfig.json\n"), true);
-  assert.equal(shouldRestoreTsconfig(false, " M dashboard/tsconfig.json\n"), false);
-  assert.equal(shouldRestoreTsconfig(true, ""), false);
-
-  const w = world();
-  fs.writeFileSync(path.join(w.dashboard, "package-lock.json"), `${libcOnly}\n`);
-  const git = gitState({
-    lockfiles: { "dashboard/package-lock.json": " M dashboard/package-lock.json\n" },
-    show: { "dashboard/package-lock.json": `${before}\n` },
-  });
-  const { run, calls } = runner(git, { onBuild: () => wroteRebuild(w.dashboard) });
-  const status = await runRebuild(
-    { mode: "service", checkout: w.checkout, stateDir: w.stateDir, pull: false },
-    serviceDeps(run),
-  );
-  assert.equal(status.state, "succeeded", status.error);
-  assert.ok(calls.some((call) => call.cmd === "git" && call.args[0] === "checkout"));
-  assert.equal(calls.some((call) => call.cmd === "systemctl"), true);
-  fs.rmSync(w.root, { recursive: true, force: true });
-});
-
-test("a resolved change in the lockfile still stops the rebuild", async () => {
-  const before = JSON.stringify({ packages: { "node_modules/leftpad": { version: "1.0.0", resolved: "https://example/a.tgz", integrity: "sha512-aaa" } } });
-  const after = JSON.stringify({ packages: { "node_modules/leftpad": { version: "1.0.0", resolved: "https://example/b.tgz", integrity: "sha512-bbb" } } });
-  assert.equal(lockfilesMatchIgnoringLibc(before, after), false);
-  const w = world();
-  fs.writeFileSync(path.join(w.dashboard, "package-lock.json"), after);
-  const git = gitState({
-    lockfiles: { "dashboard/package-lock.json": " M dashboard/package-lock.json\n" },
-    show: { "dashboard/package-lock.json": before },
-  });
-  const { run, calls } = runner(git);
-  const status = await runRebuild(
-    { mode: "service", checkout: w.checkout, stateDir: w.stateDir, pull: false },
-    serviceDeps(run),
-  );
-  assert.equal(status.state, "failed");
-  assert.match(status.error, /out of sync/);
-  assert.equal(calls.some((call) => call.cmd === "systemctl"), false);
+  assert.equal(fs.readFileSync(path.join(w.dashboard, "dist", "index.html"), "utf8"), "old\n");
   fs.rmSync(w.root, { recursive: true, force: true });
 });
 
@@ -655,7 +606,7 @@ test("a build that rewrites tsconfig.json is restored when the file was clean", 
   const { run, calls } = runner(git, {
     onBuild: () => {
       wroteRebuild(w.dashboard);
-      git.tsconfigDirty = " M dashboard/tsconfig.json\n";
+      git.tsconfigDirty = " M apps/ui/tsconfig.json\n";
     },
   });
   const status = await runRebuild(
@@ -663,7 +614,7 @@ test("a build that rewrites tsconfig.json is restored when the file was clean", 
     serviceDeps(run),
   );
   assert.equal(status.state, "succeeded", status.error);
-  assert.ok(calls.some((call) => call.args[2] === "dashboard/tsconfig.json"));
+  assert.ok(calls.some((call) => call.args[2] === "apps/ui/tsconfig.json"));
   fs.rmSync(w.root, { recursive: true, force: true });
 });
 

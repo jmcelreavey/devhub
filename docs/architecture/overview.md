@@ -26,7 +26,7 @@ It brings together a dashboard, shared agent configuration, persistent notes, ta
 | MCP server    | Lets AI tools use DevHub filesystem data and dashboard-backed workflows |
 | Sync engine   | Copies shared skills, persona, agents, and MCP configs to local tools |
 | Desktop shell | Tauri app: owns the window, the process tree and updates (`desktop/`) |
-| Integrations  | Calendar, Jira, Datadog, GitHub, Figma, Slack, and plugin integrations             |
+| Integrations  | Calendar, Jira, Datadog, GitHub, Figma, and plugin integrations             |
 | Database client | `/db` workspace + MCP `db_*` tools for Postgres, MongoDB, SQLite    |
 
 ## Mental Model
@@ -52,9 +52,9 @@ synced copies — never the other way round, unless you explicitly pull from a t
 
 ## Local-First Design
 
-DevHub is built for one user on a trusted machine or trusted LAN.
+DevHub is built for one user on a trusted machine.
 
-There is no user login or session system. Mutating API routes are guarded globally by `dashboard/proxy.ts` via `requireDashboardAuth` (strict same-origin `Origin` **or** `X-DevHub-Secret` when `DEVHUB_API_SECRET` is set). Sensitive **GET** routes that need the same guard must enforce it per handler — OpenCode recap, agent usage, the Paseo routes, every `/api/db` route, editor runtime/incoming, and `/api/integrations`. There is no packaged Browser page; `/api/browser` was removed with that screen. See [API Routes — Common Behavior](../reference/api-routes.md#common-behavior) and [Environment Variables](../reference/environment-variables.md#core-variables).
+There is no user login or session system. Mutating API routes are guarded globally by `apps/ui/proxy.ts` via `requireDashboardAuth` (strict same-origin `Origin` **or** `X-DevHub-Secret` when `DEVHUB_API_SECRET` is set). Sensitive **GET** routes that need the same guard must enforce it per handler — OpenCode recap, agent usage, the Paseo routes, every `/api/db` route, browser/editor status, and `/api/integrations`. See [API Routes — Common Behavior](../reference/api-routes.md#common-behavior) and [Environment Variables](../reference/environment-variables.md#core-variables).
 
 Do not expose DevHub to the public internet without adding a proper perimeter auth layer on top of these guards.
 
@@ -85,7 +85,7 @@ During normal use, DevHub may run several local services:
 | MCP server  | —            | Stdio server launched by AI tools when needed |
 | Terminal    | `1339`       | Docked PTY                                    |
 
-`/chamber` and `/opencode` redirect to `/agents`. Only OpenCode session recap still lazy-starts a loopback OpenCode server. See [Agents (Paseo)](../guides/paseo-agents.md) and [Terminal and agent CLI](../guides/terminal-and-agent-cli.md).
+Only OpenCode session recap still lazy-starts a loopback OpenCode server. See [Agents (Paseo)](../guides/paseo-agents.md) and [Terminal and agent CLI](../guides/terminal-and-agent-cli.md).
 
 The dashboard can also run local actions, such as syncing skills or validating the repo.
 

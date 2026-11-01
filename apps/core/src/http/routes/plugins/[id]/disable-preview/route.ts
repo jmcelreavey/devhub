@@ -1,0 +1,16 @@
+import { pluginDisablePreview } from "../../../../../../../../packages/shared/actions/plugins";
+import { assertPluginManagement, pluginError, pluginJson, serverPluginContext } from "../../../../../lib/plugins/http";
+import { startLifecycle } from "../../../../../lib/plugins/operations";
+
+
+export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const auth = assertPluginManagement(req);
+  if (!auth.ok) return auth.response;
+  try {
+    const { id } = pluginDisablePreview.input.parse(await params);
+    const view = await pluginDisablePreview.handler({ id }, { execute: ({ id }) => startLifecycle(serverPluginContext(), id, "disable") }) as Awaited<ReturnType<typeof startLifecycle>>;
+    return pluginJson({ operationId: view.id, state: view.state, statusUrl: `/api/plugins/operations/${view.id}` }, 202);
+  } catch (err) {
+    return pluginError(err);
+  }
+}

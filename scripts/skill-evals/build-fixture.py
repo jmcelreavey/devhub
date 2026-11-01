@@ -14,7 +14,7 @@ passes every check we have. Asserting behaviour needs a repository whose history
 we control, because "does it find the revert" is only answerable if we planted
 one.
 
-**Demos.** `docs/contributing/recording-demos.md` requires disposable fixtures
+**Demos.** Demo recordings require disposable fixtures
 and reviewing every frame for names, tokens and private content. Recording these
 skills against real repositories means real commit subjects, real author emails
 and a list of the user's abandoned projects. This fixture has none of that, so a

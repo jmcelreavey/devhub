@@ -1,0 +1,246 @@
+import { describe, it, expect } from "vitest";
+import {
+  escapeRegExp,
+  stripLinkedJiraKeyFromText,
+  stripTagToken,
+  stripTagTokens,
+  rewriteTaskKey,
+  textWithJiraLinkPromotion,
+  parseMarkdownLinks,
+  splitTagTokens,
+  detectBareUrl,
+  matchesTaskSearch,
+} from "./task-text.ts";
+import type { Task } from "../../tasks/types.ts";
+
+const task = (over: Partial<Task> = {}): Task => ({
+  id: "1",
+  text: "do the thing",
+  done: false,
+  createdAt: "2026-07-01T00:00:00.000Z",
+  startDate: "2026-07-01",
+  rank: "1",
+  ...over,
+});
+
+describe("escapeRegExp", () => {
+  it("escapes characters that would otherwise be regex syntax", () => {
+    expect(new RegExp(escapeRegExp("a.b*c")).test("a.b*c")).toBe(true);
+    expect(new RegExp(escapeRegExp("a.b*c")).test("axbxc")).toBe(false);
+  });
+});
+
+describe("stripLinkedJiraKeyFromText", () => {
+  it("removes the key and tidies the remaining text", () => {
+    expect(stripLinkedJiraKeyFromText("ABC-1 fix the login bug", "ABC-1")).toBe("fix the login bug");
+  });
+
+  it("removes a leading separator left behind", () => {
+    expect(stripLinkedJiraKeyFromText("ABC-1 - fix login", "ABC-1")).toBe("fix login");
+    expect(stripLinkedJiraKeyFromText("ABC-1: fix login", "ABC-1")).toBe("fix login");
+  });
+
+  it("is case insensitive", () => {
+    expect(stripLinkedJiraKeyFromText("abc-1 fix login", "ABC-1")).toBe("fix login");
+  });
+
+  it("does not strip a key that is part of a longer token", () => {
+    // \b guards this; without it "ABC-12" would lose its prefix.
+    expect(stripLinkedJiraKeyFromText("ABC-12 fix login", "ABC-1")).toBe("ABC-12 fix login");
+  });
+
+  it("collapses the whitespace left where the key was", () => {
+    expect(stripLinkedJiraKeyFromText("fix ABC-1 login", "ABC-1")).toBe("fix login");
+  });
+});
+
+describe("rewriteTaskKey", () => {
+  it("prepends the key when the task had none", () => {
+    expect(rewriteTaskKey("fix login", undefined, "ABC-2")).toBe("ABC-2 fix login");
+  });
+
+  it("replaces an existing key in place", () => {
+    expect(rewriteTaskKey("ABC-1 fix login", "ABC-1", "ABC-2")).toBe("ABC-2 fix login");
+  });
+
+  it("prepends when the old key isn't actually in the text", () => {
+    expect(rewriteTaskKey("fix login", "ABC-1", "ABC-2")).toBe("ABC-2 fix login");
+  });
+
+  it("replaces every occurrence", () => {
+    expect(rewriteTaskKey("ABC-1 then ABC-1", "ABC-1", "X-9")).toBe("X-9 then X-9");
+  });
+});
+
+
+describe("textWithJiraLinkPromotion", () => {
+  it("prepends the first jira link key when the task has none", () => {
+    expect(
+      textWithJiraLinkPromotion("fix login", undefined, [
+        { kind: "jira", id: "ABC-9", label: "ABC-9" },
+      ]),
+    ).toBe("ABC-9 fix login");
+  });
+
+  it("leaves text alone when already jira-associated", () => {
+    expect(
+      textWithJiraLinkPromotion("ABC-1 fix login", "ABC-1", [
+        { kind: "jira", id: "XYZ-2", label: "XYZ-2" },
+      ]),
+    ).toBe("ABC-1 fix login");
+  });
+
+  it("does not duplicate a key already present in the title", () => {
+    expect(
+      textWithJiraLinkPromotion("abc-9 fix login", undefined, [
+        { kind: "jira", id: "ABC-9", label: "ABC-9" },
+      ]),
+    ).toBe("abc-9 fix login");
+  });
+
+  it("no-ops without jira links", () => {
+    expect(
+      textWithJiraLinkPromotion("fix login", undefined, [
+        { kind: "pr", id: "org/repo#1", label: "PR" },
+      ]),
+    ).toBe("fix login");
+  });
+});
+
+describe("splitTagTokens", () => {
+  it("returns plain text untouched when there are no tags", () => {
+    expect(splitTagTokens("no tags here")).toEqual([{ type: "text", text: "no tags here" }]);
+  });
+
+  it("splits a tag with its boundary preserved", () => {
+    expect(splitTagTokens("ship the #auth fix")).toEqual([
+      { type: "text", text: "ship the " },
+      { type: "tag", text: "#auth", tag: "auth" },
+      { type: "text", text: " fix" },
+    ]);
+  });
+
+  it("matches a tag at the very start", () => {
+    expect(splitTagTokens("#auth first")[0]).toEqual({ type: "tag", text: "#auth", tag: "auth" });
+  });
+
+  it("ignores hash fragments inside URLs and longer tokens", () => {
+    // "/" is not a valid tag boundary, and #auth-old must not yield #auth.
+    const parts = splitTagTokens("see site.com/#section or #auth-old");
+    expect(parts.filter((p) => p.type === "tag").map((p) => p.tag)).toEqual(["auth-old"]);
+  });
+});
+
+describe("parseMarkdownLinks", () => {
+  it("returns a single text part for plain text", () => {
+    expect(parseMarkdownLinks("hello")).toEqual([{ type: "text", text: "hello" }]);
+  });
+
+  it("splits text around a link", () => {
+    expect(parseMarkdownLinks("see [docs](/docs) now")).toEqual([
+      { type: "text", text: "see " },
+      { type: "link", text: "docs", url: "/docs" },
+      { type: "text", text: " now" },
+    ]);
+  });
+
+  it("handles several links", () => {
+    const parts = parseMarkdownLinks("[a](/a) and [b](/b)");
+    expect(parts.filter((p) => p.type === "link").map((p) => p.url)).toEqual(["/a", "/b"]);
+  });
+
+  it("handles a link at the very start and end", () => {
+    expect(parseMarkdownLinks("[a](/a)")).toEqual([{ type: "link", text: "a", url: "/a" }]);
+  });
+
+  it("returns an empty list for empty text", () => {
+    expect(parseMarkdownLinks("")).toEqual([]);
+  });
+});
+
+describe("detectBareUrl", () => {
+  it("finds a bare url", () => {
+    expect(detectBareUrl("see https://example.com now")).toBe("https://example.com");
+  });
+
+  it("ignores a url already inside a markdown link", () => {
+    expect(detectBareUrl("see [docs](https://example.com)")).toBeNull();
+  });
+
+  it("returns null when there is no url", () => {
+    expect(detectBareUrl("no links here")).toBeNull();
+  });
+
+  it("gives the same answer when called repeatedly", () => {
+    // MD_LINK_RE is a module-level /g regex, so lastIndex is shared state and
+    // without resets consecutive calls alternate between matching and not.
+    // The original code got this right; this pins the behaviour so a future
+    // tidy-up of the "redundant looking" resets can't reintroduce the hazard.
+    const text = "see [docs](https://example.com)";
+    expect(detectBareUrl(text)).toBeNull();
+    expect(detectBareUrl(text)).toBeNull();
+    expect(detectBareUrl(text)).toBeNull();
+  });
+
+  it("stays consistent when alternating between inputs", () => {
+    expect(detectBareUrl("plain https://a.com")).toBe("https://a.com");
+    expect(detectBareUrl("[x](https://b.com)")).toBeNull();
+    expect(detectBareUrl("plain https://a.com")).toBe("https://a.com");
+  });
+});
+
+describe("matchesTaskSearch", () => {
+  it("ANDs whitespace-separated terms", () => {
+    expect(matchesTaskSearch(task({ text: "Fix the login flow" }), "fix login")).toBe(true);
+    expect(matchesTaskSearch(task({ text: "Fix the login flow" }), "fix nonsense")).toBe(false);
+  });
+
+  it("matches on due date", () => {
+    expect(matchesTaskSearch(task({ due: "2026-08-20" }), "2026-08-20")).toBe(true);
+  });
+
+  it("matches on abandon reason", () => {
+    expect(matchesTaskSearch(task({ abandonReason: "superseded by ABC-9" }), "superseded")).toBe(
+      true,
+    );
+  });
+
+  it("matches on a linked entity label", () => {
+    const withLink = task({
+      links: [
+        {
+          kind: "pr",
+          id: "example-org/syndication-services#46",
+          label: "Add Meta feed delivery",
+        },
+      ],
+    });
+    expect(matchesTaskSearch(withLink, "meta feed")).toBe(true);
+    expect(matchesTaskSearch(withLink, "syndication-services#46")).toBe(true);
+  });
+});
+
+describe("stripTagToken", () => {
+  it("removes a hashtag without eating the rest of the title", () => {
+    expect(stripTagToken("QA pass #devhub #qa-walk", "qa-walk")).toBe("QA pass #devhub");
+  });
+
+  it("is a no-op when the tag is absent", () => {
+    expect(stripTagToken("QA pass #devhub", "qa-walk")).toBe("QA pass #devhub");
+  });
+});
+
+describe("stripTagTokens", () => {
+  it("removes every hashtag and collapses the gap it leaves", () => {
+    expect(stripTagTokens("Track session length #mobile-app #analytics")).toBe("Track session length ");
+    expect(stripTagTokens("Fix #analytics overlay")).toBe("Fix overlay");
+  });
+
+  it("returns the text untouched when there are no tags", () => {
+    expect(stripTagTokens("Chase reviews on app#146")).toBe("Chase reviews on app#146");
+  });
+
+  it("keeps a title that is nothing but tags", () => {
+    expect(stripTagTokens("#analytics #atlas")).toBe("#analytics #atlas");
+  });
+});

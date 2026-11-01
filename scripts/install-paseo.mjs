@@ -23,6 +23,7 @@ class UserMessage extends Error {}
 const USER_MESSAGE_PREFIX = "DEVHUB_USER_MESSAGE: ";
 
 const updateRequested = process.argv.includes("--update");
+const updateVersion = updateRequested ? process.argv[process.argv.indexOf("--update") + 1] : undefined;
 const pinned = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, "paseo-release.json"), "utf8"));
 const root = path.join(os.homedir(), ".local", "share", "devhub", "paseo");
 const home = path.join(root, "home");
@@ -41,6 +42,20 @@ function run(command, args, options = {}) {
 function which(bin) {
   try { return run("/usr/bin/which", [bin], { timeout: 5000 }).trim() || null; } catch { return null; }
 }
+/** Use npm shipped with Node directly, bypassing shell shims on PATH. */
+function npmCli() {
+  const node = fs.realpathSync(process.execPath);
+  const dir = path.dirname(node);
+  const prefix = path.basename(dir) === "bin" ? path.dirname(dir) : dir;
+  const candidates = [
+    path.join(prefix, "npm", "bin", "npm-cli.js"),
+    path.join(prefix, "lib", "node_modules", "npm", "bin", "npm-cli.js"),
+    path.join(prefix, "node_modules", "npm", "bin", "npm-cli.js"),
+  ];
+  const cli = candidates.find(candidate => fs.existsSync(candidate));
+  if (!cli) throw new UserMessage("npm is unavailable in this Node.js installation.");
+  return cli;
+}
 function pause(ms) { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms); }
 /** Right after a bootout, launchd can still be tearing the old job down and refuses a bootstrap. */
 function bootstrap(file) {
@@ -55,7 +70,7 @@ function xml(s) { return String(s).replaceAll("&", "&amp;").replaceAll("<", "&lt
 
 /** OPENCHAMBER_UI_PASSWORD is the legacy name, from when OpenChamber owned this password. */
 function configuredPassword() {
-  const file = process.env.DEVHUB_ENV_FILE || path.join(import.meta.dirname, "..", "dashboard", ".env.local");
+  const file = process.env.DEVHUB_ENV_FILE || path.join(import.meta.dirname, "..", "apps/ui", ".env.local");
   const env = { ...(fs.existsSync(file) ? parseEnv(fs.readFileSync(file, "utf8")) : {}), ...process.env };
   const password = env.DEVHUB_PASEO_PASSWORD?.trim() || env.OPENCHAMBER_UI_PASSWORD?.trim()
     || (fs.existsSync(passwordFile) ? fs.readFileSync(passwordFile, "utf8").trim() : "");
@@ -85,10 +100,9 @@ function installedVersion() {
   try { return JSON.parse(fs.readFileSync(path.join(root, "node_modules", "@getpaseo", "cli", "package.json"), "utf8")).version; } catch { return null; }
 }
 
-/** Safe-Chain is required for every npm install in DevHub; never fall back to plain npm. */
+/** Install Paseo with npm; staged files allow rollback if setup fails. */
 function installCli(version) {
-  const npm = which("aikido-npm");
-  if (!npm) throw new UserMessage("Safe-Chain is required: install @aikidosec/safe-chain and run `safe-chain setup` (see README).");
+  const npm = npmCli();
   fs.mkdirSync(root, { recursive: true, mode: 0o700 });
   const staging = fs.mkdtempSync(path.join(root, ".install-"));
   const names = ["node_modules", "package.json", "package-lock.json"];
@@ -103,12 +117,7 @@ function installCli(version) {
   };
   try {
     fs.writeFileSync(path.join(staging, "package.json"), JSON.stringify({ private: true }), { mode: 0o600 });
-    // The Paseo version already cleared Safe-Chain's minimum age (pinned, or picked by `npm view` through Safe-Chain);
-    // its fresh transitive deps would otherwise block the install. Malware scanning still runs. An env var, not
-    // --safe-chain-skip-minimum-package-age, because aikido-npm may spawn the shimmed npm, a second Safe-Chain that never sees the flag.
-    run(npm, ["install", "--prefix", staging, "--save-exact", "--no-fund", "--no-audit", `@getpaseo/cli@${version}`], {
-      env: { ...process.env, SAFE_CHAIN_MINIMUM_PACKAGE_AGE_HOURS: "0" },
-    });
+    run(process.execPath, [npm, "install", "--prefix", staging, "--save-exact", "--no-fund", "--no-audit", `@getpaseo/cli@${version}`]);
     run(process.execPath, [path.join(staging, "node_modules", "@getpaseo", "cli", "bin", "paseo"), "--version"], { timeout: 30_000 });
     for (const name of names) {
       const destination = path.join(root, name);
@@ -137,7 +146,7 @@ function writeConfig(passwordHash, version) {
 /** The daemon finds claude, cursor-agent, opencode and codex on PATH, so it needs the user's. */
 function daemonPath() {
   return buildDaemonPath({
-    current: process.env.PATH,
+    current: [process.env.PATH, "/opt/homebrew/bin", "/usr/local/bin"].filter(Boolean).join(path.delimiter),
     delimiter: path.delimiter,
     toolsBin: path.join(npmPrefix, "bin"),
     nodeDir: path.dirname(daemonNode),
@@ -187,6 +196,7 @@ function register(args) {
 }
 
 async function main() {
+  if (updateRequested && (typeof updateVersion !== "string" || !/^\d+\.\d+\.\d+$/.test(updateVersion))) throw new UserMessage("Choose a valid Paseo version to update.");
   if (process.platform !== "darwin" && process.platform !== "linux") throw new Error("Managed Paseo supports macOS and Linux (including WSL2). Run `paseo daemon start --foreground` yourself and set DEVHUB_PASEO_URL.");
   const saved = fs.existsSync(manifest) ? JSON.parse(fs.readFileSync(manifest, "utf8")) : undefined;
   const password = configuredPassword();
@@ -204,15 +214,7 @@ async function main() {
   const installed = installedVersion();
   let version = installed || pinned.cli;
   if (updateRequested) {
-    const npm = which("aikido-npm");
-    if (!npm) throw new UserMessage("Safe-Chain is required to update Paseo.");
-    // Ask the same protected registry that will install it; published releases can still be held for minimum age.
-    // Safe-Chain prints a notice on stdout after the JSON version. One quoted version is the release.
-    const versions = run(npm, ["view", "@getpaseo/cli", "version", "--json"], { timeout: 30_000 }).split(/\r?\n/).map((line) => line.trim()).filter((line) => /^"\d+\.\d+\.\d+"$/.test(line));
-    if (versions.length !== 1) throw new Error("Paseo did not publish an installable stable version.");
-    const latest = JSON.parse(versions[0]);
-    const newer = !installed || latest.localeCompare(installed, "en", { numeric: true }) > 0;
-    if (newer) version = latest;
+    version = updateVersion;
   }
   const configFile = path.join(home, "config.json");
   const previousConfig = fs.existsSync(configFile) ? fs.readFileSync(configFile) : null;

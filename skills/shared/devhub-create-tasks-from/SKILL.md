@@ -108,9 +108,10 @@ created under this parent (or under the creation parent per project Jira hierarc
 ### 3. Create Jira sub-tasks (one per work item)
 
 Use Atlassian MCP `createJiraIssue` when available and authenticated. Otherwise use
-DevHub `integrations_propose` with `issue.create`. A proposal is not a created
-ticket: a person must confirm it in Integrations. Never invent a child key or use
-the parent's key in its place.
+DevHub `integrations_write` with `issue.create`. This creates the ticket immediately;
+there is no proposal queue or approval step. Call it only when the user has asked
+for that specific write. Never invent a child key or use the
+parent's key in its place.
 
 For each `workItems[]` entry:
 
@@ -127,8 +128,8 @@ For each `workItems[]` entry:
   sub-tasks — they inherit sprint and team from the parent.
 - Sub-tasks inherit Foxes team and active sprint from the parent automatically.
 
-Record each returned child key as you go. If creation is pending, follow the
-pending-proposal path in step 4 instead.
+Record each returned child key as you go. If the outcome is uncertain, check Jira
+before retrying; do not guess a key.
 
 ### 4. Create DevHub tasks
 
@@ -153,23 +154,22 @@ When Jira keys are not available yet:
    and `parentKey: "<PARENT-KEY>"`. Do not prefix the summary with any Jira key.
    Link the source note and repo as usual; the parent may be a context link
    labelled `Parent <PARENT-KEY>`, never the task's own ticket.
-2. Pass the returned task id to `integrations_propose`:
+2. Pass the returned task id to `integrations_write`:
 
    ```text
-   integrations_propose { input: {
+   integrations_write { input: {
      action: "issue.create", provider: "jira", account: "default",
      projectKey: "<PROJECT>", parentKey: "<PARENT-KEY>",
      taskId: "<DEVHUB-TASK-ID>", title: "<short summary>", body: "<description>"
    } }
    ```
 
-3. Report the proposal as awaiting confirmation. On success, DevHub writes the
-   returned child key into that same task's text and Jira link. Do not create a
-   replacement task, guess a key, or copy the parent's status onto the task.
+3. Check the result. On success, DevHub attempts to write the returned child key
+   into that same task's text and Jira link. Check the task link result; do not
+   create a replacement task, guess a key, or copy the parent's status onto it.
 
-Omit `parentKey` when there is no confirmed parent yet. If creating the parent
-itself needs confirmation, stop at that proposal and wait for its real key before
-proposing children. A pending proposal id is not a Jira key.
+Omit `parentKey` when there is no confirmed parent yet. Wait for the parent's
+real key before creating children; an uncertain result is not a Jira key.
 
 - Work items can carry nested content and screenshots (toggle lists with images). Right
   after `tasks_create`, `notes_append` the item's `description` markdown to the task note
@@ -201,8 +201,8 @@ adding links. Never drop plan prose.
 - List sub-task keys with one-line summaries.
 
 Append; do not replace existing description content. If Atlassian is unavailable,
-report this follow-up rather than bypassing confirmation or sending unsupported
-proposal actions. Only list confirmed child keys; pending proposals stay pending.
+report this follow-up rather than sending unsupported actions. Only list child
+keys returned by successful creation.
 
 ### 7. Report back
 
@@ -216,7 +216,7 @@ Include the gist URL and parent key.
 | Read plan payload | curl plan URL from launch prompt |
 | Read / update note | `notes_read`, `notes_append`, `notes_write`, `entity_links_read` |
 | Publish gist | `share_publish` |
-| Create Jira | `createJiraIssue` (authenticated Atlassian MCP) or `integrations_propose` (`issue.create`, with `taskId`) |
+| Create Jira | `createJiraIssue` (authenticated Atlassian MCP) or `integrations_write` (`issue.create`, with `taskId`) |
 | Update Jira parent | `editJiraIssue` (Atlassian MCP) |
 | Create tasks | `tasks_create`, `tasks_context_sync` |
 | Repos | `repos_list` to resolve local folder names |
@@ -227,7 +227,7 @@ Include the gist URL and parent key.
 - Each DevHub task opens with correct links and a task note.
 - Parent Jira ticket lists sub-tasks and the gist.
 - No duplicate tickets for the same work item.
-- Pending proposals have a keyless DevHub task and its `taskId`; parent keys are context only.
+- Uncertain Jira outcomes are checked before retrying; parent keys are context only.
 
 ## Rules
 

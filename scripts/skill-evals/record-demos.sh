@@ -5,7 +5,7 @@
 # Why a wrapper rather than `vhs *.tape`: the tapes must never be pointed at a
 # real repository. project-graveyard's report names abandoned projects and reads
 # commit emails; the archaeologist prints commit subjects and author addresses.
-# `docs/contributing/recording-demos.md` requires disposable fixtures and a
+# Demo recordings require disposable fixtures and a
 # frame-by-frame review before publishing, and the cheapest way to honour that
 # is to make the safe path the only path — this script builds a throwaway
 # fixture and refuses to run without it.

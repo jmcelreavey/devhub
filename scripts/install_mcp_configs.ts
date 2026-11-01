@@ -1,7 +1,7 @@
 #!/usr/bin/env tsx
 /**
  * Backward-compatible delegator. The real implementation lives in
- * `dashboard/lib/sync/mcp.ts` (in-process so the dashboard Sync MCP button
+ * `apps/ui/lib/sync/mcp.ts` (in-process so the dashboard Sync MCP button
  * and bootstrap-install can share it). Keep this file around so anyone still
  * running `npx tsx scripts/install_mcp_configs.ts` gets the same result.
  *
@@ -16,7 +16,7 @@
  */
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { syncMcpServers } from "../dashboard/lib/sync/mcp";
+import { syncMcpServers } from "../apps/core/src/lib/sync/mcp";
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(SCRIPT_DIR, "..");

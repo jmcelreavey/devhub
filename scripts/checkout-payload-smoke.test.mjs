@@ -56,7 +56,7 @@ test("payload smoke uses its bundled Node and isolated loopback env, then kills 
   };
   await smokePayload("/payload", mock.deps);
   assert.equal(mock.calls[0].cmd, "/payload/runtime/node");
-  assert.deepEqual(mock.calls[0].args, ["/payload/server/server.js"]);
+  assert.deepEqual(mock.calls[0].args, ["/payload/server/core-server.mjs"]);
   const env = mock.calls[0].options.env;
   assert.equal(env.PORT, "45678");
   assert.equal(env.HOSTNAME, "127.0.0.1");

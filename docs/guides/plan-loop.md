@@ -11,8 +11,6 @@ related:
   - guides/skills
   - reference/api-routes
   - architecture/mcp-server
-  - guides/integrations
-  - integrations/jira
 ---
 
 # Plan loop
@@ -45,8 +43,6 @@ The task gets `stage: "draft"` and a note with:
 - `## Context snapshot` — related notes, cached PRs, earlier tasks with the same words, and matching Datadog alerts from the last 24h. All best-effort; capture never fails because a source is down.
 - `## Open questions` — empty checkbox to fill in.
 
-**From alerts.** Datadog → **Draft a task for new alerts** turns each new firing on-call alert into a draft (`Investigate: <alert>`), once per alert. Off by default; drafts are never dispatched. MCP: `tasks_alert_drafts`.
-
 Draft rows show a dashed **Draft** chip and don't offer **Implement with Agent**.
 
 ## 2. Write the plan
@@ -54,6 +50,16 @@ Draft rows show a dashed **Draft** chip and don't offer **Implement with Agent**
 Task menu → **Write plan with Agent…** opens a planning run with the `devhub-plan-write` skill. Pick a model that reasons well; the dialog remembers the planning model per CLI separately from the implementing one.
 
 The agent investigates (read-only), writes `## Plan` and `## Acceptance`, lists anything only you can decide under `## Open questions`, and marks the task ready when nothing is left open. Planning runs show on **Agents → Activity** but aren't linked to the task, so Resume stays about the implementation.
+
+For UI work, the planner can declare up to five specific, non-sensitive text or visibility assertions on the preview's initial page with `task_note_update` (`op: set_qa_scenario`) or the scoped planner's `task_plan_update`. The implementer can refine them. For a static build already in the task checkout, opt in with `upstarts/<repo>/preview.json`: `{"autoStart":true,"kind":"static","directory":"dist","path":"/"}`. The directory must be inside the checkout; don't set `command` or `port`. DevHub serves it on a loopback listener held through the run. Task URLs are ignored. Generated checks wait up to 60 seconds and don't use a model or interact with the page. A pass covers only those assertions, not the whole task.
+
+For a trusted dynamic app, use `{"autoStart":true,"kind":"dev","trustCommand":true,"command":"npm run dev -- --hostname 127.0.0.1 --port {port}"}`. `expo-web` can use the same opt-in with its own command. The command must use `{port}` and listen on `127.0.0.1`; don't set a fixed `port`. DevHub checks the listener's process group before forwarding requests. This needs Unix and `lsof`. The command runs with the dashboard's environment and network access, not in a sandbox: only opt in for a trusted checkout using safe test data.
+
+The static listener proves which server the QA browser reaches, but it doesn't make the build safe to inspect. Use a dedicated build without real data or credentials. The server checks paths against the declared directory and sends a Content Security Policy that blocks cross-origin fetches and frames. It isn't a filesystem sandbox: files and symlinks can change between a path check and a read, including while QA runs. If the build's safety is unknown, record the gap and verify manually. Saved scenarios with interactive actions or no explicit wait-only menu are skipped automatically; run them manually only against a safe preview. Model-assisted scenarios may send task title, description and acceptance criteria, scenario context and goals, page text, URLs and screenshots to the provider. Missing credentials block decisions rather than pass them.
+
+**QA lab** (`/qa`) is the place to save and run manual scenarios and browse run history. A task's Evidence panel links to the same receipt, including its assertions, screenshots and video. Manual scenarios can interact with the target, so use a preview with test data.
+
+A before video must be requested during planning (`baselineRequired: true` or `Baseline capture: required`). Missing or late baselines show a reason. Generated baseline checks wait briefly for the capture; an absent post-change assertion is expected before implementation when a video exists.
 
 ## 3. Mark ready
 
@@ -69,6 +75,8 @@ Gaps come back as an error toast with **Mark anyway**. **Move back to draft** is
 ## 4. Implement
 
 **Implement with Agent…** opens the Agents handoff sheet and starts a Paseo agent linked to the task. The dialog has an optional **Anything else the agent should know?** box, which reaches the agent under `## Extra context from me`, and the prompt makes the agent restate the goal, list its assumptions and ask anything open **before** it writes code. That check-in is posted to Activity (`agent_interactive_note`) so the scoping decisions are auditable next to the run. The chip shows **Running** until the conversation finishes or you cancel it (see [Task agent handoff](task-agent-handoff.md#interactive-leftover)). When it ends, a snapshot (branch, commit, changes, session) is appended to the handoff.
+
+On Auto, verification runs without publishing by default and changes stay uncommitted. Select **Commit, push and open a PR before verification** when that workflow is wanted; opening a PR is not required for local verification.
 
 ## 5. Follow the PR
 
@@ -87,21 +95,8 @@ The dashboard checks the explicitly linked PR of each task's latest finished run
 
 MCP: `tasks_pr_watch` (`check` / `dismiss`); `tasks_agent_resume` includes the finding and clears it.
 
-## Ready for review
-
-New PRs open ready for review. Completing a task (or moving its Jira ticket to a Code Review-like status through DevHub) is a safety net for drafts left behind: DevHub runs `gh pr ready` on the task's own open draft PRs.
-
-- Sources: the task's `kind: "pr"` links, then PRs its **implement** runs recorded. Research/review runs are ignored.
-- Only open drafts authored by the signed-in `gh` user. Someone else's draft, a ready PR, or a merged/closed PR is skipped.
-- Failures never throw: they are appended to the task note's log with the `gh pr ready <url>` command to run by hand.
-- Idempotent. Completing the same task twice does not republish.
-
-Home and Storyboard cards at **ready-for-review** offer **Copy Slack message** (PR and Jira links). Slack progress posts the same request when posting is on. See [Slack](integrations.md#home-tab-and-agent-progress).
-
 ## 6. Status
 
-- Today → Morning briefing → **Plans**: what needs you (fix, complete, decide) plus counts of the rest.
-- Briefing canvas: `window.__BRIEFING__.planStatus` (live, not day-cached).
 - MCP `tasks_plan_status`, HTTP `GET /api/tasks/plan-status`.
 
 Buckets, most urgent first: PR needs a fix · merged (complete it) · PR closed · agent running · waiting on merge · stopped (resumable) · blocked · ready to hand to an agent · drafts to write up.

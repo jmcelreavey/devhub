@@ -1,6 +1,6 @@
 ---
 title: Platform support
-description: Which platforms run DevHub locally and which use the dashboard over LAN.
+description: Which platforms run DevHub locally.
 order: 4
 icon: MonitorSmartphone
 tags: [reference]
@@ -19,7 +19,6 @@ DevHub is designed for local developer machines.
 | macOS             | Primary                | Best-supported local development path                |
 | Windows with WSL2 | Supported              | Use WSL for the repo and Node environment            |
 | Linux             | Supported              | Packaged AppImage and `.deb` are x86_64, built on Ubuntu 22.04. Closing the window quits (no tray). Checkout installs use standard Node 22 and Git. |
-| iOS and iPadOS    | Dashboard over LAN | Notes and tasks work; local terminals and scripts run on the host |
 
 ## Required Tools
 
@@ -41,29 +40,4 @@ DevHub is designed for local developer machines.
 
 ## Network Requirements
 
-Local-only use needs only localhost access.
-
-LAN use requires DevHub to bind to a LAN-accessible address and your firewall to allow the relevant ports.
-
-Do not expose DevHub directly to the public internet without adding authentication.
-
-## WSL Notes
-
-LAN traffic hits **Windows** first, so Windows must accept and route it before DevHub's LAN mode (see [Setup](../getting-started/setup.md#localhost-vs-lan-access)) is reachable from other devices.
-
-**Mirrored networking (recommended, Windows 11 22H2+).** Add this to `%USERPROFILE%\.wslconfig`, then `wsl --shutdown` and reopen your distro:
-
-```ini
-[wsl2]
-networkingMode=mirrored
-```
-
-You may need Microsoft's [Hyper-V firewall rules](https://learn.microsoft.com/en-us/windows/wsl/networking#mirrored-mode-networking) once. Other devices use your **Windows** Wi‑Fi/Ethernet IPv4.
-
-**Default NAT mode.** From an **elevated** Windows PowerShell:
-
-```powershell
-powershell.exe -ExecutionPolicy Bypass -File "\\wsl$\YOUR_DISTRO_NAME\home\YOU\dev\devhub\scripts\wsl\forward-devhub.ps1"
-```
-
-That sets a `netsh` portproxy for dashboard port `1337` and Agents port `6767`, plus firewall rules. The terminal port stays local. Re-run it after a reboot if devices can't connect.
+Local-only use needs only localhost access. Do not expose DevHub directly to the public internet; it has no user login.

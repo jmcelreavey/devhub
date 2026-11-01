@@ -1,0 +1,299 @@
+import fs from "node:fs";
+import { setupSave } from "../../../../../../../packages/shared/actions/setup";
+import path from "node:path";
+import { normalizeAgentCli } from "../../../../lib/agent/cli-env";
+import { normalizeAiProvider, toAgentLaunchCli } from "../../../../lib/ai/preference";
+
+import {
+  getPackagedUserEnvFilePath,
+  patchEnvFileKeys,
+  readDashboardEnvLocalFile,
+  syncAgentProcessEnvFromOverrides,
+  syncPaseoProcessEnvFromOverrides,
+  syncInfraProcessEnvFromOverrides,
+  syncDatadogProcessEnvFromOverrides,
+  syncGoogleProcessEnvFromOverrides,
+  syncJiraProcessEnvFromOverrides,
+  syncQaProcessEnvFromOverrides,
+  writeDashboardEnvLocalFile,
+} from "../../../../lib/dashboard-env-local";
+import { isSameOriginStrict, parseBody, requireDashboardAuth } from "../../../../lib/api-utils";
+import { activateOptionalIntegrationSettings, applyOptionalIntegrationSettings, isOptionalIntegrationAvailable, optionalIntegrationSavedMessage } from "../../../../lib/plugin-integration-hooks";
+import { invalidateJiraTicketsCache } from "../../../../lib/jira/tickets-cache";
+import { SetupSaveSchema } from "../../../../lib/schemas";
+import { readDatadogSetupStatus } from "../../../../lib/setup/datadog-setup-status";
+import { resolveSetupPath, unsupportedPathMessage } from "../../../../lib/setup/input-path";
+
+
+
+function mask(val: string): string {
+  if (val.length <= 8) return "****";
+  return val.slice(0, 4) + "****" + val.slice(-4);
+}
+
+function validateDirectory(p: string): string | null {
+  const unsupported = unsupportedPathMessage(p);
+  if (unsupported) return unsupported;
+  const resolved = resolveSetupPath(p);
+  if (!path.isAbsolute(resolved)) return "Path must be absolute";
+  let stat;
+  try {
+    stat = fs.statSync(resolved);
+  } catch {
+    return "Path does not exist";
+  }
+  if (!stat.isDirectory()) return "Path is not a directory";
+  return null;
+}
+
+export async function POST(req: Request) {
+  const parsed = await parseBody(req, SetupSaveSchema);
+  if (!parsed.ok) return parsed.response;
+  return await setupSave.handler({ body: parsed.data }, {
+    execute: ({ body }) => saveSetup(req, body as typeof parsed.data),
+  }) as Response;
+}
+
+async function saveSetup(req: Request, input: ReturnType<typeof SetupSaveSchema.parse>) {
+  const { calendar, jira, datadog, core, network, infra, agent, typesafe, slack } = input;
+  if (slack !== undefined) {
+    const auth = requireDashboardAuth(req);
+    if (!auth.ok) return auth.response;
+    if (!isSameOriginStrict(req)) return Response.json({ error: "Manage Slack settings in DevHub." }, { status: 403 });
+    if (!isOptionalIntegrationAvailable()) return Response.json({ ok: false, error: "Team Slack is unavailable. Saved settings are unchanged." }, { status: 503 });
+  }
+  if (datadog !== undefined) {
+    const status = await readDatadogSetupStatus();
+    if (!status.available || status.failed) {
+      return Response.json({ ok: false, error: "Datadog setup is unavailable. Saved settings are unchanged." }, { status: 503 });
+    }
+  }
+
+  // Validate core paths up-front so we don't half-write the env file.
+  if (core) {
+    if (core.repoRoot !== undefined && core.repoRoot.trim()) {
+      const err = validateDirectory(core.repoRoot);
+      if (err) {
+        return Response.json(
+          { ok: false, error: `REPO_ROOT: ${err}` },
+          { status: 400 },
+        );
+      }
+    }
+    if (core.notesDir !== undefined && core.notesDir.trim()) {
+      const err = validateDirectory(core.notesDir);
+      if (err) {
+        return Response.json(
+          { ok: false, error: `NOTES_DIR: ${err}` },
+          { status: 400 },
+        );
+      }
+    }
+    if (core.reposDir !== undefined && core.reposDir.trim()) {
+      const err = validateDirectory(core.reposDir);
+      if (err) {
+        return Response.json(
+          { ok: false, error: `Code folder: ${err}` },
+          { status: 400 },
+        );
+      }
+    }
+  }
+
+  if (infra?.scriptsRepoPath !== undefined && infra.scriptsRepoPath.trim()) {
+    const err = validateDirectory(infra.scriptsRepoPath);
+    if (err) {
+      return Response.json(
+        { ok: false, error: `AUTOMATION_REPO_PATH: ${err}` },
+        { status: 400 },
+      );
+    }
+  }
+
+  const { overrides: baseOverrides, passthrough } = readDashboardEnvLocalFile();
+  const overrides = new Map(baseOverrides);
+
+  let needsRestartNotice = !!(core ?? network);
+
+  if (core) {
+    if (core.repoRoot !== undefined) {
+      const v = core.repoRoot.trim();
+      if (v) overrides.set("REPO_ROOT", resolveSetupPath(v));
+      else overrides.delete("REPO_ROOT");
+      needsRestartNotice = true;
+    }
+    if (core.notesDir !== undefined) {
+      const v = core.notesDir.trim();
+      if (v) overrides.set("NOTES_DIR", resolveSetupPath(v));
+      else overrides.delete("NOTES_DIR");
+      needsRestartNotice = true;
+    }
+    if (core.reposDir !== undefined) {
+      const v = core.reposDir.trim();
+      if (v) overrides.set("DEVHUB_REPOS_DIR", resolveSetupPath(v));
+      else overrides.delete("DEVHUB_REPOS_DIR");
+      // Repo discovery reads this per request, so it takes effect immediately —
+      // but Next's server env snapshot does not, hence the restart notice.
+      needsRestartNotice = true;
+    }
+  }
+
+  if (calendar) {
+    if (calendar.clientId) overrides.set("GOOGLE_CLIENT_ID", calendar.clientId);
+    if (calendar.clientSecret) overrides.set("GOOGLE_CLIENT_SECRET", calendar.clientSecret);
+    if (calendar.refreshToken) overrides.set("GOOGLE_REFRESH_TOKEN", calendar.refreshToken);
+  } else if (calendar === null) {
+    overrides.delete("GOOGLE_CLIENT_ID");
+    overrides.delete("GOOGLE_CLIENT_SECRET");
+    overrides.delete("GOOGLE_REFRESH_TOKEN");
+    overrides.delete("GOOGLE_OAUTH_REDIRECT_URI");
+  }
+
+  if (jira) {
+    if (jira.domain?.trim()) {
+      const domain = jira.domain.trim();
+      overrides.set("JIRA_DOMAIN", domain);
+      // Kept in sync for older bundles that still read the public var. Browse
+      // links themselves use the runtime domain injected by the root layout.
+      overrides.set("NEXT_PUBLIC_JIRA_DOMAIN", domain);
+    }
+    if (jira.email?.trim()) overrides.set("JIRA_EMAIL", jira.email.trim());
+    if (jira.apiToken?.trim()) overrides.set("JIRA_API_TOKEN", jira.apiToken.trim());
+    invalidateJiraTicketsCache();
+  } else if (jira === null) {
+    overrides.delete("JIRA_DOMAIN");
+    overrides.delete("JIRA_EMAIL");
+    overrides.delete("JIRA_API_TOKEN");
+    overrides.delete("NEXT_PUBLIC_JIRA_DOMAIN");
+  }
+
+  if (datadog) {
+    if (datadog.apiKey) overrides.set("DATADOG_API_KEY", datadog.apiKey);
+    if (datadog.applicationKey) overrides.set("DATADOG_APPLICATION_KEY", datadog.applicationKey);
+    // Shared identity — also used by infrastructure plugins. Empty string clears the schedule.
+    if (datadog.email !== undefined) {
+      const v = datadog.email.trim();
+      if (v) overrides.set("DATADOG_USER_EMAIL", v);
+    }
+    if (datadog.scheduleId !== undefined) {
+      const v = datadog.scheduleId.trim();
+      if (v) overrides.set("DATADOG_ONCALL_SCHEDULE_ID", v);
+      else overrides.delete("DATADOG_ONCALL_SCHEDULE_ID");
+    }
+  } else if (datadog === null) {
+    overrides.delete("DATADOG_API_KEY");
+    overrides.delete("DATADOG_APPLICATION_KEY");
+    overrides.delete("DATADOG_ONCALL_SCHEDULE_ID");
+  }
+
+  if (network !== undefined) {
+    // The Agents (Paseo) daemon password. Blank keeps whatever is saved: clearing it
+    // would lock DevHub out of a daemon still configured with the old one.
+    const agentsPassword = network.agentsPassword?.trim();
+    if (agentsPassword) overrides.set("DEVHUB_PASEO_PASSWORD", agentsPassword);
+    needsRestartNotice = true;
+  }
+
+  if (infra) {
+    if (infra.scriptsRepoPath !== undefined) {
+      const v = infra.scriptsRepoPath.trim();
+      if (v) overrides.set("AUTOMATION_REPO_PATH", resolveSetupPath(v));
+      else overrides.delete("AUTOMATION_REPO_PATH");
+    }
+  }
+
+  if (agent) {
+    const provider =
+      agent.provider !== undefined
+        ? normalizeAiProvider(agent.provider)
+        : agent.cli !== undefined
+          ? normalizeAiProvider(agent.cli)
+          : null;
+
+    if (provider) {
+      overrides.set("DEVHUB_AI_PROVIDER", provider);
+      if (provider === "api") {
+        // Keep existing agent CLI for tool jobs; only set the generation preference.
+      } else {
+        const launch = toAgentLaunchCli(provider);
+        if (launch === "cursor" || launch === "chatgpt" || launch === "antigravity") overrides.set("DEVHUB_AGENT_CLI", launch);
+        else overrides.delete("DEVHUB_AGENT_CLI");
+      }
+    } else if (agent.cli !== undefined) {
+      const cli = normalizeAgentCli(agent.cli);
+      if (cli === "cursor" || cli === "chatgpt" || cli === "antigravity") overrides.set("DEVHUB_AGENT_CLI", cli);
+      else overrides.delete("DEVHUB_AGENT_CLI");
+    }
+    if (agent.opencodeModel !== undefined) {
+      const v = agent.opencodeModel.trim();
+      if (v) overrides.set("DEVHUB_AGENT_OPENCODE_MODEL", v);
+      else overrides.delete("DEVHUB_AGENT_OPENCODE_MODEL");
+    }
+    if (agent.cursorModel !== undefined) {
+      const v = agent.cursorModel.trim();
+      if (v) overrides.set("DEVHUB_AGENT_CURSOR_MODEL", v);
+      else overrides.delete("DEVHUB_AGENT_CURSOR_MODEL");
+    }
+  }
+
+
+  if (typesafe?.apiKey?.trim()) overrides.set("TYPESAFE_API_KEY", typesafe.apiKey.trim());
+  else if (typesafe === null) overrides.delete("TYPESAFE_API_KEY");
+  if (slack !== undefined) {
+    try { applyOptionalIntegrationSettings(overrides, slack); }
+    catch { return Response.json({ ok: false, error: "Team Slack is unavailable. Saved settings are unchanged." }, { status: 503 }); }
+  }
+  writeDashboardEnvLocalFile(overrides, passthrough);
+  if (jira) {
+    const packaged = getPackagedUserEnvFilePath();
+    if (packaged) {
+      patchEnvFileKeys(packaged, overrides, ["JIRA_DOMAIN", "JIRA_EMAIL", "JIRA_API_TOKEN", "NEXT_PUBLIC_JIRA_DOMAIN"]);
+    }
+  }
+  syncGoogleProcessEnvFromOverrides(overrides);
+  syncJiraProcessEnvFromOverrides(overrides);
+  syncDatadogProcessEnvFromOverrides(overrides);
+  syncInfraProcessEnvFromOverrides(overrides);
+  syncPaseoProcessEnvFromOverrides(overrides);
+  syncAgentProcessEnvFromOverrides(overrides);
+  if (typesafe !== undefined) syncQaProcessEnvFromOverrides(overrides);
+  if (slack !== undefined) activateOptionalIntegrationSettings(overrides);
+
+  const saved: string[] = [];
+  if (slack !== undefined) saved.push(optionalIntegrationSavedMessage);
+  if (core?.repoRoot && overrides.get("REPO_ROOT")) saved.push(`REPO_ROOT=${overrides.get("REPO_ROOT")}`);
+  if (core?.notesDir && overrides.get("NOTES_DIR")) saved.push(`NOTES_DIR=${overrides.get("NOTES_DIR")}`);
+  if (core?.reposDir && overrides.get("DEVHUB_REPOS_DIR")) {
+    saved.push(`DEVHUB_REPOS_DIR=${overrides.get("DEVHUB_REPOS_DIR")}`);
+  }
+  if (calendar?.clientId) saved.push(`GOOGLE_CLIENT_ID=${mask(calendar.clientId)}`);
+  if (calendar?.clientSecret) saved.push(`GOOGLE_CLIENT_SECRET=${mask(calendar.clientSecret)}`);
+  if (calendar?.refreshToken) saved.push(`GOOGLE_REFRESH_TOKEN=${mask(calendar.refreshToken)}`);
+  if (jira?.domain) saved.push(`JIRA_DOMAIN=${jira.domain}`);
+  if (jira?.email) saved.push(`JIRA_EMAIL=${jira.email}`);
+  if (jira?.apiToken) saved.push(`JIRA_API_TOKEN=${mask(jira.apiToken)}`);
+  if (datadog?.apiKey) saved.push(`DATADOG_API_KEY=${mask(datadog.apiKey)}`);
+  if (datadog?.applicationKey) saved.push(`DATADOG_APPLICATION_KEY=${mask(datadog.applicationKey)}`);
+  if (datadog?.email?.trim()) saved.push(`DATADOG_USER_EMAIL=${datadog.email.trim()}`);
+  if (datadog?.scheduleId?.trim()) saved.push(`DATADOG_ONCALL_SCHEDULE_ID=${datadog.scheduleId.trim()}`);
+  if (typesafe?.apiKey?.trim()) saved.push(`TYPESAFE_API_KEY=${mask(typesafe.apiKey.trim())}`);
+  if (infra?.scriptsRepoPath && overrides.get("AUTOMATION_REPO_PATH")) saved.push(`AUTOMATION_REPO_PATH=${overrides.get("AUTOMATION_REPO_PATH")}`);
+  if (agent?.provider) saved.push(`DEVHUB_AI_PROVIDER=${normalizeAiProvider(agent.provider) ?? agent.provider}`);
+  else if (agent?.cli !== undefined) saved.push(`DEVHUB_AGENT_CLI=${normalizeAgentCli(agent.cli)}`);
+  if (agent?.opencodeModel?.trim()) saved.push(`DEVHUB_AGENT_OPENCODE_MODEL=${agent.opencodeModel.trim()}`);
+  if (agent?.cursorModel?.trim()) saved.push(`DEVHUB_AGENT_CURSOR_MODEL=${agent.cursorModel.trim()}`);
+
+  if (network?.agentsPassword?.trim() && overrides.get("DEVHUB_PASEO_PASSWORD")) {
+    saved.push(`DEVHUB_PASEO_PASSWORD=${mask(overrides.get("DEVHUB_PASEO_PASSWORD")!)}`);
+  }
+
+  const message = needsRestartNotice
+    ? "Saved. Restart the dev server for core paths or network bind changes. Other values are already active in this session."
+    : "Saved. Changes apply immediately.";
+
+  return Response.json({
+    ok: true,
+    saved,
+    message,
+  });
+}

@@ -1,0 +1,266 @@
+"use client";
+
+import Link from "@/lib/navigation";
+import { useCallback, useState } from "react";
+import { Calendar, ChevronDown, ChevronUp, RefreshCw, Settings2 } from "lucide-react";
+import { useLive } from "@/lib/hooks/use-fetch";
+import type { CalendarEvent, GoogleCalendarInfo } from "@shared/calendar/types";
+import { CalendarEventRow } from "@/components/calendar/CalendarEventRow";
+import { todayISO } from "@/lib/utils";
+import { EmptyState, FetchError, PageHeader, SkeletonRows } from "@/components";
+import { BootScreen, useBootGate } from "@/components/ui/BootScreen";
+
+function isToday(dateStr: string): boolean {
+  return dateStr === todayISO();
+}
+
+interface WeekResponse {
+  days?: Record<string, CalendarEvent[]>;
+}
+
+interface CalendarsResponse {
+  configured?: boolean;
+  calendars?: GoogleCalendarInfo[];
+  selectedIds?: string[];
+  error?: string;
+}
+
+function formatDay(iso: string): string {
+  return new Date(iso).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+}
+
+function CalendarPicker({
+  calendars,
+  selectedIds,
+  onChange,
+  saving,
+}: {
+  calendars: GoogleCalendarInfo[];
+  selectedIds: Set<string>;
+  onChange: (next: Set<string>) => void;
+  saving: boolean;
+}) {
+  if (calendars.length === 0) {
+    return (
+      <p className="text-xs py-2 text-text-subtle">
+        No calendars found for this account.
+      </p>
+    );
+  }
+
+  return (
+    <div className="space-y-1">
+      {calendars.map((cal) => {
+        const checked = selectedIds.has(cal.id);
+        return (
+          <label
+            key={cal.id}
+            className="flex items-center gap-2 rounded px-2 py-1.5 text-sm cursor-pointer hover:bg-[var(--surface-2)]"
+          >
+            <input
+              type="checkbox"
+              checked={checked}
+              disabled={saving}
+              onChange={() => {
+                const next = new Set(selectedIds);
+                if (checked) next.delete(cal.id);
+                else next.add(cal.id);
+                onChange(next);
+              }}
+            />
+            <span
+              className="inline-block h-2.5 w-2.5 shrink-0 rounded-[var(--radius-sm)]"
+              style={{ background: cal.backgroundColor ?? "var(--accent)" }}
+              aria-hidden
+            />
+            <span className="min-w-0 flex-1 truncate text-text">
+              {cal.summary}
+            </span>
+            {cal.primary ? (
+              <span className="badge badge-muted text-[10px]">Primary</span>
+            ) : null}
+          </label>
+        );
+      })}
+    </div>
+  );
+}
+
+export default function CalendarPage() {
+  const { data, error, isLoading, mutate, isValidating } = useLive<WeekResponse>("/api/calendar/week", { /* Google Calendar changes independently. */ refreshInterval: 60_000 });
+  const boot = useBootGate(data !== undefined || !!error);
+  const {
+    data: calData,
+    error: calError,
+    mutate: mutateCalendars,
+  } = useLive<CalendarsResponse>("/api/calendar/calendars", { /* Google Calendar changes independently. */ refreshInterval: 60_000 });
+
+  const [showPicker, setShowPicker] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  const days = data?.days ?? {};
+  const sortedDays = Object.keys(days).sort();
+  const calendars = calData?.calendars ?? [];
+  const selectedIds = new Set(calData?.selectedIds ?? []);
+  const multiCalendar = selectedIds.size > 1;
+
+  const saveSelection = useCallback(
+    async (next: Set<string>) => {
+      setSaving(true);
+      setSaveError(null);
+      try {
+        const res = await fetch("/api/calendar/calendars", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ calendarIds: [...next] }),
+        });
+        const body = (await res.json()) as { error?: string };
+        if (!res.ok) throw new Error(body.error ?? "Couldn't save calendar selection");
+        await Promise.all([mutateCalendars(), mutate()]);
+      } catch (e) {
+        setSaveError(e instanceof Error ? e.message : "Couldn't save calendar selection");
+      } finally {
+        setSaving(false);
+      }
+    },
+    [mutate, mutateCalendars],
+  );
+
+  return (
+    <div className="page-wrapper">
+      <BootScreen state={boot} />
+      <PageHeader
+        title="Calendar"
+        subtitle={
+          selectedIds.size > 0
+            ? `${selectedIds.size} calendar${selectedIds.size === 1 ? "" : "s"} shown`
+            : undefined
+        }
+        actions={
+          <>
+            {calData?.configured ? (
+              <button
+                type="button"
+                className="btn btn-ghost"
+                style={{ fontSize: "12px", padding: "4px 10px" }}
+                onClick={() => setShowPicker((open) => !open)}
+                aria-expanded={showPicker}
+              >
+                <Settings2 size={12} aria-hidden />
+                Calendars
+                {showPicker ? <ChevronUp size={12} aria-hidden /> : <ChevronDown size={12} aria-hidden />}
+              </button>
+            ) : null}
+            <button
+              type="button"
+              className="btn btn-ghost"
+              style={{ fontSize: "12px", padding: "4px 10px" }}
+              onClick={() => void mutate()}
+              disabled={isValidating}
+              aria-label="Refresh calendar"
+            >
+              <RefreshCw size={12} className={isValidating ? "animate-spin" : ""} aria-hidden />
+            </button>
+          </>
+        }
+      />
+
+      {showPicker && calData?.configured ? (
+        <div className="card mb-4">
+          <div className="card-header">
+            <span>Visible calendars</span>
+            {saving ? <span className="text-xs text-text-subtle">Saving…</span> : null}
+          </div>
+          <div className="card-body" style={{ padding: "8px 12px" }}>
+            {calError ? (
+              <FetchError message="Couldn't load calendars." onRetry={() => void mutateCalendars()} bare />
+            ) : (
+              <CalendarPicker
+                calendars={calendars}
+                selectedIds={selectedIds}
+                saving={saving}
+                onChange={(next) => void saveSelection(next)}
+              />
+            )}
+            {saveError ? (
+              <p className="text-xs mt-2 text-danger">
+                {saveError}
+              </p>
+            ) : null}
+            <p className="text-xs mt-3 text-text-subtle">
+              Defaults to calendars checked in Google Calendar until you change this list.
+            </p>
+          </div>
+        </div>
+      ) : null}
+
+      {error && <FetchError message="Couldn't load calendar." onRetry={() => void mutate()} />}
+
+      {calError && !(showPicker && calData?.configured) && <FetchError message="Unable to load calendars." onRetry={() => void mutateCalendars()} />}
+
+      {((isLoading && !data) || (!calData && !calError)) && <SkeletonRows count={3} height={80} />}
+
+      {!isLoading && !error && !calError && calData && sortedDays.length === 0 && !calData.configured && (
+        <EmptyState
+          icon={<Calendar size={28} />}
+          title="No calendar connected."
+          subtitle={
+            <>
+              Connect Google Calendar in Setup to see events here and pick which calendars to show.
+            </>
+          }
+          action={
+            <Link href="/setup" className="btn btn-primary" style={{ fontSize: "12px" }}>
+              Open Setup
+            </Link>
+          }
+        />
+      )}
+
+      {!isLoading && !error && !calError && sortedDays.length === 0 && calData?.configured && (
+        <EmptyState
+          icon={<Calendar size={28} />}
+          title="Nothing scheduled this week."
+          subtitle="Events from your selected calendars will appear here."
+        />
+      )}
+
+      <div className="space-y-4">
+        {sortedDays.map((dateStr) => (
+          <div key={dateStr} className="card">
+            <div
+              className="card-header"
+              style={{
+                color: isToday(dateStr) ? "var(--accent-text, var(--accent))" : undefined,
+                borderBottom: isToday(dateStr) ? "2px solid var(--accent)" : undefined,
+              }}
+            >
+              <span>
+                {formatDay(dateStr)}
+                {isToday(dateStr) ? " (Today)" : ""}
+              </span>
+              <span className="badge badge-muted">{days[dateStr].length}</span>
+            </div>
+            <div className="card-body" style={{ padding: "8px 16px" }}>
+              {days[dateStr].length === 0 && (
+                <p className="text-xs py-2 text-text-subtle">
+                  Nothing scheduled.
+                </p>
+              )}
+              {days[dateStr].map((e) => (
+                <CalendarEventRow
+                  key={e.id}
+                  event={e}
+                  density="comfortable"
+                  showChips
+                  showCalendarName={multiCalendar}
+                />
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}

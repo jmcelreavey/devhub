@@ -1,0 +1,119 @@
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { notConfigured, requireDashboardAuth } from "./api-utils";
+import { DESKTOP_COOKIE, DESKTOP_TOKEN_HEADER } from "../local/terminal/bootstrap-auth";
+
+describe("notConfigured", () => {
+  /**
+   * The status code is the point of this helper, so it is worth pinning.
+   *
+   * These routes answered 400 for two years, which reads as "the caller sent
+   * something wrong". A missing API token is not the caller's doing, and the
+   * smoke suite only tolerates console noise from status codes that mean the
+   * environment is at fault — so the wrong code here turns every credential-less
+   * CI run red for a reason that has nothing to do with the change under test.
+   */
+  it("answers 503, not 400 — the request was fine, the server is not", async () => {
+    const res = notConfigured("Jira");
+    expect(res.status).toBe(503);
+    await expect(res.json()).resolves.toEqual({
+      error: "Jira is not configured.",
+      code: "not_configured",
+    });
+  });
+
+});
+
+describe("requireDashboardAuth", () => {
+  const TOKEN = "a".repeat(64);
+  let savedSecret: string | undefined;
+  let savedToken: string | undefined;
+
+  beforeEach(() => {
+    savedSecret = process.env.DEVHUB_API_SECRET;
+    savedToken = process.env.DEVHUB_BOOTSTRAP_TOKEN;
+    delete process.env.DEVHUB_API_SECRET;
+    process.env.DEVHUB_BOOTSTRAP_TOKEN = TOKEN;
+  });
+
+  afterEach(() => {
+    if (savedSecret === undefined) delete process.env.DEVHUB_API_SECRET;
+    else process.env.DEVHUB_API_SECRET = savedSecret;
+    if (savedToken === undefined) delete process.env.DEVHUB_BOOTSTRAP_TOKEN;
+    else process.env.DEVHUB_BOOTSTRAP_TOKEN = savedToken;
+  });
+
+  function request(headers: Record<string, string>, method = "GET"): Request {
+    return new Request("http://localhost:1337/api/opencode/listen", { headers, method });
+  }
+
+  it("rejects a GET with neither Origin, Referer, nor a desktop session", async () => {
+    const result = requireDashboardAuth(request({ host: "localhost:1337" }));
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.response.status).toBe(403);
+  });
+
+  it("accepts a matching Referer when Origin is omitted — that is the browser GET", () => {
+    const result = requireDashboardAuth(
+      request({ host: "localhost:1337", referer: "http://localhost:1337/opencode" }),
+    );
+    expect(result.ok).toBe(true);
+  });
+
+  it("rejects a cross-origin Referer", () => {
+    const result = requireDashboardAuth(
+      request({ host: "localhost:1337", referer: "https://evil.example/opencode" }),
+    );
+    expect(result.ok).toBe(false);
+  });
+
+  /**
+   * Referer is forgeable by any local process (`curl -e http://localhost:1337/`),
+   * so it may only stand in for Origin where a forgery cannot change anything.
+   * Honouring it on POST would reopen the exact LAN hole `isSameOriginStrict`
+   * was tightened to close.
+   */
+  it("does NOT accept Referer on a mutating verb", () => {
+    for (const method of ["POST", "PUT", "PATCH", "DELETE"]) {
+      const result = requireDashboardAuth(
+        request({ host: "localhost:1337", referer: "http://localhost:1337/opencode" }, method),
+      );
+      expect(result.ok, `${method} must not pass on Referer alone`).toBe(false);
+    }
+  });
+
+  it("still accepts a POST carrying a real Origin", () => {
+    const result = requireDashboardAuth(
+      request({ host: "localhost:1337", origin: "http://localhost:1337" }, "POST"),
+    );
+    expect(result.ok).toBe(true);
+  });
+
+  it("still accepts a POST from the desktop session", () => {
+    const result = requireDashboardAuth(
+      request({ host: "localhost:1337", cookie: `${DESKTOP_COOKIE}=${TOKEN}` }, "POST"),
+    );
+    expect(result.ok).toBe(true);
+  });
+
+  it("accepts the desktop bootstrap cookie when Origin is missing", () => {
+    const result = requireDashboardAuth(
+      request({ host: "localhost:1337", cookie: `${DESKTOP_COOKIE}=${TOKEN}` }),
+    );
+    expect(result.ok).toBe(true);
+  });
+
+  it("accepts the desktop token header when Origin is missing", () => {
+    const result = requireDashboardAuth(
+      request({ host: "localhost:1337", [DESKTOP_TOKEN_HEADER]: TOKEN }),
+    );
+    expect(result.ok).toBe(true);
+  });
+
+  it("accepts a matching Origin without a desktop session", () => {
+    const result = requireDashboardAuth(
+      request({ host: "localhost:1337", origin: "http://localhost:1337" }),
+    );
+    expect(result.ok).toBe(true);
+  });
+});

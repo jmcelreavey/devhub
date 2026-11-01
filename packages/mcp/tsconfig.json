@@ -1,0 +1,17 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "allowImportingTsExtensions": true
+  },
+  "include": [
+    "src/**/*",
+    "../../packages/shared/**/*.ts"
+  ],
+  "exclude": ["src/**/*.test.ts", "../../packages/shared/**/*.test.ts", "../../packages/shared/node_modules"]
+}

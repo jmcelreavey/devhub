@@ -1,0 +1,170 @@
+import fs from "node:fs";
+import { createHash } from "node:crypto";
+import path from "node:path";
+import { repoGitDiff, repoGitDiffDashboard, repoGitDiffInput } from "../../../../../../../../../packages/shared/actions/repos";
+import { httpAction } from "../../../../../../lib/actions/http";
+import { runGitRepoAsync } from "../../../../../../lib/git/repo-local";
+import { looksLikeDirectoryPath, parseUnifiedDiff } from "../../../../../../../../../packages/shared/ui-lib/repos/git-parsers";
+import { gitFail, repoDashboardQueryHttp, withScannedRepo, type RepoParams } from "../_shared";
+
+/** Unified context lines for `git diff -U`. Default 3; `full=1` → whole file. */
+function parseUnifiedContext(raw: string | null, full: boolean): number {
+  if (full) return 999_999;
+  if (raw == null || raw === "") return 3;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n < 0) return 3;
+  return Math.min(Math.floor(n), 999_999);
+}
+
+function unifiedFlag(context: number): string {
+  return `-U${context}`;
+}
+
+
+interface DirEntry {
+  name: string;
+  type: "file" | "dir";
+}
+
+function resolveUnderRepo(repoRoot: string, rel: string): string | null {
+  if (!rel || rel.includes("\0") || rel.includes("..") || path.isAbsolute(rel)) return null;
+  const root = path.resolve(repoRoot);
+  const abs = path.resolve(root, rel);
+  if (abs !== root && !abs.startsWith(root + path.sep)) return null;
+  return abs;
+}
+
+function listDirectoryEntries(absDir: string): DirEntry[] {
+  try {
+    return fs
+      .readdirSync(absDir, { withFileTypes: true })
+      .filter((e) => e.name !== ".DS_Store")
+      .map((e) => ({
+        name: e.name,
+        type: e.isDirectory() ? ("dir" as const) : ("file" as const),
+      }))
+      .sort((a, b) => {
+        if (a.type !== b.type) return a.type === "dir" ? -1 : 1;
+        return a.name.localeCompare(b.name);
+      });
+  } catch {
+    return [];
+  }
+}
+
+export async function GET(req: Request, routeParams: RepoParams) {
+  const { name } = await routeParams.params;
+  const search = new URL(req.url).searchParams;
+  const rawContext = search.get("context");
+  const input = {
+    name,
+    path: search.get("path") ?? undefined,
+    staged: search.get("staged") === "1",
+    context: rawContext ? Number(rawContext) : undefined,
+  };
+  const allowed = new Set(["path", "staged", "context"]);
+  if ([...search.keys()].every((key) => allowed.has(key)) && repoGitDiffInput.safeParse(input).success) {
+    return httpAction(repoGitDiff, {
+      input: () => input,
+      context: () => ({ diff: async () => {
+        const response = await readRepoGitDiff(req, routeParams);
+        return { status: response.status, body: await response.json() };
+      } }),
+      response: (result) => Response.json(result.response.body, { status: result.response.status }),
+    })(req);
+  }
+  return repoDashboardQueryHttp(repoGitDiffDashboard, req, routeParams, readRepoGitDiff);
+}
+
+async function readRepoGitDiff(req: Request, { params }: RepoParams) {
+  const { name } = await params;
+  const resolved = withScannedRepo(name);
+  if (!resolved.ok) return resolved.response;
+  const { repoRoot } = resolved;
+
+  const filePath = new URL(req.url).searchParams.get("path");
+  const staged = new URL(req.url).searchParams.get("staged") === "1";
+  const stashRef = new URL(req.url).searchParams.get("stash");
+  const context = parseUnifiedContext(
+    new URL(req.url).searchParams.get("context"),
+    new URL(req.url).searchParams.get("full") === "1",
+  );
+  const u = unifiedFlag(context);
+
+  if (filePath && (filePath.includes("..") || path.isAbsolute(filePath))) {
+    return Response.json({ error: "Invalid path" }, { status: 400 });
+  }
+
+  let result;
+  if (stashRef) {
+    result = await runGitRepoAsync(
+      repoRoot,
+      filePath
+        ? ["stash", "show", "-p", u, stashRef, "--", filePath]
+        : ["stash", "show", "-p", u, stashRef],
+    );
+  } else if (!filePath) {
+    result = await runGitRepoAsync(repoRoot, staged ? ["diff", "--cached", u] : ["diff", u]);
+  } else if (staged) {
+    result = await runGitRepoAsync(repoRoot, ["diff", "--cached", u, "--", filePath]);
+  } else {
+    const abs = resolveUnderRepo(repoRoot, filePath);
+    if (!abs) {
+      return Response.json({ error: "Invalid path" }, { status: 400 });
+    }
+
+    let isDir = looksLikeDirectoryPath(filePath);
+    try {
+      isDir = fs.statSync(abs).isDirectory();
+    } catch {
+      // Fall through — may still be an untracked path git knows about.
+    }
+
+    if (isDir) {
+      const entries = listDirectoryEntries(abs);
+      return Response.json({
+        path: filePath,
+        staged,
+        kind: "directory" as const,
+        entries,
+        raw: "",
+        lines: [],
+        empty: entries.length === 0,
+        message:
+          entries.length === 0
+            ? "Empty untracked directory."
+            : "Untracked directory — stage the whole folder, or select a file inside once it appears in Changes.",
+      });
+    }
+
+    // Untracked file: show as /dev/null → file via `git diff --no-index`.
+    // Never pass a directory here — git invents paths like `skills/push/null`.
+    const status = await runGitRepoAsync(repoRoot, ["status", "--porcelain=v1", "--", filePath]);
+    const line = (status.stdout || "").trim();
+    if (line.startsWith("??")) {
+      // Two path args, no `--` between them. Directory inputs are rejected above —
+      // git otherwise invents bogus paths like `skills/push/null` from `/dev/null`.
+      result = await runGitRepoAsync(repoRoot, ["diff", "--no-index", u, "/dev/null", filePath]);
+      // git diff --no-index returns 1 when files differ — treat as success
+      if (result.status === 1 && result.stdout) result = { ...result, status: 0 };
+    } else {
+      result = await runGitRepoAsync(repoRoot, ["diff", u, "--", filePath]);
+    }
+  }
+
+  if (result.status !== 0 && !(result.stdout || "").trim()) {
+    return gitFail(result, "Diff failed");
+  }
+
+  const raw = result.stdout || "";
+  return Response.json({
+    path: filePath,
+    staged,
+    kind: "file" as const,
+    raw,
+    lines: parseUnifiedDiff(raw),
+    revision: createHash("sha256").update(raw).digest("hex"),
+    empty: !raw.trim(),
+    context,
+  });
+}

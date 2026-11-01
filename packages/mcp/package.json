@@ -1,0 +1,25 @@
+{
+  "name": "ai-notes-server",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Notes MCP server with markdown storage",
+  "scripts": {
+    "mcp": "node bin/devhub-mcp.mjs",
+    "typecheck": "tsc --noEmit",
+    "mcp:http": "tsx src/http.ts",
+    "mcp:token": "tsx src/token.ts",
+    "test": "npm run test:all -w dashboard -- ../../packages/mcp/src && node --test bin/devhub-mcp.test.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "tsx": "^4.22.3",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "esbuild": "^0.28.2",
+    "typescript": "^5",
+    "@tldraw/tlschema": "^5.0.1",
+    "vitest": "^4.1.5"
+  }
+}

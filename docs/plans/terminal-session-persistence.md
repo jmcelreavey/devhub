@@ -244,7 +244,7 @@ a checkout with no helper installed behaves as it does now.
 touch. Needs a size cap or rotation — `REATTACH_REPLAY_BYTES` already reads only
 the tail, so rotation is safe.
 
-**Redraw fidelity.** With `-r none`, a reattached xterm shows the replayed log
+**Redraw fidelity.** With `-r none`, a reattached terminal shows the replayed log
 tail, not the shell's true current screen. If the session was sitting in a
 full-screen TUI (vim, htop, `less`), the replay is a transcript of escape
 sequences that will look wrong until the app redraws. Today's code has the same

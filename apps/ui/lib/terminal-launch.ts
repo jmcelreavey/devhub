@@ -1,0 +1,763 @@
+"use client";
+
+import { getAgentCliConfig, type AgentCli, type AgentCliConfig } from "@/lib/agent/cli-config";
+import { applyEffort } from "../../../packages/shared/ui-lib/ai/effort";
+import { shellQuote } from "../../../packages/shared/ui-lib/shell-quote";
+import { UPSTART_WORKTREE_INSTRUCTIONS } from "../../../packages/shared/ui-lib/repos/upstart-command";
+import type { TerminalSessionKind } from "../../../packages/shared/ui-lib/terminal/meta";
+import { agentReviewPrompt, agentReviewSessionTitle } from "../../../packages/shared/ui-lib/github/review-prompt";
+import { agentPipelineInvestigatePrompt } from "../../../packages/shared/ui-lib/github/pipeline-prompt";
+
+export interface TerminalLaunchOptions {
+  cwd?: string;
+  label?: string;
+  command?: string;
+  kind?: TerminalSessionKind;
+  repoName?: string;
+}
+
+export interface TerminalTranscriptOptions {
+  sessionId: string;
+  /** 1-based line within the cleaned/redacted transcript tail. */
+  line?: number;
+  modifiedAt?: number;
+}
+
+/** Open the read-only historical transcript viewer (⌘K terminal hits). */
+export function openTerminalTranscript(options: TerminalTranscriptOptions): void {
+  window.dispatchEvent(new CustomEvent("devhub:terminal-transcript", { detail: options }));
+}
+
+export function openTerminal(options: TerminalLaunchOptions = {}): void {
+  window.dispatchEvent(new CustomEvent("devhub:terminal-open", { detail: options }));
+}
+
+export { shellQuote };
+
+/**
+ * The agent CLI one-shot jobs are handed to, resolved from the env-backed
+ * Agent CLI settings (`/api/agent-cli`, see `agent-cli-env.ts`). Both CLIs see
+ * the same skills and notes MCP via the sync engine, so prompts are
+ * CLI-agnostic. Builders are async because the settings live server-side.
+ */
+interface AgentCliSpec {
+  binary: string;
+  label: string;
+  /** One-shot: run the prompt, then exit (safe to `&&`-chain). */
+  run(prompt: string): string;
+  /** Interactive session seeded with the prompt. */
+  interactive(prompt: string): string;
+  /** Message printed when the binary is missing; `action` completes "… to <action>." */
+  missing(action: string): string;
+}
+
+function agentCliSpec(config: AgentCliConfig): AgentCliSpec {
+  if (config.cli === "cursor") {
+    const model = shellQuote(config.cursorModel);
+    return {
+      binary: "cursor-agent",
+      label: "Cursor",
+      // --force lets print mode actually run commands instead of stalling on
+      // approval prompts nobody can answer in a one-shot run; --approve-mcps
+      // does the same for MCP servers (an unapproved notes MCP would sit
+      // invisible). NOTE: one malformed entry in `~/.cursor/mcp.json` makes
+      // cursor-agent silently discard the whole file — sync-mcp.ts's
+      // `cursorToTool` keeps entries strictly Cursor-shaped for this reason.
+      run: (prompt) => `cursor-agent -p ${shellQuote(prompt)} --force --approve-mcps --model ${model}`,
+      interactive: (prompt) => `cursor-agent ${shellQuote(prompt)} --force --approve-mcps --trust --model ${model}`,
+      missing: (action) =>
+        `Cursor CLI not found. Install cursor-agent (or switch the Agent CLI setting back to OpenCode) to ${action}.`,
+    };
+  }
+  if (config.cli === "chatgpt") {
+    const bin = `$(${chatgptBinExpr()})`;
+    return {
+      binary: "codex",
+      label: "ChatGPT",
+      run: (prompt) => `${bin} exec --dangerously-bypass-approvals-and-sandbox ${shellQuote(prompt)}`,
+      interactive: (prompt) => `${bin} --dangerously-bypass-approvals-and-sandbox ${shellQuote(prompt)}`,
+      missing: (action) =>
+        `ChatGPT / Codex CLI not found. Install the ChatGPT app (or Codex CLI) to ${action}.`,
+    };
+  }
+  if (config.cli === "antigravity") {
+    const modelFlag = config.antigravityModel ? ` --model ${shellQuote(config.antigravityModel)}` : "";
+    return {
+      binary: "agy",
+      label: "Antigravity",
+      run: (prompt) => `agy -p ${shellQuote(prompt)} --dangerously-skip-permissions${modelFlag}`,
+      interactive: (prompt) => `agy -i ${shellQuote(prompt)} --dangerously-skip-permissions${modelFlag}`,
+      missing: (action) =>
+        `Antigravity CLI not found. Install agy to ${action}.`,
+    };
+  }
+  // Blank model → omit the flag so opencode.json's default model applies.
+  const modelFlag = config.opencodeModel ? `--model ${shellQuote(config.opencodeModel)} ` : "";
+  return {
+    binary: "opencode",
+    label: "OpenCode",
+    run: (prompt) => `opencode run ${modelFlag}${shellQuote(prompt)}`,
+    interactive: (prompt) => `opencode ${modelFlag}--prompt ${shellQuote(prompt)}`,
+    missing: (action) => `OpenCode CLI not found. Install opencode to ${action}.`,
+  };
+}
+
+async function activeAgentCliSpec(): Promise<AgentCliSpec> {
+  return agentCliSpec(await getAgentCliConfig());
+}
+
+export function opencodeCliCommand(): string {
+  return guardedCliCommand(
+    "opencode",
+    "opencode",
+    "OpenCode CLI not found. Use the browser/desktop option or install opencode.",
+  );
+}
+
+export { repoUpstartCommand } from "../../../packages/shared/ui-lib/repos/upstart-command";
+
+function upstartContextSuffix(context?: string): string {
+  const trimmed = context?.trim();
+  if (!trimmed) return "";
+  const compact = trimmed.length > 300 ? `${trimmed.slice(0, 300)}...` : trimmed;
+  return ` Context: ${compact}`;
+}
+
+/**
+ * Pin `REPO_ROOT`/`NOTES_DIR` to the DevHub repo so the notes MCP writes into
+ * DevHub's `notes/` no matter which repo the agent is launched from — without
+ * this the note lands in the wrong place.
+ */
+function withDevhubNotesEnv(run: string): string {
+  const repoRoot = (process.env.NEXT_PUBLIC_REPO_ROOT ?? "").trim();
+  if (!repoRoot) return run;
+  return `REPO_ROOT=${shellQuote(repoRoot)} NOTES_DIR=${shellQuote(`${repoRoot}/notes`)} ${run}`;
+}
+
+export async function agentRepoUpstartCommand(
+  repoName: string,
+  upstartPath: string,
+  context?: string,
+): Promise<string> {
+  const cli = await activeAgentCliSpec();
+  const prompt = `Use devhub-repo-upstart. Create ${upstartPath} for ${repoName} in the DevHub private store (not .devhub/ in the target repo). Must run nvm use if .nvmrc, refresh deps, and start dev env. Do not just print instructions. ${UPSTART_WORKTREE_INSTRUCTIONS} Exit after writing the script; execution is a separate step.${upstartContextSuffix(context)}`;
+  // Generation only. The `&& bash <script>` that used to be chained here meant
+  // an agent wrote a shell script and the terminal executed it in the same
+  // breath, in the user's repo, with their full environment — there was no
+  // moment at which the script existed and had not yet run. Execution now goes
+  // through /api/desktop/upstart, which refuses to produce a run command until
+  // the exact bytes have been reviewed and approved.
+  return guardedCliCommand(
+    cli.binary,
+    cli.run(prompt),
+    cli.missing("generate the DevHub upstart script (or create it manually under upstarts/)"),
+  );
+}
+
+export async function agentRepoUpstartUpdateCommand(
+  repoName: string,
+  upstartPath: string,
+  context: string,
+): Promise<string> {
+  const cli = await activeAgentCliSpec();
+  const prompt = `Use devhub-repo-upstart. Update ${upstartPath} for ${repoName} in the DevHub private store (not .devhub/ in the target repo). Must refresh deps, prefer nvm use, start dev env, and preserve correct bits. ${UPSTART_WORKTREE_INSTRUCTIONS} Exit after writing the script; execution is a separate step.${upstartContextSuffix(context)}`;
+  // Update only — see agentRepoUpstartCommand. A regenerated script is a
+  // different script, so it goes back through review before it can run.
+  return guardedCliCommand(
+    cli.binary,
+    cli.run(prompt),
+    cli.missing("update the DevHub upstart script (or edit it manually under upstarts/)"),
+  );
+}
+
+export async function agentRepoUpstartDebugCommand(
+  repoName: string,
+  upstartPath: string,
+  context?: string,
+): Promise<string> {
+  const cli = await activeAgentCliSpec();
+  const prompt = `Use devhub-repo-upstart. Debug/update ${repoName} upstart at ${upstartPath} (DevHub private store, not .devhub/ in the target repo). Ask what failed, keep one-command startup. ${UPSTART_WORKTREE_INSTRUCTIONS}${upstartContextSuffix(context)}`;
+  return guardedCliCommand(
+    cli.binary,
+    cli.interactive(prompt),
+    cli.missing("debug this upstart journey"),
+  );
+}
+
+/**
+ * One-shot agent DX audit of a repo via the `dx-audit` skill. The skill
+ * detects the stack, audits dev loop / CI / release / dependency health, and
+ * writes the report to DevHub notes (`reviews/dx-audit-<repo>-<date>`) via the
+ * notes MCP — `REPO_ROOT`/`NOTES_DIR` are pinned like the review command so the
+ * note lands in DevHub's notes no matter which repo the agent runs from.
+ */
+export function agentRepoDxAuditPrompt(repoName: string, context?: string): { prompt: string; notePath: string } {
+  const date = new Date().toISOString().slice(0, 10);
+  const notePath = `reviews/dx-audit-${repoName}-${date}`;
+  const parts = [
+    `Use the dx-audit skill to audit developer experience in the ${repoName} repo.`,
+    `Write the report to DevHub notes via the notes MCP (notes_write). Notes MCP path: ${notePath}.`,
+    `Finish with a terminal summary (verdict + top 5 actions), then exit.`,
+  ];
+  const trimmed = context?.trim();
+  if (trimmed) {
+    const compact = trimmed.length > 300 ? `${trimmed.slice(0, 300)}...` : trimmed;
+    parts.push(`Live question/context from the user: ${compact}`);
+  }
+  return { prompt: parts.join(" "), notePath };
+}
+
+export async function agentRepoDxAuditCommand(repoName: string, context?: string): Promise<string> {
+  const cli = await activeAgentCliSpec();
+  const date = new Date().toISOString().slice(0, 10);
+  const notePath = `reviews/dx-audit-${repoName}-${date}`;
+  const parts = [
+    `Use the dx-audit skill to audit developer experience in the ${repoName} repo.`,
+    `Write the report to DevHub notes via the notes MCP (notes_write). Notes MCP path: ${notePath}.`,
+    `Finish with a terminal summary (verdict + top 5 actions), then exit.`,
+  ];
+  const trimmed = context?.trim();
+  if (trimmed) {
+    const compact = trimmed.length > 300 ? `${trimmed.slice(0, 300)}...` : trimmed;
+    parts.push(`Live question/context from the user: ${compact}`);
+  }
+  return guardedCliCommand(
+    cli.binary,
+    withDevhubNotesEnv(cli.run(parts.join(" "))),
+    cli.missing("run DX audits from the terminal"),
+  );
+}
+
+/**
+ * One-shot agent review of a PR. Streams the explanation + review into the
+ * terminal dock via the `pr-explain-review` skill, then exits. When `notePath`
+ * is given (e.g. `pr-reviews/acme-app-1`) the skill also writes the finished
+ * review to that DevHub note via the notes MCP, so the dashboard can link to it.
+ *
+ * The command pins `REPO_ROOT` / `NOTES_DIR` to the DevHub repo so the notes
+ * MCP writes into DevHub's `notes/` no matter which repo the agent is launched
+ * from — without this the review note lands in the wrong place. Guarded so a
+ * machine without the selected CLI prints a hint instead of erroring.
+ */
+export async function agentSkillCommand(
+  skill: string,
+  instruction: string,
+  missingAction: string,
+): Promise<string> {
+  const cli = await activeAgentCliSpec();
+  return guardedCliCommand(
+    cli.binary,
+    cli.run(`Use the ${skill} skill. ${instruction}`),
+    cli.missing(missingAction),
+  );
+}
+
+export async function agentLocalCommitReviewCommand(
+  repoName: string,
+  hash: string,
+  subject: string,
+): Promise<string> {
+  const cli = await activeAgentCliSpec();
+  const date = new Date().toISOString().slice(0, 10);
+  const notePath = `reviews/${repoName}-${date}`;
+  const parts = [
+    `Use the pr-explain-review skill to explain and review local commit ${hash} ("${subject}") in the ${repoName} repo. This is not a GitHub PR — review the commit and its parent window in the local git history.`,
+    `Write the report to DevHub notes via the notes MCP (notes_write). Notes MCP path: ${notePath}.`,
+    `Include a Repo entity link for ${repoName} in the note's ## Links section.`,
+    `Finish with a terminal summary, then exit.`,
+  ];
+  return guardedCliCommand(
+    cli.binary,
+    withDevhubNotesEnv(cli.run(parts.join(" "))),
+    cli.missing("run local commit reviews from the terminal"),
+  );
+}
+
+export { agentReviewPrompt, agentReviewSessionTitle };
+
+export async function agentReviewCommand(prUrl: string, notePath?: string): Promise<string> {
+  const cli = await activeAgentCliSpec();
+  return guardedCliCommand(
+    cli.binary,
+    withDevhubNotesEnv(cli.run(agentReviewPrompt(prUrl, notePath))),
+    cli.missing("run PR reviews from the terminal"),
+  );
+}
+
+export { agentPipelineInvestigatePrompt };
+
+export async function agentPipelineInvestigateCommand(
+  prUrl: string,
+  notePath?: string,
+): Promise<string> {
+  const cli = await activeAgentCliSpec();
+  return guardedCliCommand(
+    cli.binary,
+    withDevhubNotesEnv(cli.run(agentPipelineInvestigatePrompt(prUrl, notePath))),
+    cli.missing("investigate PR pipelines from the terminal"),
+  );
+}
+
+
+export interface StashConflictLaunchOptions {
+  repoName: string;
+  /** Branch switched to when the conflict came from checkout + stash pop. */
+  branch?: string;
+  conflictFiles?: string[];
+}
+
+export function agentStashConflictPrompt(opts: StashConflictLaunchOptions): string {
+  const files = (opts.conflictFiles ?? []).slice(0, 8);
+  const filePart = files.length > 0 ? ` Conflicted files: ${files.join(", ")}.` : "";
+  const more =
+    (opts.conflictFiles?.length ?? 0) > files.length
+      ? ` (+${(opts.conflictFiles!.length - files.length)} more — check git status).`
+      : "";
+  const branchPart = opts.branch
+    ? ` after switching to ${opts.branch}`
+    : " after applying a stash";
+  return [
+    `Use the git-conflict-resolve skill.`,
+    `Resolve stash conflicts in ${opts.repoName}${branchPart}.${filePart}${more}`,
+    `Stage resolved files; do not commit unless asked.`,
+  ].join(" ");
+}
+
+export function agentGitSyncConflictPrompt(
+  opts: StashConflictLaunchOptions & { syncTarget: string; stashed?: boolean },
+): string {
+  const files = (opts.conflictFiles ?? []).slice(0, 8);
+  return [
+    "Use the git-conflict-resolve skill.",
+    `Finish syncing ${opts.branch ?? "the current branch"} with ${opts.syncTarget} in ${opts.repoName}.`,
+    files.length ? `Conflicted files: ${files.join(", ")}.` : "Check git status for conflicts.",
+    "Resolve and stage conflicts, complete the merge, push the current branch, and verify it is no longer behind main.",
+    opts.stashed ? "Preserve and restore the DevHub auto-stash; do not lose user work." : "",
+  ].filter(Boolean).join(" ");
+}
+
+/**
+ * Interactive agent session to resolve stash/checkout conflicts. Uses
+ * `interactive` (not one-shot) so the agent can ask when intent is ambiguous.
+ * Prompt stays short — PTY input is ~1024 bytes on macOS.
+ */
+export async function agentStashConflictCommand(opts: StashConflictLaunchOptions): Promise<string> {
+  const cli = await activeAgentCliSpec();
+  const files = (opts.conflictFiles ?? []).slice(0, 8);
+  const filePart = files.length > 0 ? ` Conflicted files: ${files.join(", ")}.` : "";
+  const more =
+    (opts.conflictFiles?.length ?? 0) > files.length
+      ? ` (+${(opts.conflictFiles!.length - files.length)} more — check git status).`
+      : "";
+  const branchPart = opts.branch
+    ? ` after switching to ${opts.branch}`
+    : " after applying a stash";
+  const prompt = [
+    `Use the git-conflict-resolve skill.`,
+    `Resolve stash conflicts in ${opts.repoName}${branchPart}.${filePart}${more}`,
+    `Stage resolved files; do not commit unless asked.`,
+  ].join(" ");
+  return guardedCliCommand(
+    cli.binary,
+    cli.interactive(prompt),
+    cli.missing("resolve stash conflicts from the terminal"),
+  );
+}
+
+export async function agentGitSyncConflictCommand(opts: StashConflictLaunchOptions & { syncTarget: string; stashed?: boolean }): Promise<string> {
+  const cli = await activeAgentCliSpec();
+  const files = (opts.conflictFiles ?? []).slice(0, 8);
+  const prompt = [
+    "Use the git-conflict-resolve skill.",
+    `Finish syncing ${opts.branch ?? "the current branch"} with ${opts.syncTarget} in ${opts.repoName}.`,
+    files.length ? `Conflicted files: ${files.join(", ")}.` : "Check git status for conflicts.",
+    "Resolve and stage conflicts, complete the merge, push the current branch, and verify it is no longer behind main.",
+    opts.stashed ? "Preserve and restore the DevHub auto-stash; do not lose user work." : "",
+  ].filter(Boolean).join(" ");
+  return guardedCliCommand(cli.binary, cli.interactive(prompt), cli.missing("finish a conflicted branch sync"));
+}
+
+export interface GitHookFailureLaunchOptions {
+  repoName: string;
+  hook?: string;
+  phase: "commit" | "amend" | "push" | "other";
+  /** Repo-relative path written by the API (e.g. `.git/devhub-hook-failure.log`). */
+  logPath?: string;
+}
+
+export function agentGitHookFailurePrompt(opts: GitHookFailureLaunchOptions): string {
+  const hook = opts.hook ?? "git hook";
+  const logHint = opts.logPath
+    ? ` Failure output: ${opts.logPath}.`
+    : " Re-run the failing git command or hook to see the output.";
+  return [
+    `Use the git-hook-fix skill.`,
+    `Fix the failing ${hook} in ${opts.repoName} (blocked ${opts.phase}).${logHint}`,
+    `Get the hook to pass; do not skip hooks (--no-verify / DEVHUB_SKIP_VERIFY) unless asked.`,
+  ].join(" ");
+}
+
+/**
+ * Interactive agent session to fix a failing git hook. Short prompt for PTY
+ * ~1024 byte limits — full output lives in the log file when available.
+ */
+export async function agentGitHookFailureCommand(
+  opts: GitHookFailureLaunchOptions,
+): Promise<string> {
+  const cli = await activeAgentCliSpec();
+  const hook = opts.hook ?? "git hook";
+  const logHint = opts.logPath
+    ? ` Failure output: ${opts.logPath}.`
+    : " Re-run the failing git command or hook to see the output.";
+  const prompt = [
+    `Use the git-hook-fix skill.`,
+    `Fix the failing ${hook} in ${opts.repoName} (blocked ${opts.phase}).${logHint}`,
+    `Get the hook to pass; do not skip hooks (--no-verify / DEVHUB_SKIP_VERIFY) unless asked.`,
+  ].join(" ");
+  return guardedCliCommand(
+    cli.binary,
+    cli.interactive(prompt),
+    cli.missing("fix failing git hooks from the terminal"),
+  );
+}
+
+/**
+ * One-shot: draft a conventional commit message from the staged diff and print it.
+ * Short prompt for PTY limits — agent inspects `git diff --cached` itself.
+ */
+export function agentCommitMessagePrompt(repoName: string): string {
+  return [
+    `In ${repoName}, inspect git diff --cached and print one conventional commit message.`,
+    `Subject ≤72 chars, imperative, no quotes or fences. Do not commit.`,
+  ].join(" ");
+}
+
+export async function agentCommitMessageCommand(repoName: string): Promise<string> {
+  const cli = await activeAgentCliSpec();
+  const prompt = [
+    `In ${repoName}, inspect git diff --cached and print one conventional commit message.`,
+    `Subject ≤72 chars, imperative, no quotes or fences. Do not commit.`,
+  ].join(" ");
+  return guardedCliCommand(
+    cli.binary,
+    cli.run(prompt),
+    cli.missing("draft commit messages from the terminal"),
+  );
+}
+
+/**
+ * One-shot: draft a short stash description from the working-tree diff and print it.
+ */
+export function agentStashMessagePrompt(repoName: string): string {
+  return [
+    `In ${repoName}, inspect git status and git diff HEAD, then print one short stash description.`,
+    `One line ≤72 chars, plain language, no quotes or fences. Do not stash or commit.`,
+  ].join(" ");
+}
+
+export async function agentStashMessageCommand(repoName: string): Promise<string> {
+  const cli = await activeAgentCliSpec();
+  const prompt = [
+    `In ${repoName}, inspect git status and git diff HEAD, then print one short stash description.`,
+    `One line ≤72 chars, plain language, no quotes or fences. Do not stash or commit.`,
+  ].join(" ");
+  return guardedCliCommand(
+    cli.binary,
+    cli.run(prompt),
+    cli.missing("draft stash messages from the terminal"),
+  );
+}
+
+export interface DiffSelectionLaunchOptions {
+  repoName: string;
+  filePath: string;
+  snippet: string;
+  lineHint?: string;
+  context?: string;
+  staged?: boolean;
+}
+
+export function agentDiffSelectionPrompt(opts: DiffSelectionLaunchOptions): string {
+  const side = opts.staged ? "staged" : "unstaged";
+  const ctx = opts.context?.trim();
+  const ctxPart = ctx
+    ? ` User context: ${ctx.length > 280 ? `${ctx.slice(0, 280)}...` : ctx}`
+    : "";
+  const snippet = opts.snippet.trim();
+  const maxSnippet = 320;
+  const snippetPart =
+    snippet.length > maxSnippet
+      ? ` Selection is large (${snippet.length} chars, ${opts.lineHint ?? "see file"}) — open ${opts.filePath} and inspect the ${side} diff.`
+      : ` Selection (${opts.lineHint ?? "diff"}):\n${snippet}`;
+  return [
+    `In ${opts.repoName}, help with a ${side} diff selection in ${opts.filePath}.`,
+    snippetPart,
+    ctxPart,
+    " Ask if intent is unclear. Do not commit unless asked.",
+  ]
+    .filter(Boolean)
+    .join("");
+}
+
+/**
+ * Interactive agent session seeded with a diff selection + optional user context.
+ * Keeps the prompt short for macOS PTY ~1024 byte limits — huge selections point
+ * at the file instead of pasting the whole blob.
+ */
+export async function agentDiffSelectionCommand(
+  opts: DiffSelectionLaunchOptions,
+): Promise<string> {
+  const cli = await activeAgentCliSpec();
+  const side = opts.staged ? "staged" : "unstaged";
+  const ctx = opts.context?.trim();
+  const ctxPart = ctx
+    ? ` User context: ${ctx.length > 280 ? `${ctx.slice(0, 280)}...` : ctx}`
+    : "";
+  const snippet = opts.snippet.trim();
+  const maxSnippet = 320;
+  const snippetPart =
+    snippet.length > maxSnippet
+      ? ` Selection is large (${snippet.length} chars, ${opts.lineHint ?? "see file"}) — open ${opts.filePath} and inspect the ${side} diff.`
+      : ` Selection (${opts.lineHint ?? "diff"}):\n${snippet}`;
+  const prompt = [
+    `In ${opts.repoName}, help with a ${side} diff selection in ${opts.filePath}.`,
+    snippetPart,
+    ctxPart,
+    " Ask if intent is unclear. Do not commit unless asked.",
+  ]
+    .filter(Boolean)
+    .join("");
+  return guardedCliCommand(
+    cli.binary,
+    cli.interactive(prompt),
+    cli.missing("discuss this diff selection from the terminal"),
+  );
+}
+
+/** The plan fields the lab launch command needs (subset of the API's LabPlan). */
+export interface LabLaunchPlan {
+  signalId: string;
+  label: string;
+  repoName: string;
+}
+
+/**
+ * One-shot agent build of a Capability Radar lab via the `capability-lab`
+ * skill — the same visible-terminal pattern as PR review. The agent fetches
+ * the full plan (repo path, workspace dir, evidence, language, notes path)
+ * from the plan URL itself, builds the lab, then registers it via the adopt
+ * URL so the dashboard picks it up.
+ *
+ * Deliberately terse: commands are typed into a canonical-mode PTY, which
+ * caps an input line at ~1024 bytes on macOS — a long prompt gets mangled.
+ * `REPO_ROOT`/`NOTES_DIR` are pinned like the review command so the note
+ * lands in DevHub's notes no matter which repo the agent runs from.
+ */
+export async function agentLabCommand(plan: LabLaunchPlan, refresh = false): Promise<string> {
+  const cli = await activeAgentCliSpec();
+  const query = `signalId=${encodeURIComponent(plan.signalId)}&repoName=${encodeURIComponent(plan.repoName)}`;
+  const planUrl = `${window.location.origin}/api/capability/journey/plan?${query}`;
+  const adoptUrl = `${window.location.origin}/api/capability/journey/adopt`;
+  const parts = [
+    `Use the capability-lab skill to build a hands-on learning lab for "${plan.label}" (signal id: ${plan.signalId}) in the ${plan.repoName} repo.`,
+    `Plan URL (curl for repo path, workspace dir, evidence, language, notes path): ${planUrl}`,
+    `Adopt URL: ${adoptUrl}`,
+    refresh ? "This is a REBUILD — overwrite the existing note and refresh the starter." : "",
+  ].filter(Boolean);
+  return guardedCliCommand(
+    cli.binary,
+    withDevhubNotesEnv(cli.run(parts.join(" "))),
+    cli.missing("build labs from the terminal"),
+  );
+}
+
+export function claudeCliCommand(): string {
+  return guardedCliCommand(
+    "claude",
+    // Full permission: no approval prompts for edits or shell commands.
+    "claude --dangerously-skip-permissions",
+    "Claude CLI not found. Use the Claude app option or install Claude Code.",
+  );
+}
+
+export function cursorCliCommand(): string {
+  return guardedCliCommand(
+    "cursor-agent",
+    // --force runs every tool unless explicitly denied; --trust skips the
+    // workspace-trust prompt that would otherwise stall a fresh tab.
+    "cursor-agent --force --approve-mcps --trust",
+    "Cursor CLI not found. Use the Cursor app option or install cursor-agent.",
+  );
+}
+
+/** Bare interactive TUI for the configured provider (Agent tab template). */
+export async function agentInteractiveSessionCommand(): Promise<{
+  command: string;
+  label: string;
+  cli: AgentCli;
+}> {
+  const config = await getAgentCliConfig();
+  const spec = agentCliSpec(config);
+  if (config.cli === "cursor") {
+    return { command: cursorCliCommand(), label: spec.label, cli: "cursor" };
+  }
+  if (config.cli === "chatgpt") {
+    return { command: chatgptCliCommand(), label: spec.label, cli: "chatgpt" };
+  }
+  if (config.cli === "antigravity") {
+    return { command: antigravityCliCommand(), label: spec.label, cli: "antigravity" };
+  }
+  return { command: opencodeCliCommand(), label: spec.label, cli: "opencode" };
+}
+
+export type TaskImplementationProvider = "default" | AgentCli | "claude";
+
+/** The concrete CLI "default" launches — what Agent Activity should record. */
+export async function resolveTaskImplementationProvider(
+  provider: TaskImplementationProvider,
+): Promise<Exclude<TaskImplementationProvider, "default">> {
+  return provider === "default" ? (await getAgentCliConfig()).cli : provider;
+}
+
+export type TaskImplementationCommandOptions = {
+  model?: string;
+  /** Reasoning effort. Blank leaves the command unchanged. */
+  effort?: string;
+  /** When set and the CLI supports it, continue that interactive session. */
+  resumeSessionId?: string;
+};
+
+export async function taskImplementationCommand(
+  provider: TaskImplementationProvider,
+  prompt: string,
+  modelOrOptions?: string | TaskImplementationCommandOptions,
+): Promise<{ command: string; label: string; provider: Exclude<TaskImplementationProvider, "default"> }> {
+  const options: TaskImplementationCommandOptions =
+    typeof modelOrOptions === "string" || modelOrOptions === undefined
+      ? { model: modelOrOptions }
+      : modelOrOptions;
+  const config = await getAgentCliConfig();
+  const selected = provider === "default" ? config.cli : provider;
+  const requestedModel = options.model?.trim();
+  const resumeId = options.resumeSessionId?.trim();
+  const resumeFlag = resumeId ? ` --resume ${shellQuote(resumeId)}` : "";
+
+  if (selected === "claude") {
+    const applied = applyEffort({ provider: "claude", model: requestedModel, effort: options.effort });
+    const modelForFlag = applied.model ?? requestedModel;
+    const modelFlag = modelForFlag ? ` --model ${shellQuote(modelForFlag)}` : "";
+    const effortFlag = applied.thinkingOptionId ? ` --effort ${shellQuote(applied.thinkingOptionId)}` : "";
+    return {
+      command: guardedCliCommand(
+        "claude",
+        `claude --dangerously-skip-permissions${modelFlag}${effortFlag}${resumeFlag} ${shellQuote(prompt)}`,
+        "Claude CLI not found. Install Claude Code to implement this task.",
+      ),
+      label: "Claude",
+      provider: selected,
+    };
+  }
+
+  if (selected === "cursor") {
+    const applied = applyEffort({
+      provider: "cursor",
+      model: requestedModel || config.cursorModel,
+      effort: options.effort,
+      availableModels: config.models?.["cursor-cli"],
+    });
+    const selectedModel = applied.model || requestedModel || config.cursorModel;
+    return {
+      command: guardedCliCommand(
+        "cursor-agent",
+        `cursor-agent --force --approve-mcps --trust --model ${shellQuote(selectedModel)}${resumeFlag} ${shellQuote(prompt)}`,
+        "Cursor CLI not found. Install cursor-agent to implement this task.",
+      ),
+      label: "Cursor",
+      provider: selected,
+    };
+  }
+
+  if (selected === "chatgpt") {
+    const bundled = shellQuote(CHATGPT_APP_CODEX);
+    const applied = applyEffort({ provider: "codex", model: requestedModel, effort: options.effort });
+    const modelForFlag = applied.model ?? requestedModel;
+    const modelFlag = modelForFlag ? ` -m ${shellQuote(modelForFlag)}` : "";
+    const effortFlag = applied.thinkingOptionId ? ` -c ${shellQuote(`model_reasoning_effort=${applied.thinkingOptionId}`)}` : "";
+    const args = `--dangerously-bypass-approvals-and-sandbox${effortFlag}${modelFlag} ${shellQuote(prompt)}`;
+    const onPath = guardedCliCommand(
+      "codex",
+      `codex ${args}`,
+      "Codex CLI not found. Install the ChatGPT app, or install the Codex CLI.",
+    );
+    return {
+      command: `if [ -x ${bundled} ]; then ${bundled} ${args}; else ${onPath}; fi`,
+      label: "ChatGPT",
+      provider: selected,
+    };
+  }
+
+  if (selected === "antigravity") {
+    const selectedModel = requestedModel || config.antigravityModel;
+    const modelFlag = selectedModel ? ` --model ${shellQuote(selectedModel)}` : "";
+    return {
+      command: guardedCliCommand(
+        "agy",
+        `agy --dangerously-skip-permissions${modelFlag} -i ${shellQuote(prompt)}`,
+        "Antigravity CLI not found. Install agy to implement this task.",
+      ),
+      label: "Antigravity",
+      provider: selected,
+    };
+  }
+
+  const selectedModel = requestedModel || config.opencodeModel;
+  const modelFlag = selectedModel ? ` --model ${shellQuote(selectedModel)}` : "";
+  return {
+    command: guardedCliCommand(
+      "opencode",
+      `opencode${modelFlag} --prompt ${shellQuote(prompt)}`,
+      "OpenCode CLI not found. Install opencode to implement this task.",
+    ),
+    label: "OpenCode",
+    provider: selected,
+  };
+}
+
+/**
+ * ChatGPT.app ships a signed, notarized Codex CLI inside the bundle. Prefer it
+ * over `codex` on PATH: the npm `@openai/codex` package vendors an unsigned
+ * native binary that macOS quarantines ("codex was not opened because it
+ * contains malware") and empties out, leaving a wrapper on PATH that exits
+ * without running anything.
+ */
+const CHATGPT_APP_CODEX = "/Applications/ChatGPT.app/Contents/Resources/codex";
+
+function chatgptBinExpr(): string {
+  const bundled = shellQuote(CHATGPT_APP_CODEX);
+  return `if [ -x ${bundled} ]; then echo ${bundled}; elif command -v codex >/dev/null 2>&1; then echo codex; else echo chatgpt; fi`;
+}
+
+export function chatgptCliCommand(): string {
+  const bundled = shellQuote(CHATGPT_APP_CODEX);
+  // Full permission: skip approval prompts and run without the sandbox.
+  const bypass = "--dangerously-bypass-approvals-and-sandbox";
+  const onPath = guardedCliCommand(
+    "codex",
+    `codex ${bypass}`,
+    "Codex CLI not found. Install the ChatGPT app, or install the Codex CLI.",
+  );
+  return `if [ -x ${bundled} ]; then ${bundled} ${bypass}; else ${onPath}; fi`;
+}
+
+export function antigravityCliCommand(): string {
+  return guardedCliCommand(
+    "agy",
+    // YOLO: auto-approve every tool. Same idea as Claude's skip-permissions.
+    "agy --dangerously-skip-permissions",
+    "Antigravity CLI not found. Install agy, then reopen this tab.",
+  );
+}
+
+export function guardedCliCommand(binary: string, command: string, missingMessage: string): string {
+  return `if command -v ${shellQuote(binary)} >/dev/null 2>&1; then ${command}; else printf '%s\\n' ${shellQuote(missingMessage)}; fi`;
+}

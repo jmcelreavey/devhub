@@ -18,10 +18,10 @@ and `docs/architecture/`.
 | Document                                                          | Shipped as                                                  |
 | ----------------------------------------------------------------- | ----------------------------------------------------------- |
 | [`agents-workspace-aionui-plan.md`](agents-workspace-aionui-plan.md) | Replaced by the Paseo integration (`/agents`)               |
-| [`capability-radar-plan.md`](capability-radar-plan.md)            | `dashboard/lib/capability/`, `/radar`                       |
+| [`capability-radar-plan.md`](capability-radar-plan.md)            | `apps/ui/lib/capability/`, `/radar`                       |
 | [`onboarding-and-tauri-roadmap.md`](onboarding-and-tauri-roadmap.md) | Setup wizard and `desktop/` (hosted Google OAuth deferred)  |
-| [`repo-ownership-plan.md`](repo-ownership-plan.md)                | `/own`, `dashboard/lib/ownership/`                          |
-| [`self-appraisal-mcp-plan.md`](self-appraisal-mcp-plan.md)        | `dashboard/app/appraisal/`, `shared/appraisal/`             |
+| [`repo-ownership-plan.md`](repo-ownership-plan.md)                | `/own`, `apps/ui/lib/ownership/`                          |
+| [`self-appraisal-mcp-plan.md`](self-appraisal-mcp-plan.md)        | Optional Career plugin (`devhub-career`); original core paths are historical             |
 | [`tauri-desktop-plan.md`](tauri-desktop-plan.md)                  | `desktop/` (the detailed plan behind the roadmap above)     |
 | [`db-client-parity-audit.md`](db-client-parity-audit.md)          | Point-in-time audit, August 2026                            |
 | [`git-client-parity-audit.md`](git-client-parity-audit.md)        | Point-in-time audit, August 2026                            |

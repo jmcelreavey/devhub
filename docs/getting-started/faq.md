@@ -87,7 +87,7 @@ update. Uninstalling the app also leaves it in place.
 
 ## How do I link a repo later?
 
-Open **Setup → GitHub**, or use **Set up private repo** on the Today strip.
+Open **Setup → GitHub**.
 
 ## Where does Linux keep my data?
 

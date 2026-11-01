@@ -1,0 +1,101 @@
+import { repoGitCommitContext } from "../../../../../../../../../packages/shared/actions/repos";
+import { httpAction } from "../../../../../../lib/actions/http";
+import type { EntityRef } from "../../../../../../../../../packages/shared/ui-lib/entity-note";
+import { parseCommitRefs } from "../../../../../../lib/git/commit-refs";
+import { isSafeCommitRef } from "../../../../../../lib/git/ref-safety";
+import { runGitRepoAsync } from "../../../../../../lib/git/repo-local";
+import { matchReviewNotes, type ReviewNoteMatch } from "../../../../../../lib/notes/review-index";
+import { getReviewNoteIndex } from "../../../../../../lib/notes/review-index-server";
+import { cachedGraph, neighbours } from "../../../../../../lib/recall/graph";
+import { loadIndex } from "../../../../../../lib/recall/store";
+import { gitFail, withScannedRepo, type RepoParams } from "../_shared";
+
+
+export interface CommitContextPayload {
+  commit: string;
+  /** Tracker ids named by the commit, for direct Jira links. */
+  tickets: string[];
+  prNumbers: number[];
+  notes: ReviewNoteMatch[];
+  /** `owner/name` of the GitHub remote, when resolvable — hrefs the PR numbers. */
+  prRepo: string | null;
+  /**
+   * Derived co-occurrence neighbourhood of this commit from the recall graph:
+   * PRs, tickets, tags and notes that showed up around this SHA. Explicit
+   * review-note matches above carry intent; these carry evidence.
+   */
+  related: EntityRef[];
+}
+
+/**
+ * The "why is this like this" endpoint.
+ *
+ * A commit message names a PR or a ticket; the review note for that PR is where
+ * the reasoning actually lives. Git alone can't make that jump and neither can
+ * any hosted tool, because the notes are local.
+ */
+export async function GET(req: Request, { params }: RepoParams) {
+  const { name } = await params;
+  return httpAction(repoGitCommitContext, {
+    input: () => ({ name, commit: new URL(req.url).searchParams.get("commit")?.trim() || "" }),
+    context: () => ({ read: async (repo, commit) => {
+      const response = await readCommitContext(repo, commit);
+      return { status: response.status, body: await response.json(), headers: Object.fromEntries(response.headers) };
+    } }),
+    response: (result) => Response.json(result.body, { status: result.status, headers: result.headers }),
+  })(req);
+}
+
+async function readCommitContext(name: string, commit: string) {
+  const resolved = withScannedRepo(name);
+  if (!resolved.ok) return resolved.response;
+
+  if (!commit || !isSafeCommitRef(commit)) {
+    return Response.json({ error: "Invalid commit" }, { status: 400 });
+  }
+
+  // Subject + body: the ticket is often only in the body of a squashed commit.
+  const meta = await runGitRepoAsync(resolved.repoRoot, [
+    "show",
+    "-s",
+    "--format=%s%n%b",
+    commit,
+  ]);
+  if (meta.status !== 0) return gitFail(meta, "Commit not found");
+
+  // The graph keys on full SHAs only; short refs must resolve before lookup.
+  const shaOut = await runGitRepoAsync(resolved.repoRoot, ["rev-parse", `${commit}^{commit}`]);
+  const fullSha = shaOut.status === 0 ? shaOut.stdout.trim() : "";
+
+  // Remote slug turns bare squash-merge PR numbers into real GitHub links.
+  const remote = await runGitRepoAsync(resolved.repoRoot, ["remote", "get-url", "origin"]);
+  let prRepo: string | null = null;
+  if (remote.status === 0) {
+    const m = remote.stdout.trim().match(/github\.com[:/]([^/]+\/[^/.]+)(?:\.git)?$/i);
+    prRepo = m?.[1] ?? null;
+  }
+
+  const message = meta.stdout || "";
+  const { prNumbers, tickets } = parseCommitRefs(message);
+  const notes = matchReviewNotes(getReviewNoteIndex(), name, message);
+  const related = recallRelated(fullSha);
+
+  return Response.json(
+    { commit, tickets, prNumbers, notes, prRepo, related } satisfies CommitContextPayload,
+    { headers: { "cache-control": "no-store" } },
+  );
+}
+
+/** Neighbours of `repo:commit:<sha>` in the derived graph; [] on any failure. */
+function recallRelated(fullSha: string): EntityRef[] {
+  if (!/^[0-9a-f]{40}$/.test(fullSha)) return [];
+  try {
+    const index = loadIndex();
+    if (!index) return [];
+    return neighbours(cachedGraph(index, { minWeight: 1 }), `repo:commit:${fullSha}`, 8)
+      .map((n) => n.node.ref)
+      .filter((ref) => ref.kind !== "repo");
+  } catch {
+    return [];
+  }
+}

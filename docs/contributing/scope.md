@@ -22,18 +22,17 @@ changelog.
 
 ## Status
 
-Feature-complete for daily personal use. Local-first: Next.js 16 + React 19 + BlockNote,
+Feature-complete for daily personal use. Local-first: Core HTTP + Vite + React 19 + BlockNote,
 filesystem storage, optional integrations (Google Calendar, Jira, GitHub, Datadog, Figma),
 a packaged desktop app, and a plugin overlay system (see
 [Plugin system](../architecture/plugins.md)).
 
 ## Constraints
 
-- **Local-first** — one user on a trusted machine, with optional trusted-LAN access.
-  The default dashboard port is `1337`; hosted deployments are outside the scope.
+- **Local-first** — one user on a trusted machine.
+  The packaged dashboard defaults to port `1337`; an unsupervised checkout defaults to `1437`, including on WSL. Shell-supervised Attach keeps its existing origin. A hosted core and multiple users are a longer-term direction, not supported deployment modes today.
 - **AGPL-3.0-only** — the public core ships under that licence (`LICENSE`).
-  Hosted multi-user deployments stay out of scope; if you run a modified copy
-  as a network service for others, AGPL's source-offer requirement applies.
+  If you run a modified copy as a network service for others, AGPL's source-offer requirement applies.
   See the [FAQ](../getting-started/faq.md#what-licence-is-devhub-under).
 - **Tight scope** — ship what measurably reduces friction; defer ambition.
 - **Degrade, don't break** — integrations are optional. A missing tool turns its
@@ -42,7 +41,7 @@ a packaged desktop app, and a plugin overlay system (see
 
 ## Out of scope (deliberately)
 
-- Multi-user accounts and hosted deployment.
+- Multi-user accounts and hosted deployment until authentication, authorisation and workspace isolation are in place.
 - Recurring task rules (scheduled jobs are a separate feature).
 - A note graph view. (Backlinks and note metadata are proposed in
   [Notes and learnings](../plans/notes-and-learnings.md); the graph view isn't.)
@@ -58,12 +57,12 @@ These come back only when daily use surfaces a real need.
 
 ## Verification
 
-Run `npm run verify` from the repo root for MCP types, dashboard lint, types and tests,
-vendored-skill checks, the production build and dynamic-route checks. Run browser
+Run `npm run verify` from the repo root for MCP types and dashboard
+lint, types and tests. CI also checks vendored skills, the production build and dynamic routes. Run browser
 journeys with `npm run test:e2e --prefix dashboard`.
 
 Use a disposable data directory for browser checks. If the desktop app is running,
-use a free port, `DEVHUB_SCHEDULER=0` and a separate `DEVHUB_DIST_DIR` — see
+use a free port, `DEVHUB_SCHEDULER=0` — see
 [Installation](../getting-started/installation.md#run-the-dashboard). Check keyboard
 navigation, narrow layouts and the loading, empty and error states of the changed
 surface.

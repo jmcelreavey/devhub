@@ -52,7 +52,7 @@ You don't need Git, GitHub or a fork to start. [Getting started without Git](doc
 
 ### Try this first
 
-- Add a task on **Today** and tick it off.
+- Add a task on **Work** and tick it off.
 - Write a note in **Notes** and link it to another one.
 - Press **⌘P** (Ctrl+P on Windows and Linux) and jump to anything.
 - Connect GitHub with **Setup → GitHub → Sign in with GitHub** to switch on **PRs**.
@@ -65,11 +65,9 @@ Every October, DevHub switches itself to **Hollow (Halloween) 🎃**, an optiona
 
 ## A quick tour
 
-### Today
+### Notifications
 
-Your day on one page: tasks, the plans that are ready for an agent to pick up, a morning briefing, and your calendar once Google Calendar is connected.
-
-![Today shows the day's tasks and which plans are ready for an agent](docs/assets/demos/today.gif)
+Home opens Work. Notifications collects PR reviews, agent runs needing input and plugin updates, with an unread bell badge. Failing CI, on-call alerts and plugin trust issues also appear in a global alert bar. Read, dismiss or restore items, and filter to repos you own.
 
 ### Tasks
 
@@ -87,7 +85,7 @@ Follow task progress and answer questions in Slack. Configure the bot in Setup. 
 
 ### Editor and code discussions
 
-Select code in Repos → Changes, review the snapshot and ask an assistant beside the diff without another worktree. An optional Cursor/VS Code add-on captures unsaved selections; install the separate in-app editor only if you need it.
+Select code in Repos → Changes, review the snapshot and ask an assistant beside the diff without another worktree. An optional Cursor/VS Code add-on captures unsaved selections.
 
 ![Reviewing captured code and choosing a discussion](docs/assets/demos/editor-ask-ai.gif)
 
@@ -117,7 +115,7 @@ In the desktop app, **Sync skills** needs a linked DevHub checkout. Until you li
 
 The shared catalogue also includes Matt Pocock adaptations for debugging, design interviews, code reviews and architecture. [Skills](docs/guides/skills.md#matt-pocock-adaptations) explains which ones and how they sync.
 
-There's more: Repos with a git client, Databases (SQLite, Postgres and MongoDB), full-text Search and resize handles on every edge of Today cards and floating panels. The [feature tour](docs/guides/feature-tour.md) covers all of it.
+There's more: Repos with a git client, Databases (SQLite, Postgres and MongoDB), full-text Search and resize handles on floating panels. The [feature tour](docs/guides/feature-tour.md) covers all of it.
 
 ## Plugins
 
@@ -164,7 +162,7 @@ Found a bug, or something confusing? [Open an issue](https://github.com/jmcelrea
 
 ## Run it from source
 
-For contributors, or if you'd rather not use the installer. You need Node 22 and Git.
+For contributors, or if you'd rather not use the installer. You need Node 22.14 or later, npm 10 or 11, and Git.
 
 ```bash
 git clone https://github.com/jmcelreavey/devhub.git
@@ -174,11 +172,13 @@ npm install
 DEVHUB_BIND_HOST=127.0.0.1 npm run dev
 ```
 
-Then open <http://localhost:1337>. [Installation](docs/getting-started/installation.md) covers the full bootstrap script and what to do if the desktop app already has that port. Run `npm run verify` before you open a PR. [CONTRIBUTING.md](CONTRIBUTING.md) explains the private mirror workflow that keeps personal notes and tasks out of the public repo.
+The root install covers the npm workspaces: `apps/core` (server), `apps/ui` (dashboard), `apps/desktop` (shell), `packages/mcp`, `packages/shared` and `packages/qa`. Server domains live in `apps/core`; notes and tasks stay at the content roots. Use `npm ci` for a clean install once the root `package-lock.json` is present.
+
+On macOS or Linux, open <http://localhost:1437>; WSL keeps <http://localhost:1337>. Existing `PORT` settings can override these defaults, so check the URL printed at startup. [Installation](docs/getting-started/installation.md) covers the full bootstrap and running beside the desktop app. Run `npm run verify` before you open a PR. [CONTRIBUTING.md](CONTRIBUTING.md) explains the private mirror workflow that keeps personal notes and tasks out of the public repo.
 
 ## Security
 
-DevHub is built for one person on a trusted machine. It listens on `127.0.0.1` by default, the terminal is never exposed to the network, and there is no login, so don't put it on the public internet. Opening it to your local network is opt-in: see [Setup](docs/getting-started/setup.md#localhost-vs-lan-access).
+DevHub is built for one person on a trusted machine. It listens on `127.0.0.1` by default, the terminal is never exposed to the network, and there is no login, so don't put it on the public internet. For remote agent access, use Paseo's phone pairing.
 
 ## Documentation
 

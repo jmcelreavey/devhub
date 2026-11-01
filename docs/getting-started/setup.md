@@ -8,30 +8,24 @@ related:
   - reference/environment-variables
   - getting-started/installation
   - integrations/github
-  - guides/integrations
 ---
 
 # Setup
 
 The setup page is the safest place to configure DevHub after installation.
 
-Open:
-
-```text
-http://localhost:1337/setup
-```
+Open `/setup` on the URL printed by your running dashboard. The installed app normally uses <http://localhost:1337/setup>; an unsupervised checkout, including WSL, normally uses <http://localhost:1437/setup>. Explicit port settings can differ.
 
 ## What Setup Controls
 
 | Area            | Purpose                                                                     |
 | --------------- | --------------------------------------------------------------------------- |
 | Core paths      | Where DevHub stores notes and finds the repo                                |
-| Network access  | Whether the dashboard is local-only or reachable on your LAN                |
+| Agents password | Connect DevHub to the Paseo daemon                                         |
 | Google Calendar | Optional calendar widget and calendar page                                  |
 | Jira Cloud      | Optional ticket views and standup support                                   |
 | Datadog         | Optional alert summaries and deep links                                     |
 | GitHub          | Pull request and repo-related features via the GitHub CLI — **Sign in with GitHub** on this page, or `gh auth login` in a terminal |
-| Slack           | Optional Socket Mode bot (no public URL) for Needs you, progress posts and read-only questions. [Slack](../guides/integrations.md). Team Slack uses a shared gateway — [Team Slack gateway](../slack-gateway.md) |
 | AI Provider     | Default CLI or HTTP API for in-app generation (`cursor-cli`, `chatgpt-cli`, `antigravity-cli`, `opencode`, `api`); coding runs choose a Paseo assistant separately |
 | Infra           | Optional internal infrastructure helpers, when an infra plugin is installed |
 | Notes AI        | Optional OpenAI-compatible BlockNote AI — **env vars only** (see below)     |
@@ -55,29 +49,13 @@ Most core settings are created automatically during install.
 | Notes directory | Where BlockNote notes, diagrams, and learnings are stored    |
 | Repo root       | The DevHub checkout used by scripts and sync actions         |
 | Dashboard port  | The local port used by the web app                           |
-| Bind host       | Whether DevHub is localhost-only or also proxied to your LAN |
+| Bind host       | Dashboard listener address, localhost by default              |
 
-## Localhost Vs LAN Access
+## Local access
 
-The packaged app and checkout dashboard bind to `127.0.0.1` by default. Enable LAN access in setup, or set `DEVHUB_BIND_HOST=auto`, to reach the dashboard from other devices. LAN mode keeps localhost working and starts a proxy on the detected physical LAN IPv4.
+The packaged app and checkout dashboard bind to `127.0.0.1` by default. To use agents from another device, use **Agents → Connection → Pair a phone** through Paseo's encrypted relay. The dashboard has no user login; do not expose it to the public internet.
 
-The `auto` LAN detector excludes Tailscale/VPN CGNAT addresses (`100.64.0.0/10`) by default. In normal use, enabling LAN access exposes DevHub on Wi‑Fi/Ethernet, not Tailscale.
-
-Use localhost-only mode when:
-
-- You only use DevHub from the current machine.
-- You are on an untrusted network.
-- You want the safest default.
-
-Use LAN mode when:
-
-- You want to open DevHub from a phone or tablet on the same Wi-Fi.
-- You trust the network.
-- You understand that the dashboard has no user accounts or login.
-
-LAN mode exposes the dashboard (`1337`) and the Paseo web UI (`6767`, password-protected) on your non-Tailscale LAN IP. Terminal `1339` is never proxied. For agents away from home, use **Agents → Connection → Pair a phone**, which goes through Paseo's encrypted relay instead.
-
-When opening DevHub from another device at `http://<lan-ip>:1337` during **`npm run dev`**, Next.js 16+ blocks `/_next/*` chunk requests unless the browser `Origin` matches an allowlisted host pattern. DevHub ships defaults for common private ranges (`192.168.*.*`, `10.*.*.*`, `172.*.*.*`, `*.local`). If the UI stays on loading skeletons from a phone or tablet, add your host pattern to `DEVHUB_ALLOWED_DEV_ORIGINS` in `dashboard/.env.local` (comma-separated) and restart. Production `npm run start` does not use this dev-only gate.
+If plugin management remains blocked after retiring LAN mode, stop old DevHub processes, remove `DEVHUB_LAN_PROXY_HOST` from the local environment file, and restart DevHub. The legacy guard stays in place while an old proxy might still be running.
 
 Mutating API routes accept a desktop session token, a strict same-origin `Origin` header or, when `DEVHUB_API_SECRET` is set, a matching `X-DevHub-Secret`. Put the same secret in MCP env for scripted access to dashboard-backed tools. Setting it doesn't disable same-origin access or add a user login. See [Environment Variables](../reference/environment-variables.md#core-variables).
 
@@ -95,15 +73,15 @@ The shared configuration files should use environment variable placeholders inst
 
 ### AI Features (not on this page)
 
-BlockNote's in-editor AI needs `AI_API_KEY` in `dashboard/.env.local`. `AI_BASE_URL` and `AI_MODEL` select the HTTP provider and model; the defaults use z.ai. Copy the example lines from `dashboard/.env.example` and see [Environment Variables](../reference/environment-variables.md#notes-repo-learning-and-briefing-ai-optional).
+BlockNote's in-editor AI needs `AI_API_KEY` in `apps/ui/.env.local`. `AI_BASE_URL` and `AI_MODEL` select the HTTP provider and model; the defaults use z.ai. Copy the example lines from `apps/ui/.env.example` and see [Environment Variables](../reference/environment-variables.md#notes-and-repo-learning-ai-optional).
 
-Repo Learning and morning-briefing generation use **/setup → AI Provider**. They can use a local CLI or the same HTTP API settings.
+Repo Learning uses **/setup → AI Provider**. They can use a local CLI or the same HTTP API settings.
 
 For CLI generation, choose a provider under **/setup → AI Provider** (`DEVHUB_AI_PROVIDER`). Antigravity uses the `agy` CLI. Coding runs choose an assistant in **Agents** instead. See [Agent CLI selection](../guides/terminal-and-agent-cli.md#agent-cli-selection).
 
 ## After Changing Setup
 
-Some settings are picked up immediately. Changes that affect local listeners, such as LAN proxy host or core paths, may require restarting DevHub.
+Some settings are picked up immediately. Changes to core paths may require restarting DevHub.
 
 ## Setup API
 
@@ -112,7 +90,7 @@ The `/setup` wizard reads and writes configuration through local API routes (sam
 | Route | Purpose |
 | ----- | ------- |
 | `GET /api/setup/status` | Drives nav item visibility, integration toggles, and peer-service gates. Returns booleans for each integration plus `*Vars` previews (key presence, not secret values). |
-| `POST /api/setup/save` | Persists core paths, network/LAN settings, and integration credentials to `DEVHUB_ENV_FILE` (`dashboard/.env.local` in a checkout, `<app-data>/config/.env.local` when installed). |
+| `POST /api/setup/save` | Persists core paths, the Agents password, and integration credentials to `DEVHUB_ENV_FILE` (`apps/ui/.env.local` in a checkout, `<app-data>/config/.env.local` when installed). |
 | `POST /api/setup/validate-path` | Validates `reposDir` (code folder), `notesDir`, or the optional `repoRoot` checkout before save. |
 | `POST /api/setup/check/datadog` | Tests Datadog API + application keys against the Events API. |
 | `POST /api/setup/github/device` | Starts or polls GitHub device-flow login (`action: "start"` \| `"poll"`). Token goes to `gh`, never to the browser. |

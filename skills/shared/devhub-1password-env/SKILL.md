@@ -22,13 +22,13 @@ DevHub's default item title is `devhub`. Field labels should match env var names
 
 ## Workflow
 
-1. Inspect the current repo support first: `dashboard/scripts/op-secrets.ts`, `dashboard/.env.example`, and `docs/reference/environment-variables.md`.
+1. Inspect the current repo support first: `apps/ui/scripts/op-secrets.ts`, `apps/ui/.env.example`, and `docs/reference/environment-variables.md`.
 2. Check the CLI without printing secrets: `command -v op`, `op --version`, and `op whoami >/dev/null`.
 3. If `op` is missing, install the official 1Password CLI and restart the shell. On macOS, prefer the 1Password docs or Homebrew cask/package already used on the machine.
 4. If `op` is installed but not signed in, ask the user to run `op signin` or unlock 1Password desktop integration. Do not try to capture passwords or session tokens in chat.
 5. Create or update one 1Password item titled `devhub`, optionally pinned by `DEVHUB_OP_VAULT`, with fields named exactly after env vars.
 6. Keep local path/preference vars out of 1Password: `NOTES_DIR`, `DOCS_DIR`, `REPO_ROOT`, bind hosts, ports, `AWS_PROFILE`, and local repo paths.
-7. For DevHub startup, let `loadEnvWithOnePasswordFallback` fetch missing managed secrets. Set `DEVHUB_OP_CACHE=0` when 1Password should stay the source of truth and secrets should not be written back to `dashboard/.env.local`.
+7. For DevHub startup, let `loadEnvWithOnePasswordFallback` fetch missing managed secrets. Set `DEVHUB_OP_CACHE=0` when 1Password should stay the source of truth and secrets should not be written back to `apps/ui/.env.local`.
 8. For OpenCode shared provider keys, keep repo config as `{env:VAR}` placeholders; add matching fields to the `devhub` item.
 9. For shell startup, prefer a guarded helper that reads fields only when `op` is installed and already signed in. Never hardcode plaintext secrets in shell files.
 
@@ -66,7 +66,7 @@ DEVHUB_OP_CACHE=0 npm run dev
 ## Verification
 
 - Run `npm run doctor` and confirm the `1password` check is OK or has a clear sign-in/setup warning.
-- Run `DEVHUB_OP_REFRESH=1 npm run dev` once to refresh `dashboard/.env.local` after field changes.
+- Run `DEVHUB_OP_REFRESH=1 npm run dev` once to refresh `apps/ui/.env.local` after field changes.
 - For code changes, run targeted tests around `op-secrets` and `dashboard-env-local`, then broader `npm run typecheck` when practical.
 
 ## Safety Rules

@@ -23,7 +23,7 @@ export function activate(context: vscode.ExtensionContext) {
   };
   context.subscriptions.push(vscode.commands.registerCommand("devhub.pair", guarded(async () => {
     const workspace = folder();
-    const code = await vscode.window.showInputBox({ title: "Pair this workspace with DevHub", prompt: "Paste the 30-minute pairing code from DevHub → Editor.", password: true, ignoreFocusOut: true });
+    const code = await vscode.window.showInputBox({ title: "Pair this workspace with DevHub", prompt: "Paste the 30-minute pairing code from DevHub → Repos → Changes.", password: true, ignoreFocusOut: true });
     if (!code) return;
     const pairing = parsePairing(code.trim());
     if (fs.realpathSync(workspace.uri.fsPath) !== fs.realpathSync(pairing.root)) throw new Error("This pairing belongs to a different workspace. In WSL, install the add-on in the WSL extension host.");
@@ -54,12 +54,12 @@ export function activate(context: vscode.ExtensionContext) {
     });
     const data = await response.json() as { id?: string; error?: string };
     if (!response.ok || !data.id || !/^[0-9a-f-]{36}$/.test(data.id)) throw new Error(data.error || "DevHub did not accept the selection.");
+    const previewUrl = pairing.origin + "/editor?selection=" + encodeURIComponent(data.id);
     if (vscode.env.uiKind === vscode.UIKind.Web) {
-      // code-server rewrites localhost links through its port proxy. The open
-      // DevHub editor receives this preview from its authenticated inbox instead.
-      void vscode.window.showInformationMessage("Selection ready in the open DevHub editor. Review it before sending.");
+      await vscode.env.clipboard.writeText(previewUrl);
+      void vscode.window.showInformationMessage("Selection received. Preview link copied; open it in your local browser to review before sending.");
       return;
     }
-    await vscode.env.openExternal(vscode.Uri.parse(pairing.origin + "/editor?selection=" + encodeURIComponent(data.id)));
+    await vscode.env.openExternal(vscode.Uri.parse(previewUrl));
   })));
 }

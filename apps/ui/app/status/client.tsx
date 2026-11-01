@@ -1,0 +1,857 @@
+"use client";
+
+import { CommitMessageModal,defaultCommitCheckpointMessage } from "@/components/runs/CommitMessageModal";
+import { ConflictResolverPanel } from "@/components/runs/ConflictResolverPanel";
+import { RecentRunsPanel } from "@/components/runs/RecentRunsPanel";
+import { SyncHealthPanel } from "@/components/runs/SyncHealthPanel";
+import { SkeletonRows } from "@/components/ui/SkeletonRows";
+import { useHistory, useSearchParams } from "@/lib/navigation";
+import { fetchStatusRows, readCheck, type StatusSnapshot, type ServiceInfo, type ServicesStatus, type GitStatus, type McpRuntimeEntry } from "./status-data";
+import styles from "./status.module.css";
+import { CheckoutRebuildCard } from "@/components/desktop/CheckoutRebuildCard";
+import { CopyButton } from "@/components/ui/CopyButton";
+import { useLive } from "@/lib/hooks/use-fetch";
+import { getNow,subscribeMinute } from "@/lib/minute-tick";
+import { useSecondTick } from "@/lib/tickers";
+import { revalidateScriptsHistory } from "@/lib/runs/history-swr";
+import { formatRelativePastAge } from "@/lib/utils";
+import { waitForScriptRun } from "@/lib/runs/wait";
+import { AlertTriangle,ArrowDown,ArrowUp,Check,Cloud,GitBranch,Hammer,History,Link2,Play,RefreshCw,RotateCw } from "lucide-react";
+import Link from "@/lib/navigation";
+import { useCallback,useEffect,useRef,useState,useSyncExternalStore,type ReactNode } from "react";
+
+interface ScriptRunResponse {
+  runId: string;
+}
+
+interface ScriptHistoryEntry {
+  runId: string;
+  script: string;
+  startedAt: number;
+  finishedAt?: number;
+  exitCode?: number;
+}
+
+interface ScriptRunLogPayload {
+  runId: string;
+  script: string;
+  startedAt: number;
+  finishedAt?: number;
+  exitCode?: number;
+  lines: string[];
+}
+
+interface FailedSyncRun {
+  entry: ScriptHistoryEntry;
+  log: ScriptRunLogPayload;
+}
+
+/** Mirrors GET /api/status/dashboard/rebuild. */
+interface RebuildCapability {
+  available: boolean;
+  mode: "dev" | "production" | "desktop-packaged";
+  checkout: string | null;
+  reason?: string;
+}
+
+interface ExecStatus {
+  inFlight: {
+    command: string;
+    label?: string;
+    cwd?: string;
+    startedAt: number;
+    runningMs: number;
+    timeoutMs: number;
+    overdue: boolean;
+  }[];
+  slowest: { command: string; durationMs: number; ok: boolean; timedOut: boolean }[];
+}
+
+/**
+ * External commands in flight, plus the slowest recent ones.
+ *
+ * A blocked subprocess blocks the whole server, so "the dashboard is hanging"
+ * and "one git call is stuck" are the same picture from outside. This is the
+ * panel that tells them apart — an overdue entry names the command and the repo.
+ */
+function ExternalCommandsPanel() {
+  const { data } = useLive<ExecStatus>("/api/status/exec");
+  const inFlight = data?.inFlight ?? [];
+  const slowest = data?.slowest ?? [];
+  const now = useSecondTick(inFlight.length > 0);
+  if (inFlight.length === 0 && slowest.length === 0) return null;
+  return (
+    <>
+      <SectionLabel>External commands</SectionLabel>
+      <div className="card card-body min-w-0 flex flex-col gap-2">
+        {inFlight.length > 0 ? (
+          <ul className="flex flex-col gap-1">
+            {inFlight.map((call) => {
+              const runningMs = now ? Math.max(0, now - call.startedAt) : call.runningMs;
+              const overdue = runningMs > call.timeoutMs;
+              return (
+                <li key={`${call.command}-${call.startedAt}`} className="flex items-center gap-2 text-xs">
+                  <span className={overdue ? "badge badge-danger" : "badge badge-muted"}>
+                    {Math.round(runningMs / 1000)}s
+                  </span>
+                  <span className="font-mono truncate">{call.command}</span>
+                  {overdue ? <span className="text-danger">overdue</span> : null}
+                </li>
+              );
+            })}
+          </ul>
+        ) : (
+          <p className="text-xs text-text-subtle">Nothing running right now.</p>
+        )}
+        {slowest.length > 0 ? (
+          <details>
+            <summary className="text-xs text-text-subtle">Slowest recent ({slowest.length})</summary>
+            <ul className="mt-2 flex flex-col gap-1">
+              {slowest.slice(0, 10).map((call, i) => (
+                <li key={`${call.command}-${i}`} className="flex items-center gap-2 text-xs">
+                  <span className={call.timedOut ? "badge badge-danger" : "badge badge-muted"}>
+                    {Math.round(call.durationMs)}ms
+                  </span>
+                  <span className="font-mono truncate">{call.command}</span>
+                  {call.timedOut ? <span className="text-danger">timed out</span> : null}
+                </li>
+              ))}
+            </ul>
+          </details>
+        ) : null}
+      </div>
+    </>
+  );
+}
+
+function SectionLabel({ children }: { children: ReactNode }) {
+  return (
+    <div className="text-[11px] font-semibold px-0.5" style={{ color: "var(--text-subtle)", letterSpacing: "-0.01em" }}>
+      {children}
+    </div>
+  );
+}
+
+/** MCP: running = green, idle = neutral (not an error), missing binary = warning. */
+function McpStateDot({ running, binaryMissing }: { running: boolean; binaryMissing: boolean }) {
+  const background = running
+    ? "var(--success)"
+    : binaryMissing
+      ? "var(--warning)"
+      : "var(--text-subtle)";
+  return (
+    <span
+      className="inline-block h-2 w-2 shrink-0 rounded-[var(--radius-sm)] ring-1 ring-black/20"
+      style={{ background }}
+      title={running ? "Process detected" : binaryMissing ? "Command binary missing" : "No matching process (normal when idle)"}
+      aria-hidden
+    />
+  );
+}
+
+
+
+
+export default function StatusPage() {
+  const tickNow = useSyncExternalStore(subscribeMinute, getNow, () => 0);
+  const [services, setServices] = useState<ServicesStatus | null>(null);
+  const [mcpRuntime, setMcpRuntime] = useState<McpRuntimeEntry[]>([]);
+  const [runtimeLoading, setLoading] = useState(true);
+  const [runtimeUnavailable, setUnavailable] = useState<string[]>([]);
+  const gitQuery = useLive<GitStatus & { available?: boolean; reason?: string }>("/api/status/git?scope=local", { fetcher: readCheck });
+  const { mutate: revalidateGit } = gitQuery;
+  const gitPayload = gitQuery.error ? undefined : gitQuery.data;
+  const gitSkipped = gitPayload?.available === false && (gitPayload.reason === "no-checkout" || gitPayload.reason === "git-missing");
+  const git = !gitSkipped && typeof gitPayload?.branch === "string" && typeof gitPayload?.dirtyCount === "number" ? gitPayload : null;
+  const loading = runtimeLoading || gitQuery.isLoading;
+  const unavailable = [...runtimeUnavailable, ...(!git && !gitSkipped && !gitQuery.isLoading ? ["Repository"] : [])];
+  const notices = gitSkipped ? [gitPayload?.reason === "no-checkout"
+    ? "No linked checkout, so the repository check is skipped."
+    : "Git isn't installed, so the repository wasn't checked."] : [];
+  const [checkedAt, setCheckedAt] = useState<number | null>(null);
+  const statusRequest = useRef(0);
+  const [refreshed, setRefreshed] = useState(0);
+  const [rebuildInfo, setRebuildInfo] = useState<RebuildCapability | null>(null);
+  const [rebuilding, setRebuilding] = useState(false);
+  const [rebuildMessage, setRebuildMessage] = useState<string | null>(null);
+  const [checkoutRebuild, setCheckoutRebuild] = useState<boolean | null>(null);
+  const rebuildWatch = useRef<{ poll: number; timeout: number } | null>(null);
+  const [syncing, setSyncing] = useState(false);
+  const [syncDirtyModal, setSyncDirtyModal] = useState<{ dirtyCount: number } | null>(null);
+  const { data: scriptHistory } = useLive<ScriptHistoryEntry[]>("/api/scripts/history");
+  const latestSync = scriptHistory?.find((entry) => entry.script === "commit_dirty_push" || entry.script === "update_and_sync");
+  const failedSync = latestSync?.exitCode != null && latestSync.exitCode !== 0 ? latestSync : null;
+  const { data: failedSyncLog } = useLive<ScriptRunLogPayload>(failedSync ? `/api/scripts/runs/${failedSync.runId}` : null, { refreshInterval: 0 });
+  const latestFailedSyncRun: FailedSyncRun | null = failedSync && Array.isArray(failedSyncLog?.lines) ? { entry: failedSync, log: failedSyncLog } : null;
+  const params = useSearchParams();
+  const history = useHistory();
+  const requestedTab = params.get("tab");
+  const statusTab = requestedTab === "runtime" || requestedTab === "maintenance" ? requestedTab : "sync";
+  const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  const setStatusTab = (tab: string) => {
+    const next = new URLSearchParams(params.toString());
+    next.set("tab", tab);
+    history.push(`/status?${next}${window.location.hash}`, null);
+  };
+
+  const applyStatusRows = useCallback((snapshot: StatusSnapshot) => {
+    setServices(snapshot.services);
+    setMcpRuntime(snapshot.mcp ?? []);
+    setUnavailable(snapshot.unavailable);
+    setCheckedAt(Date.now());
+  }, []);
+
+  const reload = useCallback(() => {
+    const request = ++statusRequest.current;
+    setLoading(true);
+    void revalidateGit().catch(() => {});
+    void Promise.all([
+      fetchStatusRows(),
+      fetch("/api/status/dashboard/rebuild", { signal: AbortSignal.timeout(8_000) })
+        .then((r) => (r.ok ? (r.json() as Promise<RebuildCapability>) : null))
+        .catch(() => null),
+    ])
+      .then(([rows, rebuild]) => {
+        if (request !== statusRequest.current) return;
+        applyStatusRows(rows);
+        if (rebuild) setRebuildInfo(rebuild);
+      })
+      .finally(() => { if (request === statusRequest.current) setLoading(false); });
+  }, [applyStatusRows, revalidateGit]);
+
+  // A rebuild watch that outlives this page would reload the app out from under
+  // whatever the user navigated to next.
+  useEffect(
+    () => () => {
+      const watch = rebuildWatch.current;
+      if (!watch) return;
+      window.clearInterval(watch.poll);
+      window.clearTimeout(watch.timeout);
+    },
+    [],
+  );
+
+  useEffect(() => { reload(); }, [refreshed, reload]);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (document.visibilityState === "hidden") return;
+      const request = ++statusRequest.current;
+      void fetchStatusRows().then((rows) => {
+        if (request !== statusRequest.current) return;
+        applyStatusRows(rows);
+        setLoading(false);
+      });
+    }, 30_000);
+    const onVisible = () => { if (document.visibilityState === "visible") reload(); };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => { clearInterval(interval); document.removeEventListener("visibilitychange", onVisible); statusRequest.current += 1; };
+  }, [applyStatusRows, reload]);
+
+  function stopRebuildWatch() {
+    const watch = rebuildWatch.current;
+    if (!watch) return;
+    window.clearInterval(watch.poll);
+    window.clearTimeout(watch.timeout);
+    rebuildWatch.current = null;
+  }
+
+  async function rebuildDashboard() {
+    if (rebuilding) return;
+    setRebuilding(true);
+    setRebuildMessage(null);
+    try {
+      const res = await fetch("/api/status/dashboard/rebuild", { method: "POST" });
+      const body = (await res.json().catch(() => null)) as {
+        message?: string;
+        error?: string;
+      } | null;
+      if (!res.ok) {
+        setRebuildMessage(body?.error ?? "Couldn't start rebuild.");
+        setRebuilding(false);
+        return;
+      }
+      setRebuildMessage(body?.message ?? "Rebuild started — waiting for the server to come back…");
+
+      // The old server keeps answering for the first seconds of the build, so a
+      // plain health poll would reload straight back into the process that is
+      // about to exit. Wait for the outage, then for the recovery.
+      let observedDown = false;
+      const poll = window.setInterval(() => {
+        void fetch("/api/status/dashboard/rebuild", {
+          cache: "no-store",
+          signal: AbortSignal.timeout(2000),
+        })
+          .then((r) => {
+            if (observedDown && r.ok) {
+              stopRebuildWatch();
+              window.location.reload();
+            }
+          })
+          .catch(() => {
+            observedDown = true;
+          });
+      }, 2000);
+      const timeout = window.setTimeout(() => {
+        stopRebuildWatch();
+        setRebuildMessage("Rebuild didn't bring the dashboard back. Check the terminal logs.");
+        setRebuilding(false);
+      }, 10 * 60_000);
+      rebuildWatch.current = { poll, timeout };
+    } catch {
+      setRebuildMessage("Couldn't start rebuild.");
+      setRebuilding(false);
+    }
+  }
+
+  async function quickSync() {
+    const latestGit = await fetch("/api/status/git")
+      .then((r) => (r.ok ? r.json() : null))
+      .catch(() => null) as GitStatus | null;
+
+    if (latestGit?.dirtyCount && latestGit.dirtyCount > 0) {
+      setSyncDirtyModal({ dirtyCount: latestGit.dirtyCount });
+      return;
+    }
+
+    setSyncing(true);
+    try {
+      const syncStart = await fetch("/api/scripts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ script: "update_and_sync" }),
+      });
+      if (!syncStart.ok) throw new Error("Could not start Update & Sync.");
+      const { runId } = await syncStart.json() as ScriptRunResponse;
+      const syncCode = await waitForScriptRun(runId);
+      revalidateScriptsHistory();
+      if (syncCode !== 0) throw new Error(`Update & Sync failed (exit ${syncCode}).`);
+      setTimeout(() => setRefreshed((n) => n + 1), 5000);
+    } finally {
+      setSyncing(false);
+    }
+  }
+
+  async function quickSyncAfterCommit(commitMessage: string) {
+    setSyncing(true);
+    try {
+      const commitStart = await fetch("/api/scripts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          script: "commit_dirty_push",
+          commitMessage,
+        }),
+      });
+      if (!commitStart.ok) throw new Error("Could not start Commit & Push action.");
+      const { runId: commitRunId } = await commitStart.json() as ScriptRunResponse;
+      const commitCode = await waitForScriptRun(commitRunId);
+      revalidateScriptsHistory();
+      if (commitCode !== 0) throw new Error(`Commit & Push failed (exit ${commitCode}).`);
+
+      const syncStart = await fetch("/api/scripts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ script: "update_and_sync" }),
+      });
+      if (!syncStart.ok) throw new Error("Could not start Update & Sync.");
+      const { runId } = await syncStart.json() as ScriptRunResponse;
+      const syncCode = await waitForScriptRun(runId);
+      revalidateScriptsHistory();
+      if (syncCode !== 0) throw new Error(`Update & Sync failed (exit ${syncCode}).`);
+      setTimeout(() => setRefreshed((n) => n + 1), 5000);
+    } finally {
+      setSyncing(false);
+    }
+  }
+
+  function buildAgentPrompt(failure: FailedSyncRun): string {
+    const excerpt = failure.log.lines.slice(-120).join("\n");
+    return [
+      "Fix the push blockers in this repo.",
+      "",
+      "Context:",
+      "- Checkout: your DevHub repository root (the folder you have open in the editor).",
+      `- Failed action: ${failure.entry.script}`,
+      `- Run ID: ${failure.entry.runId}`,
+      `- Exit code: ${failure.entry.exitCode ?? failure.log.exitCode ?? 1}`,
+      "",
+      "Goal:",
+      "- Make minimal code changes to resolve the failing verify/pre-push checks.",
+      "- Run the project verification command used by pre-push and confirm it is clean.",
+      "- Do not bypass hooks.",
+      "",
+      "Recent action log output:",
+      "```",
+      excerpt || "(no output captured)",
+      "```",
+    ].join("\n");
+  }
+
+
+  // Health summary — aggregated across all loaded data
+  const healthItems: string[] = [];
+  if (services) {
+    const visible = [
+      services.agents,
+    ].filter((s): s is ServiceInfo => !!s);
+    const stopped = visible.filter((s) => !s.active && !s.optional).length;
+    if (stopped > 0) healthItems.push(`${stopped} service${stopped > 1 ? "s" : ""} stopped`);
+  }
+  // Content (notes/tasks/diagrams/docs) has a one-tap sync and is tracked
+  // separately from genuine "dirty files" that need commit & push.
+  // Never fall back to the TOTAL dirty count: content (notes/tasks/diagrams/docs)
+  // has its own one-tap sync and must not be mislabeled as a generic "dirty path".
+  const otherDirty = git ? (git.otherDirtyCount ?? 0) : 0;
+  const contentDirty = git ? (git.contentDirtyCount ?? 0) : 0;
+  if (git) {
+    if (otherDirty > 0) healthItems.push(`${otherDirty} file${otherDirty > 1 ? "s" : ""} to commit`);
+    if (git.behind > 0) healthItems.push(`${git.behind} commit${git.behind > 1 ? "s" : ""} behind`);
+    if ((git.conflictCount ?? 0) > 0) {
+      healthItems.push(`${git.conflictCount} merge conflict${git.conflictCount !== 1 ? "s" : ""}`);
+    }
+    if (git.hints?.some((h) => h.severity === "error")) healthItems.push("git errors");
+  }
+  const mcpMissing = mcpRuntime.filter((s) => !s.binaryExists).length;
+  if (mcpMissing > 0) healthItems.push(`${mcpMissing} MCP binary missing`);
+  if (latestFailedSyncRun) healthItems.push("last sync failed");
+  if (contentDirty > 0) healthItems.push(`${contentDirty} content change${contentDirty === 1 ? "" : "s"} ready to sync`);
+  const allGreen = !loading && unavailable.length === 0 && healthItems.length === 0;
+  const summaryTitle = loading ? "Checking your workspace…" : unavailable.length ? "Some checks are unavailable" : allGreen ? "Core checks passed" : "Your workspace needs attention";
+
+  return (
+    <div className={`page-wrapper ${styles.page}`}>
+      <CommitMessageModal
+        open={syncDirtyModal !== null}
+        onClose={() => setSyncDirtyModal(null)}
+        title="Uncommitted changes"
+        description={
+          syncDirtyModal
+            ? `Working tree has ${syncDirtyModal.dirtyCount} changed path(s). Enter a commit message to stage, commit, push to origin, then run Update & Sync.`
+            : undefined
+        }
+        defaultMessage={defaultCommitCheckpointMessage()}
+        confirmLabel="Commit, push & sync"
+        variant="warning"
+        onConfirm={(msg) => {
+          setSyncDirtyModal(null);
+          void quickSyncAfterCommit(msg);
+        }}
+      />
+      <div className="page-header">
+        <div>
+          <h1 className="page-title">Status</h1>
+          <p className={styles.subtitle}>Workspace health, sync, and maintenance.</p>
+        </div>
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <button type="button" className="btn btn-primary" onClick={quickSync} disabled={syncing || !git}>
+            <Play size={14} aria-hidden />
+            {syncing ? "Syncing…" : git && git.dirtyCount > 0 ? "Commit & sync…" : "Sync workspace"}
+          </button>
+          <button
+            type="button"
+            className="btn btn-ghost"
+            style={{ fontSize: "12px", padding: "4px 10px" }}
+            onClick={() => setRefreshed((n) => n + 1)}
+            disabled={loading}
+            aria-label="Refresh status"
+          >
+            <RefreshCw size={14} className={loading && refreshed > 0 ? "animate-spin" : ""} aria-hidden />
+            Refresh
+          </button>
+        </div>
+      </div>
+
+      <section className={styles.summary} aria-label="Workspace health" aria-busy={loading}>
+        <div className={styles.summaryHeading}>
+          {loading ? <span className="skeleton h-4 w-4 rounded-full" aria-hidden /> : allGreen ? <Check size={20} className="text-success" aria-hidden /> : <AlertTriangle size={20} className="text-warning" aria-hidden />}
+          <div><h2 role="status">{summaryTitle}</h2>
+            <p>{checkedAt ? `Checked ${new Date(checkedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} · Updates every 30 seconds` : "Checking repository, agent connection, and MCP servers."}</p>
+          </div>
+        </div>
+        {loading ? <SkeletonRows count={2} height={36} variant="list" /> : (
+          <>
+            {unavailable.length > 0 && <div className={styles.unavailable}>
+              <p>Couldn’t check: {unavailable.join(", ")}. Retry to get their current status.</p>
+              <button type="button" className="btn btn-ghost" onClick={() => setRefreshed((n) => n + 1)}>Retry checks</button>
+            </div>}
+            {healthItems.length > 0 && <ul className={styles.issues}>
+              {healthItems.map((issue) => (
+                <li key={issue}><span>{issue}</span><button type="button" onClick={() => setStatusTab(issue.includes("service") || issue.includes("MCP") ? "runtime" : "sync")}>
+                  {issue.includes("service") || issue.includes("MCP") ? "View services" : "Review sync"} <ArrowUp size={12} className="rotate-45" aria-hidden />
+                </button></li>
+              ))}
+            </ul>}
+            {allGreen && <p className={styles.healthy}>No issues reported by repository or runtime checks. Skill sync is detailed below.</p>}
+            {notices.map((notice) => <p key={notice} className="text-sm text-text-muted">{notice}</p>)}
+            {services?.agents.optional && !services.agents.active && (
+              <p className="text-sm text-text-muted">Agents aren&apos;t set up. That&apos;s optional. <Link href="/setup?step=tools">Go to Setup → Tools</Link></p>
+            )}
+          </>
+        )}
+      </section>
+
+      <div className="flex flex-col gap-4">
+        <div className={styles.tabs} role="tablist" aria-label="Status sections">
+          {STATUS_TABS.map((tab, index) => (
+            <button key={tab.id} ref={(element) => { tabRefs.current[index] = element; }}
+              type="button" role="tab" id={`status-tab-${tab.id}`} aria-controls={`status-panel-${tab.id}`}
+              aria-selected={statusTab === tab.id} tabIndex={statusTab === tab.id ? 0 : -1}
+              onClick={() => setStatusTab(tab.id)}
+              onKeyDown={(event) => {
+                const next = event.key === "ArrowRight" ? (index + 1) % STATUS_TABS.length : event.key === "ArrowLeft" ? (index + STATUS_TABS.length - 1) % STATUS_TABS.length : event.key === "Home" ? 0 : event.key === "End" ? STATUS_TABS.length - 1 : -1;
+                if (next < 0) return;
+                event.preventDefault();
+                setStatusTab(STATUS_TABS[next].id);
+                tabRefs.current[next]?.focus();
+              }}>{tab.label}</button>
+          ))}
+        </div>
+        <div role="tabpanel" id={`status-panel-${statusTab}`} aria-labelledby={`status-tab-${statusTab}`} className={styles.panel} tabIndex={0}>
+        <p className={styles.sectionHint}>{STATUS_TABS.find((tab) => tab.id === statusTab)?.description}</p>
+
+        {statusTab === "sync" && (
+        <>
+        {!git && (loading ? <SkeletonRows count={3} variant="list" /> : notices.some((notice) => notice.startsWith("No linked checkout") || notice.startsWith("Git isn't installed")) ? <p className="text-sm text-text-muted">{notices.find((notice) => notice.startsWith("No linked checkout") || notice.startsWith("Git isn't installed"))}</p> : <p className="tone-panel tone-panel--warning">Repository status is unavailable. Retry checks above to see sync and change details.</p>)}
+        {git && (
+          <>
+          <div className="card min-w-0 flex flex-col">
+            <div className="card-header">
+              <span className="flex items-center gap-1.5"><GitBranch size={12} />Repo</span>
+            </div>
+            <div className="card-body flex flex-1 flex-col gap-3">
+              <div className="grid grid-cols-1 gap-x-5 gap-y-2.5 sm:grid-cols-2">
+                <div className="flex min-h-[1.75rem] items-center justify-between gap-3 border-b border-[var(--border-muted)] pb-2 sm:border-b-0 sm:pb-0">
+                  <span className="text-[13px] font-medium tracking-tight text-text-muted">
+                    Branch
+                  </span>
+                  <span className="truncate font-mono text-xs tabular-nums text-text" title={git.branch}>
+                    {git.branch}
+                  </span>
+                </div>
+                <div
+                  className="flex min-h-[1.75rem] items-center justify-between gap-3 border-b border-[var(--border-muted)] pb-2 sm:border-b-0 sm:pb-0"
+                  title="Dirty files needing commit & push. Notes/tasks/diagrams are tracked separately as syncable content."
+                >
+                  <span className="text-[13px] font-medium tracking-tight text-text-muted">
+                    Files to commit
+                  </span>
+                  <span className="flex items-center gap-1.5 text-sm">
+                    <span
+                      className="tabular-nums font-semibold"
+                      style={{ color: otherDirty > 0 ? "var(--warning)" : "var(--success)" }}
+                    >
+                      {otherDirty}
+                    </span>
+                    {contentDirty > 0 && (
+                      <span className="tabular-nums text-[11px] text-accent">
+                        +{contentDirty} content
+                      </span>
+                    )}
+                  </span>
+                </div>
+                <div
+                  className="flex min-h-[1.75rem] items-center justify-between gap-3 border-b border-[var(--border-muted)] pb-2 sm:border-b-0 sm:pb-0"
+                  title="Compared to your upstream branch (usually origin/main). ↑ = local commits not pushed yet. ↓ = remote commits not pulled yet."
+                >
+                  <span className="text-[13px] font-medium tracking-tight text-text-muted">
+                    Remote changes
+                  </span>
+                  <span className="flex flex-wrap items-center justify-end gap-x-2 gap-y-0.5 text-xs">
+                    {git.ahead > 0 && (
+                      <span className="inline-flex items-center gap-0.5 whitespace-nowrap text-accent" title="Unpushed local commits">
+                        <ArrowUp size={10} aria-hidden />
+                        {git.ahead} to push
+                      </span>
+                    )}
+                    {git.behind > 0 && (
+                      <span className="inline-flex items-center gap-0.5 whitespace-nowrap text-warning" title="Commits on remote you do not have locally">
+                        <ArrowDown size={10} aria-hidden />
+                        {git.behind} behind
+                      </span>
+                    )}
+                    {git.ahead === 0 && git.behind === 0 && (
+                      <span className="whitespace-nowrap text-success">
+                        up to date
+                      </span>
+                    )}
+                  </span>
+                </div>
+                {git.lastCommit && (
+                  <div className="flex min-h-[1.75rem] items-start justify-between gap-3 sm:col-span-2">
+                    <span className="shrink-0 pt-0.5 text-[13px] font-medium tracking-tight text-text-muted">
+                      Last commit
+                    </span>
+                    <span
+                      className="text-right font-mono text-[11px] leading-snug break-all text-text-subtle"
+                      title={new Date(git.lastCommit.authoredAt * 1000).toLocaleString()}
+                    >
+                      <span className="text-[var(--text-muted)]">{git.lastCommit.hash}</span>
+                      {" · "}
+                      {tickNow === 0
+                        ? "recently"
+                        : formatRelativePastAge(Math.max(0, tickNow - git.lastCommit.authoredAt * 1000))}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {git.dirtyCount > 0 && (
+                <div
+                  className="flex flex-col gap-2 rounded-md border border-[var(--border)] px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between"
+                  style={{ background: "var(--warning-dim)" }}
+                >
+                  <p className="text-xs leading-snug text-text">
+                    {otherDirty > 0
+                      ? "Automated sync is paused until these changes are committed (or discarded)."
+                      : "Notes, tasks, and diagrams have unsynced changes - sync them (cloud button in the top bar) before automated sync resumes."}
+                  </p>
+                </div>
+              )}
+
+              {latestFailedSyncRun && (
+                <div
+                  className="rounded-md border border-[var(--border)] px-3 py-2.5"
+                  style={{ background: "var(--danger-dim)" }}
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div className="space-y-1">
+                      <p className="text-xs font-semibold text-text">
+                        Last sync/commit action failed ({latestFailedSyncRun.entry.script}).
+                      </p>
+                      <p className="text-[11px] text-text-muted">
+                        Run <span className="font-mono">{latestFailedSyncRun.entry.runId}</span> exited with code{" "}
+                        {latestFailedSyncRun.entry.exitCode ?? latestFailedSyncRun.log.exitCode ?? "1"}.
+                      </p>
+                    </div>
+                    <CopyButton
+                      text={latestFailedSyncRun ? buildAgentPrompt(latestFailedSyncRun) : ""}
+                      label="Agent prompt"
+                    />
+                  </div>
+                  <pre
+                    className="mt-2 rounded border border-[var(--border-muted)] p-2 text-[11px] font-mono leading-snug"
+                    style={{
+                      color: "var(--text-muted)",
+                      background: "var(--bg)",
+                      maxHeight: "10rem",
+                      overflowY: "auto",
+                      whiteSpace: "pre-wrap",
+                    }}
+                  >
+                    {latestFailedSyncRun.log.lines.slice(-12).join("\n")}
+                  </pre>
+                </div>
+              )}
+
+              {(() => {
+                const extraHints =
+                  git.hints?.filter(
+                    (h) =>
+                      !(
+                        git.dirtyCount > 0 &&
+                        (h.text.startsWith("Working tree has dirty files") ||
+                          h.text.startsWith("Notes, tasks, and diagrams have unsynced"))
+                      ),
+                  ) ?? [];
+                if (extraHints.length === 0) return null;
+                return (
+                <details
+                  className="group rounded-md text-xs"
+                  style={{
+                    background: "var(--bg-elevated)",
+                    border: "1px solid var(--border)",
+                  }}
+                  open={extraHints.some((h) => h.severity === "error")}
+                >
+                  <summary
+                    className="cursor-pointer list-none px-3 py-2 font-semibold outline-none marker:content-none [&::-webkit-details-marker]:hidden text-text-muted"
+                  >
+                    <span className="inline-flex w-full items-center justify-between gap-2">
+                      <span className="text-text">Git notices</span>
+                      <span className="text-[11px] font-normal tabular-nums text-text-subtle">
+                        {extraHints.length} item{extraHints.length === 1 ? "" : "s"} · expand for details
+                      </span>
+                    </span>
+                  </summary>
+                  <div className="space-y-3 border-t border-[var(--border-muted)] px-3 py-3">
+                    {extraHints.map((h, i) => (
+                      <div key={i} className="space-y-1.5">
+                        <p style={{ color: h.severity === "error" ? "var(--danger)" : "var(--warning)" }}>{h.text}</p>
+                        {h.fix && (
+                          <p className="leading-relaxed text-text-muted">
+                            {h.fix}
+                          </p>
+                        )}
+                      </div>
+                    ))}
+                    <p className="border-t border-[var(--border-muted)] pt-2 text-[11px] leading-relaxed text-text-subtle">
+                      After you resolve blockers, use <strong className="font-medium text-text-muted">Sync</strong> on this page or run <strong className="font-medium text-text-muted">Update &amp; Sync</strong> from Actions - live output matches what you see there.
+                    </p>
+                  </div>
+                </details>
+                );
+              })()}
+            </div>
+          </div>
+
+          <div className="card min-w-0 flex flex-col">
+            <div className="card-header">
+              <span className="flex items-center gap-1.5"><AlertTriangle size={12} />Merge conflicts</span>
+            </div>
+            <div className="card-body">
+              <ConflictResolverPanel />
+            </div>
+          </div>
+          </>
+        )}
+
+
+        <div className="card min-w-0 flex flex-col">
+          <div className="card-header"><span className="flex items-center gap-1.5"><Cloud size={14} />Skills &amp; agent configuration</span></div>
+          <div className="card-body"><SyncHealthPanel /></div>
+        </div>
+
+
+        <div className="card min-w-0 flex flex-col">
+          <div className="card-header"><span className="flex items-center gap-1.5"><History size={14} />Recent activity</span></div>
+          <div className="card-body"><RecentRunsPanel /></div>
+        </div>
+        </>
+        )}
+
+        {statusTab === "runtime" && (
+        <>
+        <ExternalCommandsPanel />
+        {/* Services + MCP: shared row on large screens */}
+        <SectionLabel>Services &amp; Integrations</SectionLabel>
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)] lg:items-stretch">
+        <div className="card p-5 space-y-3"><h3 className="font-medium">Agents workspace</h3><p className="text-sm text-text-muted">{!services ? "Status unavailable" : services.agents?.active ? "Connected" : "Not connected"}</p><a className="btn btn-ghost" href="/agents?view=connection">Manage connection</a></div>
+
+        <div className="card min-w-0 flex flex-col">
+          <div className="card-header">
+            <span className="flex items-center gap-1.5"><Link2 size={12} />MCP Servers</span>
+          </div>
+          <div
+            className="card-body flex-1 min-h-0 overflow-y-auto max-h-[min(50vh,24rem)] lg:max-h-none"
+            style={{ padding: "8px 16px" }}
+          >
+            {mcpRuntime.length === 0 ? (
+              <p className="text-xs py-2 text-text-subtle">
+                {unavailable.includes("MCP servers") ? "MCP status is unavailable. Retry checks above." : "No MCP servers configured."}
+              </p>
+            ) : (
+              mcpRuntime.map((srv, i) => {
+                const isRunning = srv.runningCount > 0;
+                const binaryMissing = !srv.binaryExists;
+                const badgeClass = isRunning ? "badge-success" : binaryMissing ? "badge-warning" : "badge-muted";
+                const badgeText = isRunning ? `running · ${srv.runningCount} proc${srv.runningCount > 1 ? "s" : ""}` : binaryMissing ? "binary missing" : "idle";
+                return (
+                  <div
+                    key={srv.name}
+                    className="flex items-center justify-between py-2 text-sm"
+                    style={{ borderTop: i === 0 ? "none" : "1px solid var(--border-muted)" }}
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <McpStateDot running={isRunning} binaryMissing={binaryMissing} />
+                      <span className="font-medium font-mono min-w-0 truncate text-text" title={binaryMissing ? `binary missing: ${srv.command}` : srv.name}>{srv.name}</span>
+                    </div>
+                    <span className={`badge shrink-0 ${badgeClass}`} title={isRunning && srv.pids.length ? `pids: ${srv.pids.join(", ")}` : binaryMissing ? `command: ${srv.command}` : "no matching processes"}>
+                      {badgeText}
+                    </span>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+
+        </div>
+        </>
+        )}
+
+        {statusTab === "maintenance" && (
+        <>
+        {/*
+          Maintenance sits last on purpose. It is a minutes-long action nobody
+          needs on arrival, and putting it above the service cards pushed the
+          actual status — the reason anyone opens this page — below the fold.
+        */}
+        <SectionLabel>Maintenance</SectionLabel>
+        <CheckoutRebuildCard
+          onAvailability={setCheckoutRebuild}
+          autoStart={params.get("rebuild") === "1"}
+        />
+        {checkoutRebuild === false && (
+        <div className="card min-w-0">
+          <div className="card-header">
+            <span className="flex items-center gap-1.5"><Hammer size={12} />Rebuild dashboard</span>
+          </div>
+          <div className="card-body flex flex-col gap-3" style={{ padding: "12px 16px" }}>
+            <p className="text-xs leading-relaxed text-text-muted">
+              Reopening DevHub does <strong className="font-medium text-text">not</strong> rebuild.
+              Use this when a checkout-hosted dashboard needs a fresh production build.
+            </p>
+            {rebuildInfo?.mode === "dev" && (
+              <p className="text-xs leading-relaxed text-text-subtle">
+                The dev server already hot-reloads. This builds the production UI and restarts core.
+              </p>
+            )}
+            {rebuildInfo && !rebuildInfo.available && (
+              <p className="text-xs leading-relaxed text-text-subtle">{rebuildInfo.reason}</p>
+            )}
+            {rebuildMessage && (
+              <p
+                role="status"
+                aria-live="polite"
+                className="text-xs leading-relaxed"
+                style={{ color: rebuilding ? "var(--accent-text, var(--accent))" : "var(--danger)" }}
+              >
+                {rebuildMessage}
+              </p>
+            )}
+            <div className="flex items-center gap-2 min-w-0">
+              <button
+                type="button"
+                className="btn btn-ghost inline-flex shrink-0 items-center gap-1.5 text-xs"
+                style={{ padding: "4px 10px", minHeight: 28 }}
+                disabled={!rebuildInfo?.available || rebuilding}
+                aria-busy={rebuilding}
+                title={
+                  rebuildInfo === null
+                    ? "Checking whether this dashboard can rebuild itself…"
+                    : rebuildInfo.available
+                      ? `Builds the UI and restarts core in ${rebuildInfo.checkout}`
+                      : rebuildInfo.reason
+                }
+                onClick={() => void rebuildDashboard()}
+              >
+                <RotateCw size={12} className={rebuilding ? "animate-spin" : ""} aria-hidden />
+                {rebuilding ? "Rebuilding…" : "Rebuild & restart"}
+              </button>
+              {rebuildInfo?.checkout && (
+                <code
+                  className="font-mono text-[11px] min-w-0 truncate text-text-subtle"
+                  title={rebuildInfo.checkout}
+                >
+                  {rebuildInfo.checkout}
+                </code>
+              )}
+            </div>
+          </div>
+        </div>
+        )}
+        </>
+        )}
+
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const STATUS_TABS = [
+  { id: "sync", label: "Sync & changes", description: "Review local changes, keep tool configurations in sync, and inspect recent activity." },
+  { id: "runtime", label: "Services", description: "Check agent connections, MCP servers, and running commands." },
+  { id: "maintenance", label: "Maintenance", description: "Rebuild and restart the dashboard when a fresh build is needed." },
+] as const;

@@ -87,9 +87,9 @@ Prove draft prefill through a supported AionUi interface or a minimal validated 
 
 The deletion inventory is:
 
-- `dashboard/components/shell/AgentChatPanel.tsx`: composer, attachment UI, conversation bubbles, streaming/retry/stop state, workflow buttons and command-extraction UI. AionUi owns the ongoing conversation experience.
-- `dashboard/lib/agent-chat.ts` and its chat-specific tests: custom chat types, flattened transcript requests, local chat persistence, open/clear/insert/focus events and chat popout preferences. Replace useful behavioral coverage with Agents handoff tests.
-- `dashboard/app/api/agent/chat/route.ts`: retire the dedicated custom-chat endpoint after its callers migrate. Shared generation utilities remain for tracked inline AI features.
+- `apps/ui/components/shell/AgentChatPanel.tsx`: composer, attachment UI, conversation bubbles, streaming/retry/stop state, workflow buttons and command-extraction UI. AionUi owns the ongoing conversation experience.
+- `apps/ui/lib/agent-chat.ts` and its chat-specific tests: custom chat types, flattened transcript requests, local chat persistence, open/clear/insert/focus events and chat popout preferences. Replace useful behavioral coverage with Agents handoff tests.
+- `apps/ui/app/api/agent/chat/route.ts`: retire the dedicated custom-chat endpoint after its callers migrate. Shared generation utilities remain for tracked inline AI features.
 - `TerminalDock.tsx`: remove agent chat panes, seeds, chat event listeners, agent-only drag/drop routing, provider/status state and chat frame branches. It retains ordinary shells, command blocks/history, capture, terminal proposals and terminal frame controls.
 - `AgentStatusStrip.tsx`, `agent-attach.ts`, chat-only helpers in `terminal-prompt.ts`/`agent-status.ts`, and agent-specific portions of `terminal-agent.css`: remove once caller checks prove them unused. The stylesheet and helpers may contain shared terminal behavior; move or retain those portions rather than deleting by filename alone.
 - Command-palette and other AI callers: replace `openAgentChat`, `focusAgentComposer` and `insertAgentComposer` with explicit Agents navigation/context handoffs; remove delayed focus timers and custom chat tabs. Shared terminal window controls such as `DockFrameControls.tsx` remain where ordinary terminals use them.
@@ -121,7 +121,7 @@ flowchart LR
   G[Constrained model generation] --> R
 ```
 
-Extend `dashboard/lib/agent-runs` as the single dispatch/lifecycle boundary. Add a small `dashboard/lib/aionui` adapter for connection, validated request/response mapping, catalog capabilities and events. Keep upstream schemas and naming inside that adapter. `agent-job.ts` becomes a UI caller of the shared dispatch service and a separate, client-only navigation helper.
+Extend `apps/ui/lib/agent-runs` as the single dispatch/lifecycle boundary. Add a small `apps/ui/lib/aionui` adapter for connection, validated request/response mapping, catalog capabilities and events. Keep upstream schemas and naming inside that adapter. `agent-job.ts` becomes a UI caller of the shared dispatch service and a separate, client-only navigation helper.
 
 Do not add a generic agent framework, a second scheduler, another transcript database or a new public orchestration API. Preserve the existing DevHub agent APIs and MCP tools while changing their execution backend.
 
@@ -210,19 +210,19 @@ Paths below are implementation targets, not files changed by this plan. Re-check
 
 | Area | Existing entry points and intended change |
 | --- | --- |
-| Navigation and hosting | `dashboard/lib/nav.ts`, `dashboard/app/layout.tsx`, `components/persistent/PersistentOpenCode.tsx`, `PersistentChamber.tsx`, `PersistentServiceFrame.tsx`; add `/agents` and a persistent AionUi host. Remove the session-created → route-push coupling. |
+| Navigation and hosting | `apps/ui/lib/nav.ts`, `apps/ui/app/layout.tsx`, `components/persistent/PersistentOpenCode.tsx`, `PersistentChamber.tsx`, `PersistentServiceFrame.tsx`; add `/agents` and a persistent AionUi host. Remove the session-created → route-push coupling. |
 | Shell entry points | `components/shell/WorkspaceTabs.tsx`, `CommandPalette.tsx`, `TerminalDock.tsx`; top bar, launch menu, shortcuts, mobile shelf and tab-title helpers. Replace AI open/focus events while preserving ordinary terminal behavior. |
-| Custom chat removal | `components/shell/AgentChatPanel.tsx`, `AgentStatusStrip.tsx`, chat portions of `terminal-agent.css`, `dashboard/lib/agent-chat.ts`, `agent-chat.test.ts`, `agent-attach.ts`, and `app/api/agent/chat/route.ts`; delete the obsolete chat stack after migration and reference checks. Rewire `TerminalBlockHistory.tsx` and `TerminalBlocksView.tsx` context actions through the new handoff. |
-| Interactive launch | `dashboard/lib/agent-job.ts`, `agent-chat.ts`, `components/tasks/useTaskAgentActions.tsx`, `PlanTaskDialog.tsx`, `ImplementTaskDialog.tsx`, `ImplementReadyPanel.tsx`; use one shared launch result and explicit local open action. |
-| Runtime/lifecycle | `dashboard/lib/agent-runs/dispatch.ts`, `background.ts`, `run-files.ts`, `store.ts`, existing events/consent/budget/worktree modules; add the AionUi adapter and runtime-specific reconciliation. |
-| APIs and task linkage | `dashboard/app/api/agent/**`, `app/api/tasks/agent-runs/**`, `app/api/tasks/implement/**`, `app/api/tasks/stage/route.ts`, `dashboard/lib/tasks/task-agent-runs.ts`, `reconcile-task-agent-sidecar.ts`, `run-snapshot.ts`; preserve stage checks and handoff/resume contracts. |
-| PRs and investigations | `dashboard/lib/github/auto-pr-review.ts`, `auto-pr-review-poller.ts`, `auto-pr-review-state.ts`, `pipeline-investigate.ts`, relevant PR/pipeline/Datadog routes and buttons; dispatch silently for background origin and link results. |
-| Scheduler | `dashboard/lib/scheduler.ts`; server-owned execution, atomic occurrence claim, durable status/recovery and current wake/approval policy. |
+| Custom chat removal | `components/shell/AgentChatPanel.tsx`, `AgentStatusStrip.tsx`, chat portions of `terminal-agent.css`, `apps/ui/lib/agent-chat.ts`, `agent-chat.test.ts`, `agent-attach.ts`, and `app/api/agent/chat/route.ts`; delete the obsolete chat stack after migration and reference checks. Rewire `TerminalBlockHistory.tsx` and `TerminalBlocksView.tsx` context actions through the new handoff. |
+| Interactive launch | `apps/ui/lib/agent-job.ts`, `agent-chat.ts`, `components/tasks/useTaskAgentActions.tsx`, `PlanTaskDialog.tsx`, `ImplementTaskDialog.tsx`, `ImplementReadyPanel.tsx`; use one shared launch result and explicit local open action. |
+| Runtime/lifecycle | `apps/ui/lib/agent-runs/dispatch.ts`, `background.ts`, `run-files.ts`, `store.ts`, existing events/consent/budget/worktree modules; add the AionUi adapter and runtime-specific reconciliation. |
+| APIs and task linkage | `apps/ui/app/api/agent/**`, `app/api/tasks/agent-runs/**`, `app/api/tasks/implement/**`, `app/api/tasks/stage/route.ts`, `apps/ui/lib/tasks/task-agent-runs.ts`, `reconcile-task-agent-sidecar.ts`, `run-snapshot.ts`; preserve stage checks and handoff/resume contracts. |
+| PRs and investigations | `apps/ui/lib/github/auto-pr-review.ts`, `auto-pr-review-poller.ts`, `auto-pr-review-state.ts`, `pipeline-investigate.ts`, relevant PR/pipeline/Datadog routes and buttons; dispatch silently for background origin and link results. |
+| Scheduler | `apps/ui/lib/scheduler.ts`; server-owned execution, atomic occurrence claim, durable status/recovery and current wake/approval policy. |
 | MCP | `mcp-servers/devhub-server/src/tools/agents.ts`, `tasks.ts`, `work.ts`, `jobs.ts`, `ui.ts`, `notes.ts`, `datadog.ts`, annotations and dashboard client context; preserve dispatch/wait/follow-up/cancel/diff contracts and enforce unattended navigation policy. |
-| Activity | `dashboard/app/agent-activity/client.tsx` and its APIs; reuse under Agents Activity, with source grouping, durable links and managed-generation records. |
-| Shared AI generation | `dashboard/lib/ai/generate.ts`, `briefing-ai.ts`, `briefing-canvas.ts`, `repos/learn-ai.ts`, `db/ai-sql.ts`, briefing design route; register all calls and add constrained conversation-backed briefing support. |
-| Direct SDK bypasses | `dashboard/lib/briefing-tasks.ts`, `capability/ai-enrich.ts`, `capability/explain.ts`, `ownership/service.ts`, `notes-ai/stream-chat.ts`, commit/stash-message routes, capability journey and repo-learning tutor routes; move through the shared tracked boundary without losing feature-specific response contracts. |
-| Service/setup cleanup | `dashboard/lib/dev-peer-services.ts`, `dev-services.ts`, `peer-service-availability.ts`, setup and status/service routes, `desktop/sidecar/supervisor.mjs`, desktop staging/config and root install/start scripts; add a single AionUi connection and remove obsolete peer launch/theme logic after cutover. |
+| Activity | `apps/ui/app/agent-activity/client.tsx` and its APIs; reuse under Agents Activity, with source grouping, durable links and managed-generation records. |
+| Shared AI generation | `apps/ui/lib/ai/generate.ts`, `briefing-ai.ts`, `briefing-canvas.ts`, `repos/learn-ai.ts`, `db/ai-sql.ts`, briefing design route; register all calls and add constrained conversation-backed briefing support. |
+| Direct SDK bypasses | `apps/ui/lib/briefing-tasks.ts`, `capability/ai-enrich.ts`, `capability/explain.ts`, `ownership/service.ts`, `notes-ai/stream-chat.ts`, commit/stash-message routes, capability journey and repo-learning tutor routes; move through the shared tracked boundary without losing feature-specific response contracts. |
+| Service/setup cleanup | `apps/ui/lib/dev-peer-services.ts`, `dev-services.ts`, `peer-service-availability.ts`, setup and status/service routes, `desktop/sidecar/supervisor.mjs`, desktop staging/config and root install/start scripts; add a single AionUi connection and remove obsolete peer launch/theme logic after cutover. |
 | Documentation/config | Task handoff, agents, auto-review, pipeline, scheduled jobs, setup, environment variables and companion guides; update affected shared skill/MCP descriptions and persisted navigation/provider defaults. |
 
 ## Delivery plan

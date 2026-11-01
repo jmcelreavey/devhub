@@ -1,0 +1,144 @@
+/**
+ * Server-side inputs for the implement-ready checklist.
+ * Reuses the same task/note/repo neighbourhood as GET /api/tasks/implement/plan.
+ */
+import fs from "node:fs";
+import path from "node:path";
+import { getNotesDir } from "../../lib/content/dirs";
+import { blocksToText } from "../../../../../packages/shared/ui-lib/markdown-convert";
+import { adfToPlainText } from "../../lib/jira/adf";
+import { getResolvedJiraEnv, authHeader, apiBase } from "../../lib/jira/env";
+
+export { adfToPlainText };
+import { resolveTaskNotePath } from "./task-notes";
+import { readSourceContextIfPresent } from "./source-context";
+import { currentTaskNode, loadTaskIndex, taskLineageIds, type TaskNode } from "./task-index";
+export { resolveTaskNotePath } from "./task-notes";
+import { isTaskOpen, type Task } from "../../../../../packages/shared/tasks/types";
+import {
+  evaluateImplementReady,
+  taskTextHasPrerequisiteTag,
+  type ImplementReadyResult,
+  type OpenPrerequisiteBlocker,
+} from "./implement-ready";
+
+function noteFilePath(relPath: string): string | null {
+  const root = path.resolve(getNotesDir());
+  const full = path.resolve(root, `${relPath}.json`);
+  return full === root || full.startsWith(root + path.sep) ? full : null;
+}
+
+/** Task note body as round-trip markdown, or null when missing. */
+export function readTaskNoteMarkdown(notePath: string): string | null {
+  const full = noteFilePath(notePath);
+  if (!full || !fs.existsSync(full)) return null;
+  try {
+    const raw = JSON.parse(fs.readFileSync(full, "utf8")) as unknown;
+    const blocks = Array.isArray(raw) ? raw : (raw as { content?: unknown })?.content;
+    if (!Array.isArray(blocks)) return null;
+    return blocksToText(blocks);
+  } catch {
+    return null;
+  }
+}
+
+/** Best-effort Jira description text; null when unconfigured / missing / error. */
+export async function fetchJiraDescriptionText(key: string, signal?: AbortSignal): Promise<string | null> {
+  const j = getResolvedJiraEnv();
+  if (!j) return null;
+  try {
+    const res = await fetch(`${apiBase(j)}/issue/${encodeURIComponent(key)}?fields=description`, {
+      signal,
+      headers: {
+        Authorization: authHeader(j),
+        Accept: "application/json",
+      },
+      cache: "no-store",
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as { fields?: { description?: unknown } };
+    const text = adfToPlainText(data.fields?.description ?? null).trim();
+    return text || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Open tasks tagged #prerequisite / #prereq / #blocker that either this task
+ * links to, or that link back to this task.
+ */
+export function collectOpenPrerequisiteBlockers(
+  taskId: string,
+  links: Task["links"] | undefined,
+): OpenPrerequisiteBlocker[] {
+  const index = loadTaskIndex();
+  const aliases = taskLineageIds(index, taskId);
+  const out = new Map<string, OpenPrerequisiteBlocker>();
+
+  const consider = (node: TaskNode | undefined) => {
+    if (!node) return;
+    if (aliases.has(node.task.id)) return;
+    if (node.task.movedAt) return;
+    if (!isTaskOpen(node.task)) return;
+    if (!taskTextHasPrerequisiteTag(node.task.text)) return;
+    out.set(node.task.id, {
+      id: node.task.id,
+      text: node.task.text,
+      date: node.date,
+    });
+  };
+
+  for (const link of links ?? []) {
+    if (link.kind !== "task") continue;
+    consider(currentTaskNode(index, link.id) ?? undefined);
+  }
+
+  for (const candidate of index.byId.values()) {
+    const node = currentTaskNode(index, candidate.task.id);
+    if (!node) continue;
+    if (node.task.movedAt) continue;
+    const pointsHere = node.task.links?.some((l) => l.kind === "task" && aliases.has(l.id));
+    if (!pointsHere) continue;
+    consider(node);
+  }
+
+  return [...out.values()];
+}
+
+/** Gather everything the checklist reads for one task and evaluate it. */
+export async function checkTaskImplementReady(
+  task: Task,
+  date: string,
+  opts: {
+    selectedRepoId?: string | null;
+    hubRepoId?: string | null;
+    hardBlock: boolean;
+    requirePlanSection?: boolean;
+  },
+): Promise<ImplementReadyResult & { notePath: string; noteExists: boolean; repoIds: string[] }> {
+  const notePath = resolveTaskNotePath(task, date);
+  const repoIds = (task.links ?? []).filter((l) => l.kind === "repo").map((l) => l.id);
+  const noteMarkdown = readTaskNoteMarkdown(notePath);
+  const result = evaluateImplementReady({
+    noteMarkdown,
+    jiraDescriptionText: task.jiraKey ? await fetchJiraDescriptionText(task.jiraKey) : null,
+    hasJiraKey: Boolean(task.jiraKey),
+    repoIds,
+    selectedRepoId: opts.selectedRepoId ?? null,
+    hubRepoId: opts.hubRepoId ?? null,
+    openPrerequisiteBlockers: collectOpenPrerequisiteBlockers(task.id, task.links),
+    hardBlock: opts.hardBlock,
+    requirePlanSection: opts.requirePlanSection,
+    notePath,
+    taskDate: date,
+  });
+  const context = readSourceContextIfPresent(task.id);
+  if (context?.snapshot) {
+    result.items.push({ id: "source-context", ok: !context.stale, label: "Jira source context reviewed",
+      detail: context.stale ? "The source or edited brief changed since the last context review." : "The reviewed source and brief revisions still match.",
+      fixHref: `/storyboard?task=${encodeURIComponent(task.id)}`, fixLabel: "Review source context" });
+    if (context.stale) { result.ok = false; result.blocked = opts.hardBlock; result.warn = !opts.hardBlock; }
+  }
+  return { ...result, notePath, noteExists: noteMarkdown !== null, repoIds };
+}

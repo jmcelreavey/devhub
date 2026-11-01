@@ -1,6 +1,6 @@
 ---
 title: Plugin system
-description: "Tier-1 to tier-3 plugins: how a separate repo contributes skills, agents, MCP servers and dashboard modules."
+description: "How a separate repo contributes assets and reviewed runtime features."
 order: 7
 icon: Blocks
 tags: [architecture, plugins]
@@ -21,53 +21,271 @@ The plugin loader is a generalisation of the original `ai-tools` skill merge: in
 one hard-coded upstream, any number of registered plugins merge alongside core, with
 **core winning on name collisions**.
 
-```mermaid
-graph TD
-  reg["~/.config/devhub/plugins.json<br/><i>machine-local registry</i>"] --> loader["Plugin loader"]
-  loader --> t1["Tier 1: assets<br/>skills, agents, MCP configs"]
-  loader --> t2["Tier 2: dashboard modules<br/>materialised into dashboard/"]
-  loader --> t3["Tier 3: branding<br/>presets, fonts, logo"]
-
-  t2 -.->|"fs.cpSync on predev"| tree["dashboard/ tree"]
-  core["Core repo files"] -->|"always wins"| tree
-```
-
-> [!WARNING]
-> Tier-2 files are **copies**. Editing a materialised file in `dashboard/` looks
-> like it works until the next `npm run dev`, which silently overwrites it. Run
-> `git ls-files -- <path>` first: no output means the file is plugin-owned and
-> you should edit the plugin repo instead.
+Plugins contribute skills, agents and MCP configuration through asset sync. Pages,
+navigation, themes, providers and services use reviewed runtime contributions. Core
+never copies plugin dashboard source into the checkout; a manifest with `dashboard`
+is rejected. See the [runtime example](../../templates/runtime-plugin/README.md).
 
 > Building one? See the step-by-step [Creating a Plugin](../contributing/creating-plugins.md) guide.
 > This page is the design/reference.
 
-## Tiers
-
-### Packaged runtime plugins
+## Packaged runtime plugins
 
 An optional `runtime` manifest field adds a separate delivery path. `runtime.api: "1"` and `transport: "request-worker"` identify a prebuilt `.mjs` bundle committed alongside its dependency lockfile. Both have SHA-256 pins. The GitHub installer reviews the exact commit, permissions and files before **Trust and enable**. It never builds the plugin or installs its dependencies.
 
 Core ships fixed dynamic host routes once. Each request launches the bundled Node through `execExternal`, with a 30-second deadline, a 64 KB request limit and a 2 MB response limit. Only declared pages, API methods/paths and MCP server names are reachable. Pages render in a sandboxed frame with an opaque origin; a small message bridge can invoke only that plugin's declared APIs. MCP is stateless HTTP, registered for new DevHub-managed Paseo sessions. Existing sessions must be restarted to acquire new servers.
 
-Managed runtime installs bypass checkout materialisation. Their approval receipt holds manifest and source-tree hashes outside the plugin directory. Changed files refuse execution. Disable blocks new work and cancels active workers; remove keeps downloads and plugin data, matching existing removal behaviour. Updates currently require remove, add and fresh consent.
+Managed runtime installs use an approval receipt that holds manifest and source-tree hashes outside the plugin directory. Changed files refuse execution. Disable blocks new work and cancels active workers; remove keeps downloads and plugin data, matching existing removal behaviour. Updates currently require remove, add and fresh consent.
+
+Local runtime bundles can use the same managed registration without a GitHub download:
+
+```bash
+npm run plugins -- add-runtime /path/to/plugin
+# Review the permissions and hashes, then repeat with the digest printed above:
+npm run plugins -- add-runtime /path/to/plugin --trust <plan-digest>
+```
+
+The first command only reviews a snapshot. The second checks those inputs again, saves
+an approved copy under managed plugin storage and registers its runtime immediately.
+It does not publish skills and agents. Open, disable,
+re-enable or remove it from Plugins without rebuilding the dashboard. Source edits need
+a fresh install and consent; they do not change the approved copy. A same-named local
+or managed registration is never replaced. Existing `plugins add` registrations keep their local asset sync path.
 
 The child receives only declared environment variables, its own HOME/temp folder and a controlled PATH. Node filesystem permissions confine ordinary file access to the plugin and its data. Exec is separately declared. This is **not a sandbox against hostile code**: server network declarations are disclosures, and permitted child processes can escape Node's restrictions. All runtime plugins are labelled high risk. Checksums do not verify publisher identity.
 
+`permissions.write` grants named paths beneath the host home, separately from
+read-only `permissions.read`. Both reject traversal and symlinked paths. Keep
+writable scopes as narrow as the feature permits; the review lists each one.
+
+`capabilities.settings: [{ "path": "/profile", "keys": ["AWS_PROFILE"] }]`
+allows that non-streaming POST route to return `{ ok: true, hostSettings:
+{ AWS_PROFILE: "profile-name" } }`. The key must also be in `permissions.publicEnv`.
+Core saves only this patch to its existing settings file, retains unrelated
+settings, and removes `hostSettings` from the response. The worker cannot read
+the settings file. Failed, malformed, cancelled, replaced and concurrently
+changed responses cannot save a patch. Only `AWS_PROFILE` is supported today.
+
+`permissions.notes` can separately request specific top-level folders in the
+existing notes vault, for example `[{ "path": "appraisal", "write": true }]`.
+Each reviewed grant is read-only unless `write` is true. The host resolves the
+vault and rejects symlinked scopes before launching the worker, then supplies
+only those folder paths in `DEVHUB_PLUGIN_NOTE_SCOPES` and Node's filesystem
+permissions. An injected host context must supply its own `NOTES_DIR`; it cannot
+fall back to another vault. Notes stay in place when a plugin is replaced or
+disabled. Plugins must still validate note content and use atomic writes.
+
 Runtime branding supports dark/light colour presets, PNG/WebP logos and WOFF2 fonts. Choose **Use {label} branding** on the plugin page. It does not replace signed app icons or inject arbitrary CSS. Disabling removes the active contribution within the next refresh (up to ten seconds), without overwriting the saved core theme.
 
-Source-only Next.js modules, overlays, native addons, streaming and database-provider hooks retain the checkout path below. See the [runtime plan](../plans/runtime-plugins-and-node.md) for migration limits and the [portable example](../../templates/runtime-plugin/README.md) for the executable contract.
+Source-only modules, overlays and native addons require migration to runtime plugins. See the [runtime plan](../plans/runtime-plugins-and-node.md) for migration limits and the [portable example](../../templates/runtime-plugin/README.md) for the executable contract.
 
-| Tier | Contributes | Status |
-| ---- | ----------- | ------ |
-| 1 — file-copy assets | `skills/`, `agents/`, `mcp/`, optional MCP packages | **implemented** |
-| 2 — dashboard module | pages, API routes, libs, components | **implemented** |
-| 3 — branding (whitelabel) | theme, fonts, logo, desktop icon | **implemented** |
+#### Reviewed host reads
+
+A runtime may bind `capabilities.reads` to a declared non-streaming GET route.
+The available sources are `github.prs`, `jira.issues` and `datadog.alerts` (the
+optional Datadog integration provider). The review lists each route and source.
+Core appends a version-one `hostReads` snapshot with its configured origin and
+allowlisted work metadata; public callers cannot provide that field. Other
+routes and MCP calls receive no snapshot. Credentials, account configuration
+and arbitrary host HTTP access stay outside the worker.
+
+PR lists are bounded to 100 authored and 100 review rows, Jira to 40 issues and
+alerts to 20 rows per group; each string is limited to 4,096 characters.
+Optional source failures produce null entries, preserving partial results.
+Preparation has a ten-second deadline under the worker's active-call lease;
+caller cancellation, disable and replacement retire it before a worker starts.
+Native reads retain their own network/subprocess deadlines. Caller input stays
+limited to 64 KiB; the combined snapshot and input must fit one MiB. Workers
+that declare reads must accept that input size. Core rechecks the reviewed
+snapshot before launch. Read preparation is never replayed as a write.
+
+## Headless runtime toolsets
+
+A managed snapshot can expose its existing tool names through the core stdio peer,
+without a running dashboard or importing a plugin module. Ship this descriptor at
+the plugin root as `devhub-mcp-toolsets.json`:
+
+```json
+{
+  "version": 2,
+  "toolsets": [{ "name": "example", "runtime": "example", "tools": ["example_read"] }]
+}
+```
+
+`runtime` names a server declared in `runtime.mcp`. The descriptor and bundle are
+covered by the same review receipt. `DEVHUB_MCP_TOOLSETS` selects these toolsets
+alongside core toolsets; unselected workers do not start. Core checks tool and
+toolset collisions before loading any plugin. It obtains the selected inventory
+from the restricted worker and refuses missing, extra or duplicate tool names.
+Object input schemas, field descriptions and annotations pass through the core
+registrar. The worker validates arguments with its original schema; unsupported
+tool metadata fails closed. Calls use the existing
+worker limits, filesystem grants, cancellation and secret redaction. Disable or
+replacement retires existing proxies; restart the MCP peer to acquire new tools.
+Version-one source descriptors remain available only to local source registrations.
+Managed snapshots never import their source registrar.
+
+#### Runtime database providers
+
+Declare `runtime.capabilities.database: { "id": "provider-namespace" }` to offer database connections. The review and consent digest cover this capability; unknown capabilities and the reserved `local` namespace are rejected. No provider code is imported into core. Existing source providers stay available until migrated; codegen records their plugin owner so a disabled or damaged managed replacement cannot fall back to compiled source code.
+
+Core sends internal worker requests with `kind: "database"`, `method: "POST"` and a `path` of `list`, `preflight`, `resolve` or `invalidate`. These requests cannot be invoked through the public runtime HTTP endpoint. Responses are limited to 256 KB; list and invalidation have a three-second deadline, preflight and resolve thirty seconds. A reviewed `database.listTimeoutSeconds` can raise a cold list's limit to at most thirty seconds; warm lists should use the provider's cache. Disable or replacement cancels active calls.
+
+- `list` returns up to 500 `DbConnectionRef` objects **without `source`**. Core supplies the plugin origin. IDs must use the declared namespace and be unique. Warm lists must be cheap, without network or credential fetches, and core caches them for thirty seconds. Registration and reviewed public-setting changes bypass that cache immediately.
+- `preflight` receives `{ id, accessMode }` (read by default) and returns `DbPreflight`. Remedies may only call the same plugin's declared POST API routes and always require machine-state confirmation.
+- `resolve` receives `{ id }` and returns `ResolvedDbConnection` to the server pool only. Engine, ID, access mode and dangerous flags must match the listing. SQLite's read-only flag must agree too. Core keeps its existing read-only and typed production-write confirmations.
+- `invalidate` returns `null` after dropping provider state. Core waits for it before listing or resolving again.
+
+Public responses use strict field validation and redact declared environment values. Worker failures return a fixed error without stdout, stderr or schema values. Hosts, usernames, passwords, URIs and SQLite paths belong only in `resolve`; never include credentials in labels, checks or other public metadata.
+
+#### Runtime integration providers
+
+Declare `runtime.capabilities.integrations` as an array of `{ id, label, capabilities }` entries. Each capability must be a supported read, alert, transition or standard issue/PR write action. Reviews cover the complete list. Provider IDs still conflict with core or other plugins rather than replacing them. Generated source providers carry their plugin owner and are suppressed when that owner has a managed registration, including disabled or damaged snapshots.
+
+Internal requests use `kind: "integration"`, `method: "POST"` and a body containing `provider`. Supported paths are `accounts`, `setupStatus`, `get` (`ref`), `alerts` (`limit`), `transitions` (`ref`), `prepareWrite` (`input`) and `executeWrite` (`input`, `prepared`, `requestId`). Accounts and setup have three-second limits; other calls thirty seconds. Responses are bounded to 256 KB. These operations are unavailable through the public runtime HTTP endpoint. Accounts and setup calls may be async for source providers too.
+
+Core validates provider/account identity, references, response shapes, capabilities and HTTP(S) links. Standard write inputs allow a runtime provider ID while retaining the native Jira/GitHub action, key, account and traversal checks. Jira task linking applies only to Jira writes. Prepared writes contain no credentials and are bound to the same input, unmodified preparation, adapter and reviewed snapshot for sixty seconds. Sending consumes the preparation. A disabled or updated worker refuses it; an uncertain or malformed execution response stays an unknown outcome in the existing write journal and is never replayed automatically.
+
+Workers can report an explicit refusal as `{ error: { kind, retryAfter? } }` using an existing integration error kind. Core supplies the public message; worker stderr and error bodies are never forwarded. Public data redacts declared environment values, while preparation and receipt documents containing those values are rejected. Keep credentials inside the worker and use `native` only for the request and revision evidence required to execute the prepared action.
+
+#### Runtime host slots
+
+Declare `runtime.capabilities.slots` entries with `{ id, location, label, routes }`.
+Locations are `repo`, `setup` and `task`; each route declares `path`, `method` and a
+required `confirmation` message for writes. Slot IDs and route/method pairs must
+be unique. Reviews include the context access and confirmation text.
+
+Core lists enabled slots live and renders their HTML using the same opaque-origin
+frame as runtime pages. Internal worker calls use `kind: "slot"`, the slot ID as
+`path`, and a body containing server-resolved `context`. `GET` returns HTML;
+`POST` includes an `action: { path, method, body? }` and returns JSON. Slot routes
+are separate from ordinary runtime APIs and cannot be called through that endpoint.
+The existing `devhub:api`, `devhub:cancel` and `devhub:result` frame messages apply.
+Escape sends `devhub:close` to dismiss the frame's own host dialog, when present.
+
+Repo context contains a scanned repo's name and resolved path. Task context
+contains its canonical ID, creation identity, title, note path, active profile and
+read-only state. Core ignores supplied descriptions and paths, refuses stale
+profiles or task identities, and checks ownership and closed state before each
+write. Setup receives only its location. Public responses redact declared secrets.
+The host binds calls to the reviewed manifest revision, confirms writes outside
+the frame, and offers Stop. Cancellation never retries a submitted action;
+plugins must preserve their own prepared-write and idempotency checks. Views are
+removed on disable or replacement without changing core fallbacks or saved data.
+
+#### Runtime background services
+
+Declare `runtime.capabilities.service: { id, label, maxRunSeconds }` for a
+connection worker. The limit is 30–86,400 seconds. Installation leaves it off:
+
+In Plugins, open the plugin's details and review its background service. Approve
+the reviewed snapshot there, or turn the service off from the same control.
+
+Consent covers the complete reviewed snapshot; replacement needs fresh service
+consent. Only the primary dashboard (`DEVHUB_SCHEDULER` other than `0`) starts
+services. Core sends `{ kind: "service", path: id, method: "START" }` on stdin
+and applies the same scoped environment, Node permissions and persistent plugin
+data directory as request workers. Services are internal, with no HTTP invocation.
+
+One cross-process lease covers each plugin. The child joins that lease before
+loading plugin code and stops its process group if its dashboard dies. Disable,
+revocation, changed bytes and shutdown cancel the connection. Windows services
+that request subprocess access fail closed until process-tree cleanup is supported.
+Other Windows service behaviour still needs target verification.
+
+Each run has a deadline and a 256 KiB ceiling per output stream. Core discards
+output and exposes only generic lifecycle states. Unexpected exits reconnect with
+backoff, stopping after five short-lived failures; explicit service approval
+retries a failed service. Core never queues or replays action requests. The
+worker must persist delivery IDs and preserve its own write/idempotency checks.
+
+The reviewed `board-snapshot` service task reads cards and workflow records for
+an available task profile. Without the `run-usage` grant it omits run usage,
+error and review enrichment. With that grant it reads scoped run data without
+importing or reconciling runs in the active profile. Its `uncertainRunState` is
+true when open, owned task runs cannot be verified. Consumers must not act on uncertain
+run state. If a failure acknowledgement cannot be verified, the snapshot reports
+an error. Service task responses are limited to 2 MiB; an oversized snapshot fails
+instead of returning a partial board.
+
+#### Reviewed runtime theme assets
+
+`runtime.capabilities.themes` declares up to eight presets with complete dark/light
+palettes. Core accepts only its existing colour tokens and colour syntax. Core
+preset IDs are reserved; a collision between plugins hides both contributions.
+An effect surface must declare its preferences. Sound must be off by default;
+each declared WAV has a volume cap of 0.25.
+
+The review hashes every declared HTML, static PNG/WebP, WOFF2 and WAV asset.
+Animated images and executable image formats are refused. HTML is limited to
+256 KiB; other theme assets to 4 MiB. A preset may declare up to 32 named images,
+with a 16 MiB ceiling across its distinct images. `/api/plugins/themes` returns
+`{ themes, managedPlugins }`: approved, enabled themes and managed owner names.
+Managed replacements suppress their compiled legacy presets and components even
+when disabled or unavailable. Asset requests name a declared asset and its current revision,
+never a file path. Disabled, changed and stale snapshots fail closed. HTML is
+returned as JSON for the sandbox host, never as a dashboard-origin document.
+Binary assets support bounded byte ranges so WebKit can decode reviewed sounds.
+Runtime presets appear in Appearance without rebuilding. Validated palettes apply
+before first paint, and palette/font rules are scoped to the reviewed revision.
+The live catalogue refreshes on focus and every ten seconds. Disable or replacement
+retires the old scene and audio; unavailable themes fall back to Graphite while
+retaining the saved preset and effect preferences for re-enable.
+
+Effect HTML runs in a passive, opaque-origin `allow-scripts` frame, outside React's
+component tree. It cannot read the dashboard DOM, storage or APIs. Its CSP blocks
+network resources, nested frames, workers and direct media playback. Core fetches
+declared images and supplies bounded data URLs. Use a runtime page or slot for
+interactive controls; effect frames cannot receive focus or pointer input.
+
+The frame receives `devhub:theme-state` events with the preset, mode, effective
+preferences, motion/visibility/editing state, viewport size and image data URLs
+keyed by declared asset ID. `devhub:theme-event` carries pointer coordinates
+(suppressed over editors), the `boo` shortcut outside editors, and task/merge
+celebrations. No typed text, task content or arbitrary DOM access crosses this
+bridge. `window.devhubTheme.play(id)` and `.stop(id)` can request only declared
+sounds. Core binds messages to the current frame and nonce, caps play requests,
+and requires both the saved sound preference and a real user gesture. Saved sound
+does not autoplay after reload. Visibility, master and sound switches stop playback.
+
+For a `readableScene`, `pointerEffects` can name up to eight declared preferences
+that independently enable mouse events. Coordinates remain rounded to eight
+pixels and are suppressed over protected areas and during editing. Pointer events
+also carry `overContent`: hide any follower there; eyes and other remote reactions
+can still respond. Without this declaration the existing cursor-only gate applies.
+
+`fogLayer: true` creates a second copy of the surface. Its state has `layer: "fog"`;
+the normal surface has `layer: "scene"`. The plugin must draw each part only in
+its respective layer. Core applies a wider, feathered mask and room envelope to
+the fog layer, and its regular protected-content mask to both. Protected text and
+editor rectangles stay in the host. Both copies receive the same `sceneEpoch`
+(milliseconds since epoch) for synchronising their timed effects. Only the scene
+copy receives input events or may request audio.
+
+`staticSurface: true` opts a readable surface into reduced-motion rendering in
+place of `staticImage` or `staticLayers`. The state has `motion: false` and
+preferences already adjusted for reduced motion. The surface must render still
+content, schedule no animation or events, and honour the effective preferences;
+core suppresses CSS animations and transitions and sends no interaction events.
+This preserves scalable textures and independently masked fog without a flattened
+viewport image. Sound remains governed by its own preference.
+
+An audio entry may use `trigger: "random"` with `loop: false` and a `schedule`
+of `initialMin`, `initialMax`, `min`, and `max` seconds (1–3600). An optional
+`rate: [min, max]` randomises playback speed between 0.5 and 2. Core schedules
+the bounded sounds only after activation, and cancels timers on hide, disable or
+retirement. Frames cannot trigger or stop scheduled sounds.
+
+Reduced motion and the motion kill-switch otherwise replace the script surface with its
+optional static image. Hidden tabs remove the scene. Palette and logo remain when
+effects are off. Scene errors stop that scene and appear in Appearance; plugin
+error details are not sent to the host. Runtime themes are reviewed before use.
 
 Docs and persona-modes are not yet plugin-aware (different delivery mechanisms).
 
-## Tier 1 — file-copy assets and MCP packages
+## File-copy assets and MCP packages
 
-Tier-1 assets mirror core directories and merge into the same catalogs:
+Assets mirror core directories and merge into the same catalogs:
 
 ```
 team-tools/
@@ -89,153 +307,35 @@ During bootstrap and the dashboard health check, DevHub scans enabled plugins fo
 That keeps plugin stdio servers self-contained instead of pretending one
 top-level `node_modules` can somehow satisfy every package on earth. It cannot.
 
-## Tier 2 — dashboard modules
+## Runtime dashboard features
 
-A plugin can ship a Next.js module (pages, API routes, libs, components) via a `dashboard`
-manifest field:
+Runtime plugins declare reviewed pages, APIs, providers and branding in their manifest.
 
-```json
-"dashboard": {
-  "root": "dashboard",
-  "paths": ["app/team-tools", "app/api/team-tools", "lib/team-ops.ts", "components/TeamScriptsCard.tsx"]
-}
-```
+Navigation comes from the reviewed live runtime catalogue. `runtime.pages` supplies
+palette destinations; optional `runtime.nav` metadata supplies labels, icons, groups,
+setup gates, sidebar visibility and Library/Settings section tabs. Its `href` must name
+a declared page alias or that page's canonical `/plugins/runtime/<name>?page=…` URL.
+Core constructs the links and follows plugin events, so enable, disable and reviewed
+replacement need no rebuild. Unreviewed source registrations contribute no shell links.
 
-The **materialiser** (`dashboard/lib/plugins/materialize.ts`, run via `sync_plugins` and
-wired into `predev`/`prebuild`/`prestart`) copies each path from the plugin into the core
-dashboard at the **same relative path** — so the plugin's `@/lib` / `@/components` imports
-resolve unchanged and Next compiles them as if they were core files. It:
+Legacy page URLs use reviewed `runtime.aliases`. Core checks them against its compiled
+route inventory and all managed owners, including disabled plugins. A conflict or bad
+navigation target hides that plugin's entries and points to Plugins; core namespaces
+always keep their routes. Use `group: "infra"` for infrastructure destinations. The
+existing infrastructure setup gate still applies.
 
-- refuses to overwrite any **git-tracked** core path (never clobbers core);
-- ignores the copies via `.git/info/exclude` (machine-local, never committed — the set is
-  per-machine since it depends on which plugins are registered);
-- prunes paths no longer contributed.
+API aliases can use named single-segment parameters, for example
+`/api/example/runs/[runId]`. Core passes them in `body.params` alongside
+`body.query`, rejects overlapping aliases for the same method, and accepts only
+letters, digits, `_` and `-` in parameter values. Targets remain declared,
+non-streaming runtime routes. Empty write bodies are forwarded without a `body`
+field; the target validates whether that is allowed.
 
-Nav: plugins declare `dashboard.nav` entries in `devhub-plugin.json`. The materialiser
-writes them into `lib/plugin-nav.generated.ts`; core merges them into the sidebar via
-`groupSidebarNav` and into ⌘P via `ALL_NAV_DESTINATIONS`. Use `group: "infra"` for
-infrastructure destinations. `lib/infrastructure-presence.ts` opens that gate when an
-enabled plugin declares `navGate: "infra"`, even before AWS setup. Generic AWS profiles
-and an optional automation folder can also open the gate; domain logic stays in plugins.
+### Database connections and branding
 
-### Database connections
-
-A plugin can contribute database connections to `/db` without forking the client.
-`dashboard.connections` is a module path under the plugin's `lib/` that default-exports
-a `DbConnectionProvider` (`list()` cheap, `resolve(id)` may mint credentials).
-
-```json
-"dashboard": {
-  "root": "dashboard",
-  "paths": ["lib/team-db-provider.ts"],
-  "connections": "lib/team-db-provider.ts"
-}
-```
-
-`lib/plugins/db-materialize.ts` writes `lib/plugin-db-providers.generated.ts` with a real
-`import` (empty baseline when no plugin declares connections, same skip-worktree treatment
-as plugin nav). The module **must** also be covered by `dashboard.paths`, or the generated
-import would fail the whole build. See [Database client — The plugin seam](database-client.md#the-plugin-seam).
-
-### Overlays (single-file extensions)
-
-When a plugin needs to **replace one core file** that must stay in the public template
-(buildable without the plugin), use `dashboard.overlays` instead of `paths`:
-
-```json
-"dashboard": {
-  "root": "dashboard",
-  "overlays": ["app/repos/RepoRadarSection.tsx"]
-}
-```
-
-Overlays differ from normal `paths` copies:
-
-| | `paths` | `overlays` |
-| - | ------- | ---------- |
-| Core baseline | Must **not** be git-tracked | Must be a **committed stub** in core (e.g. renders `null`) |
-| Local copy | Copied into core; listed in `.git/info/exclude` | Overwrites the stub on disk |
-| Git visibility | Fully ignored | Hidden via `git update-index --skip-worktree` (same convention as tier-3 branding baselines) |
-| Source shape | File or directory | **Single file only** |
-| Prune | Deletes the materialised copy | Restores the committed baseline with `git checkout --` |
-
-Workflow:
-
-1. Core commits an empty/no-op baseline at the target path so CI and fresh clones build
-   without the plugin (`app/repos/RepoRadarSection.tsx` is the reference pattern).
-2. The plugin ships the real implementation at the same relative path under its
-   `dashboard/` root.
-3. `sync_plugins` / `predev` copies the plugin file over the baseline and marks the path
-   skip-worktree. Applied overlays are tracked in `.git/devhub-overlays.json` for pruning.
-4. Disabling the plugin or removing the overlay entry restores the baseline and clears
-   skip-worktree.
-
-Use overlays for optional UI hooks wired into core pages; use `paths` for whole pages,
-API routes, and libs that core does not own at all.
-
-### Materialization honesty
-
-`detectMaterializeDrift` (`dashboard/lib/plugins/materialize-honesty.ts`) compares each
-materialised dashboard copy to its plugin source. When hashes diverge, the Status page
-shows a **Plugin-owned files edited in core** banner (`GET /api/status/materialized`).
-
-| Drift reason | Meaning |
-| ------------ | ------- |
-| `diverged` | Core copy differs from the plugin file — your edit will be overwritten on the next `sync_plugins` / `predev` |
-| `missing-source` | A materialised file has no matching plugin source |
-| `core-only-copy` | A path is listed in `.git/info/exclude` but no longer contributed by any enabled plugin |
-
-Fix: edit the plugin checkout (e.g. `~/Developer/team-tools/dashboard/…`), then restart the
-dev server or run `sync_plugins`. Never edit materialised copies in the core tree — see
-AGENTS.md → Plugin Architecture.
-
-## Tier 3 — branding (whitelabel)
-
-A plugin can **whitelabel** DevHub when it's enabled: contribute a theme palette + presets,
-seed the default theme/mode, swap the UI font, the sidebar/boot logo, and the desktop
-app icon. Nothing here is plugin-specific in core — any plugin can
-do it by adding a `branding` block to its manifest:
-
-```json
-"branding": {
-  "themeCss": "branding/theme.css",
-  "presets": "branding/presets.json",
-  "defaultPreset": "acme",
-  "defaultMode": "system",
-  "fonts": "branding/fonts",
-  "logo": { "src": "branding/logo.svg", "label": "ACME" },
-  "desktopIcon": "branding/icon.png"
-}
-```
-
-The **branding materialiser** (`dashboard/lib/plugins/branding.ts`, run alongside the
-dashboard materialiser via `sync_plugins` + `postinstall`) reads the **first enabled
-plugin** that declares `branding` and writes machine-local generated files:
-
-| Target | Source | Consumed by |
-| ------ | ------ | ----------- |
-| `app/plugin-branding.generated.css` | `themeCss` (verbatim) + copied fonts | imported by `app/layout.tsx` after `globals.css` |
-| `lib/plugin-branding.generated.ts` | `presets`, `defaultPreset`, `defaultMode`, `logo` | `lib/theme-presets.ts`, `lib/brand-mark.ts` |
-| `public/fonts-plugin/*` | `fonts` dir | `@font-face url("/fonts-plugin/…")` in your `themeCss` |
-| `public/plugin-brand-logo.*` | `logo.src` | sidebar chip, mobile bar, boot screen |
-| `public/plugin-desktop-icon.png` | `desktopIcon` | `desktop/scripts/stage-icons.mjs` during `desktop:stage` / `desktop:build` (OS app icon). Absent → core Shift Dock mark from `dashboard/public/icon-master.png`. |
-
-Key properties:
-
-- **Seeds, never forces.** `defaultPreset` / `defaultMode` / `logo` only set the out-of-box
-  default. The theme picker, the dark/light/system toggle, and the IconPicker still let the
-  user override, and their choice (in `localStorage`) is never overwritten.
-- **No core clobbering.** The two generated source files are committed as *empty baselines*
-  (so a fresh clone and CI build work with no plugin), and the materialiser rewrites them
-  locally then `git update-index --skip-worktree` so the whitelabel never shows as repo
-  churn. Copied `public/` assets are git-ignored.
-- **`openchamber` is deprecated.** DevHub no longer runs OpenChamber. The field is still
-  accepted so old manifests validate, but it does nothing; drop it from yours.
-- **One brander at a time.** If several enabled plugins declare `branding`, the first wins
-  and a warning is logged. Disabling the brander restores the empty baseline and prunes the
-  copied assets.
-
-See `docs/contributing/creating-plugins.md` for a step-by-step branding walkthrough.
+Runtime plugins declare database providers and branding assets in their reviewed
+runtime manifest. See [runtime database providers](#runtime-database-providers)
+and [reviewed runtime theme assets](#reviewed-runtime-theme-assets).
 
 ## Manifest
 
@@ -273,7 +373,7 @@ them on every forker. Declare them in the manifest:
 }
 ```
 
-`dashboard/scripts/check-plugin-requirements.mjs` runs in **`preinstall`**: it reads the
+`apps/ui/scripts/check-plugin-requirements.mjs` runs in **`preinstall`**: it reads the
 machine-local registry, and for each *enabled* plugin verifies every required `command`
 resolves on `PATH`. If one is missing it prints the `install` hint and fails the install.
 
@@ -362,8 +462,7 @@ shows the recorded locations and offers **Retry cleanup**. It removes unchanged
 copies only; an already enabled plugin must first be disabled from its details.
 
 Plugin API routes require the desktop session and same-origin proof, a valid
-`X-DevHub-Secret`, or a browser session on a known loopback-only listener. The
-LAN dashboard proxy refuses plugin API requests even if they carry credentials.
+`X-DevHub-Secret`, or a browser session on a known loopback-only listener.
 Start checkout dashboards through the provided launcher so the API knows the
 actual listener address. An unknown listener fails closed for browser access.
 
@@ -377,7 +476,7 @@ npm run plugins -- list --json     # paths shortened; no credentials
 It does not fall back to `~/.config/devhub/plugins.json`.
 
 This installer enables skills and agents. A plugin that also contributes MCP
-servers, a dashboard module, branding, overlays, docs, or persona modes is shown
+servers, legacy branding, docs, or persona modes is shown
 in the review and is not enabled. Nothing from the repository runs before you
 confirm, and an incompatible plugin is not registered.
 
@@ -388,8 +487,8 @@ npm run plugins -- new team-tools --out ~/dev/team-tools
 npm run plugins -- new team-tools --out ~/dev/team-tools --dry-run
 ```
 
-`--branding` adds a theme. The GitHub installer will refuse that manifest until
-branding can be applied. `plugins add <path>` still registers it.
+The scaffold includes a runtime page, its lockfile and matching hashes. Use
+`plugins add-runtime <path>` to review a local copy.
 
 ## Precedence and read-only
 
@@ -399,18 +498,18 @@ branding can be applied. `plugins add <path>` still registers it.
 - Plugin assets are **read-only** in DevHub — edit them in the plugin repo. The Skills
   and Agents APIs mark them `readOnly`, the UI hides edit/delete, mutating routes return
   403, and collect never pulls them back into `skills/shared` / `agents/shared`.
-- Origin is exposed as `core` or `plugin:<name>` (see `dashboard/lib/plugins/types.ts`).
+- Origin is exposed as `core` or `plugin:<name>` (see `apps/ui/lib/plugins/types.ts`).
 
 ## Where it lives
 
 | Concern | File |
 | ------- | ---- |
-| Types / origin | `dashboard/lib/plugins/types.ts` |
-| Manifest reader (zod) | `dashboard/lib/plugins/manifest.ts` |
-| Registry + asset-dir resolution | `dashboard/lib/plugins/registry.ts` |
-| Agent merge | `dashboard/lib/sync/agents.ts` (`resolveAgentSources`) |
-| Skill merge | `dashboard/lib/skill-catalog.ts` (`buildMergedSkillCatalog`) |
-| MCP merge | `dashboard/lib/sync/mcp.ts` (`pluginMcpServers`, `readCatalogMcpServer`) |
+| Types / origin | `apps/ui/lib/plugins/types.ts` |
+| Manifest reader (zod) | `apps/ui/lib/plugins/manifest.ts` |
+| Registry + asset-dir resolution | `apps/ui/lib/plugins/registry.ts` |
+| Agent merge | `apps/ui/lib/sync/agents.ts` (`resolveAgentSources`) |
+| Skill merge | `apps/ui/lib/skill-catalog.ts` (`buildMergedSkillCatalog`) |
+| MCP merge | `apps/ui/lib/sync/mcp.ts` (`pluginMcpServers`, `readCatalogMcpServer`) |
 
 ## ai-tools
 

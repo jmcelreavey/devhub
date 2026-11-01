@@ -28,7 +28,18 @@ export function paseoDaemonArgs(cli, home, version) {
 export function managedPaseoConfig(current, { port, passwordHash, cursor, codex, webUiConfig = false }) {
   const providers = { ...current.agents?.providers };
   if (cursor && !providers.cursor) providers.cursor = { extends: "acp", label: "Cursor", command: [cursor, "acp"] };
-  if (codex && !providers.codex?.command) providers.codex = { ...providers.codex, command: [codex] };
+  providers.codex = {
+    ...providers.codex,
+    ...(codex && !providers.codex?.command ? { command: [codex] } : {}),
+    additionalModels: [
+      ...(providers.codex?.additionalModels ?? []).filter(model => model.id !== "gpt-6.1-terra"),
+      {
+        id: "gpt-6.1-terra",
+        label: "GPT-6.1 Terra",
+        thinkingOptions: ["low", "medium", "high", "xhigh", "max", "ultra"].map(id => ({ id, label: id, ...(id === "low" ? { isDefault: true } : {}) })),
+      },
+    ],
+  };
   return {
     ...current,
     version: 1,

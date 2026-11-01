@@ -16,6 +16,16 @@ See [`docs/architecture/plugins.md`](docs/architecture/plugins.md) for the plugi
 - **Plugins** — separate repos (one per plugin). Company/private plugins stay private;
   community plugins are public.
 
+## Source layout
+
+The root npm workspaces include `apps/ui` (Next dashboard), `apps/desktop`
+(Tauri shell and staging), `packages/mcp`, `packages/shared` and `packages/qa`.
+Server domains live in `apps/core`. Runtime content such as `notes/` and `tasks/`
+stays outside these packages. The old MCP launcher remains for synced client configs.
+
+Install from the repo root with `npm install`, or use `npm ci` when a root
+`package-lock.json` is present. Do not install the core MCP package separately.
+
 ## First-time setup (private mirror)
 
 ```bash
@@ -82,7 +92,8 @@ gh pr create --repo <owner>/devhub --base main
 
 Before opening a PR:
 
-- `npm run verify` from the repo root must pass (MCP types, dashboard checks and build).
+- `npm run verify` from the repo root must pass (the fast Vitest suite and Node tests). CI also checks lint, types and the production build.
+  Install the root workspaces first. Team's gateway is tested in its plugin repository.
 - Confirm the diff contains no personal data, secrets, or private-plugin content.
 
 ## Developing a feature as a plugin
@@ -107,7 +118,7 @@ generic defaults for these paths:
 | `upstarts/`            | Per-repo Upstart scripts (`<repo>/upstart.sh`) | `UPSTARTS_DIR`    |
 | `persona/identity.txt` | Your voice/tone                                | —                 |
 | `skills/shared/my-voice/{writing-style,learned-voice}.md` | Your writing samples and learned voice rules | — |
-| `dashboard/.env.local` | Secrets/config                                 | — (git-ignored)   |
+| `apps/ui/.env.local` | Secrets/config                                 | — (git-ignored)   |
 | `private/` | Mirror-only domain files, archived guides and assets | — |
 | `.devhub/` | Local checkouts, caches and run state | — (never commit) |
 
@@ -148,43 +159,14 @@ multi-user accounts. For commercial licensing or setup help, open a
 
 Things that have cost real time here. Each one looked like it worked and didn't.
 
-### Never edit plugin-overlay files from this repo
+### Checkout and plugins
 
-Files contributed through a plugin's `dashboard.paths` are **materialised from that
-plugin repo** and listed in `.git/info/exclude`. In core they are untracked, invisible
-to `git status`, and **overwritten by `sync_plugins`, which `prebuild` and `prestart`
-run automatically**.
+`npm run dev` supervises core, Vite and the terminal on the checkout ports.
+Build and startup do not copy plugin source into the dashboard. Edit plugins in
+their own repos and use reviewed runtime registrations for their pages and APIs.
 
-An edit here looks like it worked, passes typecheck, then silently vanishes at the
-next build. Edit the source in the plugin repo, then re-run `sync_plugins`.
-
-### Verify against the source, not the materialised copy
-
-Related and worse: a codemod that rewrites both the core tree _and_ the materialised
-copies will make `tsc` pass while the plugin **source** is still broken. The green
-typecheck proves nothing — it's checking generated output.
-
-After any change that touches shared components or imports, update each affected
-plugin, run `sync_plugins`, and **build again**.
-
-### Verify the checkout you're running
-
-The packaged desktop app usually owns port 1337. Checkout edits won't appear there.
-Check the listening process before debugging the code:
-
-```sh
-lsof -nP -iTCP:1337 -sTCP:LISTEN
-```
-
-Run checkout verification on a free port with `DEVHUB_SCHEDULER=0` and a separate
-`DEVHUB_DIST_DIR`; keep the packaged app running. See the [dashboard verification skill](skills/shared/devhub-dashboard-verify/SKILL.md).
-
-### React 19.2.4 has no `ViewTransition`
-
-Do not re-enable `experimental.viewTransition`. React stable exports no
-`ViewTransition` component, so the React half is a no-op while Next's
-`document.startViewTransition` throws `InvalidStateError` every ~30s. An e2e spec
-fails if the flag comes back. Revisit only when React ships it in a stable release.
+The packaged app normally uses 1337. Verify checkout changes on 1437 with
+`DEVHUB_SCHEDULER=0`; keep the packaged app running.
 
 ### Shell scripts run under macOS bash 3.2
 

@@ -26,6 +26,9 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
+source "$REPO_ROOT/scripts/lib/git-lock.sh"
+trap 'cleanup_git_lock' EXIT
+setup_git_lock
 
 SYNC_REF="refs/devhub/upstream-sync"
 DRY_RUN=0
@@ -52,20 +55,15 @@ run_post_pull_steps() {
     return 0
   fi
   log "Validating..."
-  ( cd "$REPO_ROOT/dashboard" && npx tsx scripts/run-action.ts validate ) || fail "Validation failed."
+  ( cd "$REPO_ROOT/apps/ui" && npx tsx ../core/src/scripts/run-action.ts validate ) || fail "Validation failed."
   log "Syncing assets to local tools..."
-  ( cd "$REPO_ROOT/dashboard" && npx tsx scripts/run-action.ts sync ) || fail "Sync failed."
+  ( cd "$REPO_ROOT/apps/ui" && npx tsx ../core/src/scripts/run-action.ts sync ) || fail "Sync failed."
 }
 
-# Personal-data paths: excluded from the pull (never expected from upstream) AND ignored by
-# the dirty-tree guard, so live-dirty notes/tasks/upstarts don't block a pull from the UI.
-EXCLUDES=(':!notes' ':!tasks' ':!reps' ':!collections' ':!upstarts' ':!dashboard/.env.local'
-          ':!persona/identity.txt' ':!TEMPLATE_AND_PLUGIN_PLAN.md' ':!scripts/make-public-seed.sh'
-          ':!skills/shared/my-voice/writing-style.md' ':!skills/shared/my-voice/learned-voice.md')
-# Paths that may stay dirty during a pull — never commit them as part of a core update.
-PERSONAL_PATHS=(notes tasks reps collections upstarts dashboard/.env.local persona/identity.txt
-                TEMPLATE_AND_PLUGIN_PLAN.md scripts/make-public-seed.sh
-                skills/shared/my-voice/writing-style.md skills/shared/my-voice/learned-voice.md)
+# shellcheck source=lib/public-paths.sh
+source "$REPO_ROOT/scripts/lib/public-paths.sh"
+EXCLUDES=()
+for personal in "${PERSONAL_PATHS[@]}"; do EXCLUDES+=(":!$personal"); done
 
 # --- guards ---
 BRANCH="$(git branch --show-current)"
@@ -86,7 +84,7 @@ git remote get-url upstream >/dev/null 2>&1 || fail \
 
 # --- fetch + resolve upstream default branch ---
 log "Fetching upstream..."
-git fetch --quiet upstream
+git_write fetch --quiet upstream
 UPSTREAM_BRANCH="$(git symbolic-ref --quiet --short refs/remotes/upstream/HEAD 2>/dev/null | sed 's@^upstream/@@' || true)"
 [[ -n "$UPSTREAM_BRANCH" ]] || UPSTREAM_BRANCH="$BRANCH"
 UPSTREAM_REF="upstream/${UPSTREAM_BRANCH}"
@@ -94,7 +92,7 @@ UPSTREAM_SHA="$(git rev-parse "$UPSTREAM_REF")"
 
 # --- mark-synced: record state, no apply (use after a backport) ---
 if [[ "$MARK_ONLY" == "1" ]]; then
-  git update-ref "$SYNC_REF" "$UPSTREAM_SHA"
+  git_write update-ref "$SYNC_REF" "$UPSTREAM_SHA"
   log "Marked synced at ${UPSTREAM_REF} ($(git rev-parse --short "$UPSTREAM_SHA")). No changes applied."
   exit 0
 fi
@@ -111,7 +109,7 @@ git rev-parse --verify --quiet "$SINCE" >/dev/null || fail "Unknown --since ref:
 COUNT="$(git rev-list --count "${SINCE}..${UPSTREAM_REF}" 2>/dev/null || echo 0)"
 if [[ "$COUNT" == "0" ]]; then
   log "Already up to date with ${UPSTREAM_REF}."
-  git update-ref "$SYNC_REF" "$UPSTREAM_SHA"
+  git_write update-ref "$SYNC_REF" "$UPSTREAM_SHA"
   run_post_pull_steps
   log "Done. You are now up to date with ${UPSTREAM_REF}."
   exit 0
@@ -127,7 +125,7 @@ while IFS= read -r line; do
 done < <(git diff --name-only "${SINCE}..${UPSTREAM_REF}" -- . "${EXCLUDES[@]}")
 if [[ -z "$PATCH" ]]; then
   log "No file changes after exclusions; marking synced."
-  git update-ref "$SYNC_REF" "$UPSTREAM_SHA"
+  git_write update-ref "$SYNC_REF" "$UPSTREAM_SHA"
   run_post_pull_steps
   log "Done. You are now up to date with ${UPSTREAM_REF}."
   exit 0
@@ -142,31 +140,31 @@ fi
 
 # --- apply onto the mirror (3-way preserves your customisation) ---
 log "Applying ${SINCE}..${UPSTREAM_REF} onto ${BRANCH}..."
-if ! printf '%s\n' "$PATCH" | git apply --index --3way 2>/tmp/devhub-update-apply.err; then
+if ! printf '%s\n' "$PATCH" | git_write apply --index --3way 2>/tmp/devhub-update-apply.err; then
   cat /tmp/devhub-update-apply.err >&2 || true
   # Revert only files from the upstream patch — personal paths (tasks/notes/upstarts/…) may stay
   # dirty on purpose and must not be wiped by a failed apply.
   for f in "${PATCH_FILES[@]}"; do
     [[ -n "$f" ]] || continue
-    git reset --quiet HEAD -- "$f" 2>/dev/null || true
-    git checkout --quiet HEAD -- "$f" 2>/dev/null || true
+    git_write reset --quiet HEAD -- "$f" 2>/dev/null || true
+    git_write checkout --quiet HEAD -- "$f" 2>/dev/null || true
   done
   fail "Could not cleanly apply upstream changes (conflicts vs your mirror customisation).
 Resolve manually: \`git diff ${SINCE}..${UPSTREAM_REF} -- . | git apply --3way\`, fix conflicts, commit."
 fi
 
 # Commit only upstream patch files — never sweep staged personal paths into this commit.
-git commit --quiet -m "chore: pull core updates from ${UPSTREAM_REF} ($(git rev-parse --short "$SINCE")..$(git rev-parse --short "$UPSTREAM_SHA"))" \
+git_write commit --quiet -m "chore: pull core updates from ${UPSTREAM_REF} ($(git rev-parse --short "$SINCE")..$(git rev-parse --short "$UPSTREAM_SHA"))" \
   -- "${PATCH_FILES[@]}"
-git update-ref "$SYNC_REF" "$UPSTREAM_SHA"
+git_write update-ref "$SYNC_REF" "$UPSTREAM_SHA"
 log "Applied and committed. Sync marker → $(git rev-parse --short "$UPSTREAM_SHA")."
 
 # --- validate + sync ---
 if [[ "$DO_SYNC" == "1" ]]; then
   log "Validating..."
-  ( cd "$REPO_ROOT/dashboard" && npx tsx scripts/run-action.ts validate ) || fail "Validation failed."
+  ( cd "$REPO_ROOT/apps/ui" && npx tsx ../core/src/scripts/run-action.ts validate ) || fail "Validation failed."
   log "Syncing assets to local tools..."
-  ( cd "$REPO_ROOT/dashboard" && npx tsx scripts/run-action.ts sync ) || fail "Sync failed."
+  ( cd "$REPO_ROOT/apps/ui" && npx tsx ../core/src/scripts/run-action.ts sync ) || fail "Sync failed."
 fi
 
 log "Done. You are now up to date with ${UPSTREAM_REF}."

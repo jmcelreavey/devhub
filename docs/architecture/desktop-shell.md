@@ -24,7 +24,7 @@ machine, and the [Windows (WSL2) app](desktop-windows-wsl.md), which is unverifi
 ## What Rust owns, and what it doesn't
 
 Rust owns the window, the process tree, and the update client. It owns no
-product logic — the dashboard is the same Next.js app, served over loopback,
+product logic — the core server and Vite dashboard are served over loopback,
 and nothing was rewritten in Rust to get here.
 
 ```
@@ -62,11 +62,11 @@ above your other repos" simultaneously — which works exactly as long as the ap
 | `DEVHUB_APP_DATA`      | OS app-data directory              | Repo root                        |
 | `REPO_ROOT`            | Usually absent; optional checkout  | Repo root                        |
 | `DEVHUB_REPOS_DIR`     | User's chosen code folder          | Parent of `REPO_ROOT`            |
-| `DEVHUB_ENV_FILE`      | `<app-data>/config/.env.local`     | `dashboard/.env.local`           |
+| `DEVHUB_ENV_FILE`      | `<app-data>/config/.env.local`     | `apps/ui/.env.local`           |
 | `NOTES_DIR` and peers  | `<app-data>/<name>` or migrated    | `REPO_ROOT/<name>`               |
 | `DEVHUB_IDENTITY_FILE` | `<app-data>/persona/identity.txt`  | `REPO_ROOT/persona/identity.txt` |
 
-Implemented twice, deliberately: `dashboard/lib/desktop/runtime-paths.ts` and
+Implemented twice, deliberately: `apps/ui/lib/desktop/runtime-paths.ts` and
 `desktop/src-tauri/src/paths.rs`. Rust owns process startup, TypeScript owns
 everything after it, and `sidecar_env()` is the single seam between them.
 
@@ -103,9 +103,7 @@ does any web page that can be made to fetch it.
   packaged app. Port-conflict messages use the listener's **process ancestry**
   (`lsof`), not the port's HTTP reply.
 - **The PTY requires a short-lived ticket and an exact loopback origin.** The dashboard exchanges its desktop session for a terminal ticket before opening the WebSocket. The peer checks the origin exactly, not by prefix (`http://127.0.0.1.evil.com` starts with `http://127.0.0.1`).
-- **Port 1339 is no longer LAN-proxied.** It hands out an interactive login
-  shell. LAN mode exists so you can read your dashboard from a phone; it was
-  never worth a remote shell.
+- **Port 1339 stays local.** It hands out an interactive login shell.
 - **The native bridge exposes specific desktop commands.** Boot state, logs, folder selection, lifecycle and updates have dedicated handlers; there isn't a generic shell-command handler.
 - **Never kill by port.** The sidecar and every descendant run in one process
   group. Shutdown signals that group. Port 1337 belongs to somebody's own dev
@@ -149,37 +147,10 @@ Losing the updater private key permanently strands every installed client: a
 new key cannot sign updates that old binaries will accept. It is the one secret
 that needs an offline backup, not just a GitHub secret.
 
-## Two leaks this pipeline found and now prevents
+## Build isolation
 
-Both were real, both were in a bundle that built and ran perfectly.
-
-1. **`dashboard/.env.local` inside the app.** Next copies `.env*` into
-   `.next/standalone` and loads them at boot — correct for a server deployment,
-   catastrophic here, where that file holds live Jira, Datadog, Google, and AI
-   credentials. `stage-dashboard.mjs` now strips them and fails staging if any
-   survive.
-2. **Real note titles in prerendered HTML.** Next statically prerenders routes
-   using the build machine's data, so `/notes` shipped as HTML listing the
-   developer's actual notes. The desktop build now runs against an empty
-   content tree, and `verify-staging.mjs` greps prerendered output for local
-   content names (excluding ones the app hardcodes, like `personal-radar`).
-
-## Measurements (macOS 26.5, arm64, 2026-07-26)
-
-| Metric                        | Value  | Notes                                  |
-| ----------------------------- | ------ | -------------------------------------- |
-| `DevHub.app`                  | 243 MB | Electron 1.3.2 was 266 MB              |
-| Bundled Node runtime          | 113 MB | Largest single component               |
-| Next standalone server        | 129 MB | Traced dependency subset               |
-| Packaged resources            | 880 KB | skills, agents, mcp, persona, docs     |
-| Rust shell binary             | 4.7 MB | release, stripped, LTO                 |
-| Updater artifact (`.tar.gz`)  | 70 MB  | signed                                 |
-
-The bundle is smaller than the Electron app it replaces, which was not the
-goal — reliability was — but it does retire the "Tauri will be 15 MB"
-expectation. Shipping a known Node runtime is the reason, and it is the right
-trade while `node-pty` is a native module and Next standalone traces a real
-dependency graph.
+Desktop staging builds the core server and Vite assets in an isolated environment.
+It checks build provenance and refuses credentials or personal data in the payload.
 
 ## Verification status
 

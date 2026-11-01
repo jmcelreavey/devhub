@@ -1,5 +1,5 @@
 {
-  "command": "REPO_ROOT/mcp-servers/devhub-server/bin/devhub-mcp.mjs",
+  "command": "REPO_ROOT/packages/mcp/bin/devhub-mcp.mjs",
   "env": {
     "NOTES_DIR": "REPO_ROOT/notes",
     "TASKS_DIR": "REPO_ROOT/tasks",

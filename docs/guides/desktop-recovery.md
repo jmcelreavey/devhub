@@ -44,7 +44,7 @@ Each rotates at 2 MB and keeps one previous `.log.1` file.
 ## The port is in use
 
 DevHub decides **who** holds a port from the listener's process tree (`lsof`),
-not from whatever the port answers with. A stale `next start` from your checkout
+not from whatever the port answers with. A stale `npm run start` from your checkout
 used to claim `{ devhub: true }` and send you hunting for a second app window
 that did not exist — the shell now classifies holders as **yours** (this
 checkout's dev server), **another packaged app**, or **someone else's process**.
@@ -53,7 +53,7 @@ checkout's dev server), **another packaged app**, or **someone else's process**.
 > checkout. DevHub can stop it and carry on, or you can attach to it instead
 > from View → Attach to Dev Server…
 
-A `npm run dev` or `next start` you left running from the linked checkout.
+A `npm run dev` or `npm run start` you left running from the linked checkout.
 Click **Try again** — DevHub offers to stop only listeners it has verified as
 *your* checkout's server, never a stranger's process.
 
@@ -163,13 +163,13 @@ data stays in its separate folder. Back it up before downgrading; older versions
 
 ## The dashboard looks stale after `git pull`
 
-The installed `.app` ships a **frozen** Next.js build inside `Contents/Resources/server/`. Reopening DevHub does **not** recompile your checkout — you are still running the dashboard that was baked in at install time until you rebuild.
+The installed `.app` ships a **frozen** core and Vite build inside `Contents/Resources/server/`. Reopening DevHub does **not** recompile your checkout — you are still running the dashboard that was baked in at install time until you rebuild.
 
 | Situation | Fix |
 | --------- | --- |
-| Installed app, you pulled dashboard changes | **View → Rebuild Dashboard…** (or **Status → Rebuild & restart** when the shell is *not* supervising the server). The boot page shows a log panel while Rust runs `desktop/scripts/rebuild-installed-server.mjs`, stages a fresh production Next server **and** peer-services bundle (`start-peer-services.mjs`) from your linked checkout, copies both into this app, and relaunches. |
+| Installed app, you pulled dashboard changes | **View → Rebuild Dashboard…** (or **Status → Rebuild & restart** when the shell is *not* supervising the server). The boot page shows a log panel while Rust runs `desktop/scripts/rebuild-installed-server.mjs`, stages a fresh core server, Vite assets and terminal services from your linked checkout, copies both into this app, and relaunches. |
 | Installed app, active development | **View → Attach to Dev Server…** and run `npm run dev` in the checkout instead — hot reload without rebuilding the bundle. |
-| Browser / checkout `npm run dev` | Restart the server you started. Use a free port and `DEVHUB_DIST_DIR` for checkout testing; don't stop the packaged app's listener. |
+| Browser / checkout `npm run dev` | Restart the server you started. Use a free port for checkout testing; don't stop the packaged app's listener. |
 
 `POST /api/status/dashboard/rebuild` is intentionally unavailable when `DEVHUB_SHELL_SUPERVISED=1` (the desktop sidecar owns the process). Use the menu rebuild in that case — see [Dashboard — Status page runbook](../architecture/dashboard.md#status-page-runbook).
 

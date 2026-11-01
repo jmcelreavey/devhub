@@ -10,7 +10,9 @@ related:
 
 # Performance Appraisal (MCP + Dashboard)
 
-DevHub captures review evidence through MCP tools on the `devhub` server. Entries are BlockNote JSON under `notes/appraisal/` so the dashboard can render them like other notes.
+The optional Career plugin supplies Appraisal, 1:1 preparation and the `appraisal_*` tools on the `devhub` MCP server. Entries remain BlockNote JSON under `notes/appraisal/`, so the core notes editor can still open them when Career is disabled.
+
+Career must be installed and enabled as a reviewed runtime plugin. Without Career, these pages, APIs and MCP tools are absent; existing notes and the generic 1:1 note template remain. Packaged delivery and enablement need separate verification before a live cutover.
 
 Use this when you want **dated, reference-backed moments** during the year — not a scramble to reconstruct impact at review time.
 
@@ -18,7 +20,7 @@ Use this when you want **dated, reference-backed moments** during the year — n
 
 | Route         | Purpose                                                                                                                     |
 | ------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| `/appraisal`  | Self-review hub — goals, themed entries, coverage bars, evidence suggestions from recent PRs/Jira/tasks, HR markdown export |
+| `/appraisal`  | Self-review hub — goals, themed entries, coverage bars, evidence suggestions from recent PRs/Jira/alerts, HR markdown export |
 | `/one-on-one` | 1:1 prep template seeded from appraisal themes and open goals                                                               |
 
 Open either page through **⌘P** or its URL. The evidence panel on `/appraisal` calls `GET /api/appraisal/evidence?days=`; the main year view uses `GET /api/appraisal/year?year=`. Goal create/revise and evidence **Record** use `POST /api/appraisal/year` and `POST /api/appraisal/evidence` respectively (same write paths as the MCP tools).

@@ -57,7 +57,7 @@ op signin
 
 Create or sync a 1Password item titled `devhub`. Add fields named exactly after the env vars, such as `JIRA_API_TOKEN`, `DATADOG_API_KEY`, `DATADOG_APPLICATION_KEY`, and `AI_API_KEY`.
 
-Set this if you want secrets loaded into the process without writing them back to `dashboard/.env.local`:
+Set this if you want secrets loaded into the process without writing them back to `apps/ui/.env.local`:
 
 ```bash
 export DEVHUB_OP_CACHE=0
@@ -75,7 +75,7 @@ npm run doctor
 npm install
 ```
 
-The root install delegates to the dashboard install. Dashboard `postinstall` (`dashboard/scripts/postinstall.ts`) bootstraps `dashboard/.env.local` from `.env.example`, creates notes archive dirs, wires `.githooks/pre-push`, and materialises plugin branding. Postinstall is skipped in CI or when `DEVHUB_SKIP_POSTINSTALL` is set — use the [full bootstrap](#full-bootstrap) in that case.
+The root install installs every workspace together. Dashboard `postinstall` (`apps/ui/scripts/postinstall.ts`) bootstraps `apps/ui/.env.local` from `.env.example`, creates notes archive dirs, wires `.githooks/pre-push`. Postinstall is skipped in CI or when `DEVHUB_SKIP_POSTINSTALL` is set — use the [full bootstrap](#full-bootstrap) in that case.
 
 ## Run The Dashboard
 
@@ -83,19 +83,17 @@ The root install delegates to the dashboard install. Dashboard `postinstall` (`d
 DEVHUB_BIND_HOST=127.0.0.1 npm run dev
 ```
 
-Open the dashboard at:
+On macOS, Linux and WSL, an unsupervised checkout defaults to <http://localhost:1437>, with its terminal on port `1439` and HTTP MCP on `1440`. The installed app keeps its usual ports. Development mode reloads as files change; the checkout leaves scheduled jobs and shared dashboard discovery to the primary instance.
 
-```text
-http://localhost:1337
-```
-
-Use development mode for normal day-to-day work. It reloads as files change. If the desktop app already owns port 1337, keep it running and start the checkout on separate ports:
+Shell-supervised Attach keeps the legacy dashboard port `1337` and terminal port `1339`. Existing environment or `apps/ui/.env.local` values take precedence on every platform; use the URL printed at startup. If older settings still select the installed app's ports, override them for the checkout. For example:
 
 ```bash
-PORT=1400 TERMINAL_PORT=1402 DEVHUB_BIND_HOST=127.0.0.1 DEVHUB_SCHEDULER=0 DEVHUB_DIST_DIR=.next-dev-1400 npm run dev
+PORT=1437 TERMINAL_PORT=1439 DEVHUB_MCP_HTTP_PORT=1440 DEVHUB_SCHEDULER=0 npm run dev
 ```
 
-Open http://localhost:1400. The dock discovers `TERMINAL_PORT` from the running dashboard, so it connects to this instance's peer. The scheduler stays with your primary instance.
+The Windows app may select a different port when availability changes. Changing its WebView origin can leave unsent drafts and focus state at the old address.
+
+If no other DevHub instance is running and this checkout should own background work, start it with `DEVHUB_SCHEDULER=1 npm run dev`.
 
 ## Production Mode
 
@@ -120,22 +118,17 @@ A fresh public clone uses the shared engineering standards. Add your personal id
 
 ## MCP Server Dependencies
 
-The `devhub` MCP server is a separate npm package at `mcp-servers/devhub-server/` with
-its own `node_modules`. AI clients launch `bin/devhub-mcp.mjs`, which builds or reuses
-an esbuild bundle and falls back to `tsx` if needed. The root install doesn't install
-this package directly.
+The `devhub` MCP server is the `packages/mcp/` workspace and uses the root
+install. AI clients launch `bin/devhub-mcp.mjs`, which builds or reuses an
+esbuild bundle and falls back to `tsx` if needed.
 
-DevHub auto-installs missing MCP package dependencies during:
-
-- `npm run dev` (predev health check in `dashboard/scripts/health-check.ts`)
-- Full bootstrap (`dashboard/scripts/bootstrap-install.ts`)
-
-Enabled plugins with `mcp-servers/<name>/package.json` get the same treatment.
+Enabled plugins with `mcp-servers/<name>/package.json` are installed separately
+by the health check and full bootstrap.
 
 Manual recovery when an MCP client cannot start `devhub` or reports a missing `tsx`:
 
 ```bash
-cd mcp-servers/devhub-server && npm install
+npm ci # at the repo root
 # plugin example:
 cd <plugin-root>/mcp-servers/<server-name> && npm install
 ```
@@ -159,6 +152,6 @@ This checks the MCP server types, then runs dashboard lint, typecheck, tests, ve
 | Port 1337 is already in use     | Keep the existing instance running and use the separate-port command above |
 | Optional integration is missing | Open `/setup` and add the relevant credentials                                                        |
 | Skills or MCP configs are stale | Run the sync actions from the dashboard                                                               |
-| MCP client cannot start `devhub` | Run `cd mcp-servers/devhub-server && npm install`, then re-run MCP sync                              |
+| MCP client cannot start `devhub` | Run `npm ci` at the repo root, then re-run MCP sync                              |
 | Plugin MCP server fails to start | Run `npm install` inside the plugin's `mcp-servers/<name>/` package, then re-run MCP sync            |
 | Push is blocked by tests        | Run `npm run verify` locally and fix the reported issue                                               |

@@ -78,7 +78,7 @@ Resolve real paths beneath approved roots, reject symlink escapes, bound selecti
 | **2 · Editor spike (S)** | Pinned code-server works inside all three actual desktop webviews; record resource measurements and extension inventory before committing to packaging | Auth expiry, WebSocket reconnect, clipboard, keyboard/IME, WSL paths, two worktrees, unsaved-buffer recovery |
 | **3 · Productise (L)** | Managed install/update/rollback and selection extension; review note stays beside code; optional desktop extension uses the same contract | Traversal/symlinks, hostile messages, secret-file exclusion, crash/restart, packaged upgrade and uninstall leaving repos intact |
 
-### Open questions for John
+### Open questions
 
 **Decisions · 9 October 2026**
 
@@ -139,7 +139,7 @@ Persist proposals for **commit/push**, **draft PR**, **Jira transition** and **t
 
 App-owned publication can enforce these gates, but unrestricted assistants can still run Git/API commands themselves. Remove auto-confirm from managed approval requests; do not describe the workflow as a sandbox. A guaranteed barrier additionally needs isolated harness execution, restricted Git metadata/credentials/network and scoped MCP operations. Unsupported providers must be visibly ungated or unavailable in strict mode. Protect approval storage from agent writes in that mode.
 
-Reviews should use immutable snapshots/restricted execution where supported. A missing assigned reviewer stays blocked until John explicitly chooses a fallback; do not silently label self-review as second-assistant review. Keep transcripts local and minimise outbound notification content.
+Reviews should use immutable snapshots/restricted execution where supported. A missing assigned reviewer stays blocked until the user explicitly chooses a fallback; do not silently label self-review as second-assistant review. Keep transcripts local and minimise outbound notification content.
 
 ### Phased plan with acceptance criteria and tests per phase
 
@@ -150,7 +150,7 @@ Reviews should use immutable snapshots/restricted execution where supported. A m
 | **3 · Complete the UI (M)** | Stage strip, code/review/chat, resume and persistent attention inbox work without Cursor; PR watcher feeds the same task | Screenshot/keyboard review on three platforms; sleep/wake, offline recovery, denied notifications, no repeated alerts |
 | **4 · Strict mode (XL, separate decision)** | Only supported isolated providers can claim enforced review/write boundaries | Attempts to modify approval records, commit/push directly, access unrelated repos/credentials or bypass scoped APIs all fail |
 
-### Open questions for John
+### Open questions
 
 **Decisions · 9 October 2026**
 

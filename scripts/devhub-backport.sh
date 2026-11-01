@@ -23,6 +23,9 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
+source "$REPO_ROOT/scripts/lib/git-lock.sh"
+trap 'cleanup_git_lock' EXIT
+setup_git_lock
 
 log()  { echo "[devhub-backport] $*"; }
 fail() { echo "[devhub-backport] ERROR: $*" >&2; exit 1; }
@@ -57,38 +60,21 @@ if [[ "$PATCH_ONLY" != "1" ]]; then
   [[ -z "$(git status --porcelain --untracked-files=no)" ]] || fail "Tracked changes present. Commit or stash, then re-run."
 fi
 git rev-parse --verify --quiet "$SOURCE_REF" >/dev/null || fail "Unknown ref: $SOURCE_REF"
-git rev-parse --verify --quiet "$BASE_REF" >/dev/null || fail "Unknown base ref: $BASE_REF"
+if [[ "$SNAPSHOT" != "1" ]]; then
+  git rev-parse --verify --quiet "$BASE_REF" >/dev/null || fail "Unknown base ref: $BASE_REF"
+fi
 git remote get-url upstream >/dev/null 2>&1 || fail "No 'upstream' remote. Add the public core first."
 if [[ "$EXECUTE" == "1" ]]; then command -v gh >/dev/null || fail "--execute needs the GitHub CLI (gh)."; fi
 
 ORIG_BRANCH="$(git branch --show-current)"
 
-# Skip-worktree files (plugin overlays, generated baselines like plugin-nav) hold
-# machine-local content that upstream lacks, which blocks the branch switch. Reset
-# them to the committed baseline for the branch dance; `sync_plugins` re-applies
-# the overlays (and re-marks skip-worktree) on restore.
-SKIP_FILES="$(git ls-files -v | awk '/^S /{print substr($0, 3)}')"
-reset_skip_worktree_baselines() {
-  [[ -n "$SKIP_FILES" ]] || return 0
-  log "Resetting skip-worktree baselines for the branch switch..."
-  while IFS= read -r f; do
-    [[ -n "$f" ]] || continue
-    git update-index --no-skip-worktree -- "$f"
-    git checkout --quiet -- "$f" 2>/dev/null || true
-  done <<< "$SKIP_FILES"
-}
-
 restore() {
-  git checkout --quiet "$ORIG_BRANCH" 2>/dev/null || true
-  if [[ -n "$SKIP_FILES" ]]; then
-    log "Re-applying plugin overlays (sync_plugins)..."
-    (cd "$REPO_ROOT/dashboard" && npx tsx scripts/run-action.ts sync_plugins >/dev/null 2>&1) || \
-      log "WARN: sync_plugins failed — re-run it manually to restore overlays."
-  fi
+  git_write checkout --quiet "$ORIG_BRANCH" 2>/dev/null || true
+
 }
 
 log "Fetching upstream..."
-git fetch --quiet upstream
+git_write fetch --quiet upstream
 UPSTREAM_BRANCH="$(git symbolic-ref --quiet --short refs/remotes/upstream/HEAD 2>/dev/null | sed 's@^upstream/@@' || true)"
 [[ -n "$UPSTREAM_BRANCH" ]] || UPSTREAM_BRANCH="main"
 UPSTREAM_REF="upstream/${UPSTREAM_BRANCH}"
@@ -109,6 +95,17 @@ fi
 # shellcheck source=lib/public-paths.sh
 source "$REPO_ROOT/scripts/lib/public-paths.sh"
 
+DIFF_SOURCE_REF="$SOURCE_REF"
+if [[ "$SNAPSHOT" == "1" ]]; then
+  SNAPSHOT_DIR="$(mktemp -d "${TMPDIR:-/tmp}/devhub-public-index.XXXXXXXX")"
+  trap 'rm -rf -- "$SNAPSHOT_DIR"; cleanup_git_lock' EXIT
+  GIT_INDEX_FILE="$SNAPSHOT_DIR/source" git read-tree "$SOURCE_REF"
+  GIT_INDEX_FILE="$SNAPSHOT_DIR/public" git read-tree --empty
+  GIT_INDEX_FILE="$SNAPSHOT_DIR/source" git ls-files --stage -z -- "${PUBLIC_PATHS[@]}" \
+    | GIT_INDEX_FILE="$SNAPSHOT_DIR/public" git update-index -z --index-info
+  DIFF_SOURCE_REF="$(GIT_INDEX_FILE="$SNAPSHOT_DIR/public" git write-tree)"
+fi
+
 # Personal paths that were touched but will be dropped (informational).
 DROPPED="$(git diff --name-only "$BASE_REF" "$SOURCE_REF" -- "${PERSONAL_PATHS[@]}" 2>/dev/null || true)"
 [[ -n "$DROPPED" ]] && { log "Dropping personal/strategy paths from the PR:"; echo "$DROPPED" | sed 's/^/  - /'; }
@@ -120,19 +117,25 @@ LOCAL_SKILLS="$(git diff --name-only "$BASE_REF" "$SOURCE_REF" -- skills ':(excl
 # (persona/modes moved into a skill) otherwise strands the old copies in core
 # for good, because the patch below never looks at that path again.
 RETIRED_PATHS=()
-PERSONAL_EXCLUDES=()
-for personal in "${PERSONAL_PATHS[@]}"; do PERSONAL_EXCLUDES+=(":(exclude)${personal}"); done
-while IFS= read -r deleted; do
-  [[ -n "$deleted" ]] || continue
-  if git cat-file -e "${UPSTREAM_REF}:${deleted}" 2>/dev/null; then RETIRED_PATHS+=("$deleted"); fi
-done < <(git diff --no-renames --diff-filter=D --name-only "$BASE_REF" "$SOURCE_REF" -- . \
-  "${PERSONAL_EXCLUDES[@]}" ':(exclude)skills' ':(exclude).devhub' 2>/dev/null || true)
-if [[ ${#RETIRED_PATHS[@]} -gt 0 ]]; then
-  log "Porting deletions of retired public paths:"
-  printf '  - %s\n' "${RETIRED_PATHS[@]}"
+if [[ "$SNAPSHOT" != "1" ]]; then
+  PERSONAL_EXCLUDES=()
+  for personal in "${PERSONAL_PATHS[@]}"; do PERSONAL_EXCLUDES+=(":(exclude)${personal}"); done
+  while IFS= read -r deleted; do
+    [[ -n "$deleted" ]] || continue
+    if git cat-file -e "${UPSTREAM_REF}:${deleted}" 2>/dev/null; then RETIRED_PATHS+=("$deleted"); fi
+  done < <(git diff --no-renames --diff-filter=D --name-only "$BASE_REF" "$SOURCE_REF" -- . \
+    "${PERSONAL_EXCLUDES[@]}" ':(exclude)skills' ':(exclude).devhub' 2>/dev/null || true)
+  if [[ ${#RETIRED_PATHS[@]} -gt 0 ]]; then
+    log "Porting deletions of retired public paths:"
+    printf '  - %s\n' "${RETIRED_PATHS[@]}"
+  fi
 fi
 # bash 3.2 + set -u rejects "${empty[@]}"; this form expands to nothing instead.
-PATCH_PATHS=("${PUBLIC_PATHS[@]}" ${RETIRED_PATHS[@]+"${RETIRED_PATHS[@]}"})
+if [[ "$SNAPSHOT" == "1" ]]; then
+  PATCH_PATHS=(.)
+else
+  PATCH_PATHS=("${PUBLIC_PATHS[@]}" ${RETIRED_PATHS[@]+"${RETIRED_PATHS[@]}"})
+fi
 
 # The feature's patch (hunks only), constrained to the public catalog.
 #
@@ -142,7 +145,7 @@ PATCH_PATHS=("${PUBLIC_PATHS[@]}" ${RETIRED_PATHS[@]+"${RETIRED_PATHS[@]}"})
 # That silently made any feature containing an image, icon or font
 # un-backportable — found when the desktop app's icons blocked the first
 # attempt to port it upstream.
-PATCH="$(git diff --binary "$BASE_REF" "$SOURCE_REF" -- "${PATCH_PATHS[@]}")"
+PATCH="$(git diff --binary "$BASE_REF" "$DIFF_SOURCE_REF" -- "${PATCH_PATHS[@]}")"
 if [[ -z "$PATCH" ]]; then
   log "No public-catalog changes to backport after exclusions."
   [[ "$PATCH_ONLY" == "1" ]] && exit 3
@@ -154,7 +157,7 @@ if [[ "$PATCH_ONLY" == "1" ]]; then
   ADDED_LINES="$(printf '%s\n' "$PATCH" | grep -E '^\+' | grep -vE '^\+\+\+' || true)"
   printf '%s\n' "$ADDED_LINES" | bash "$REPO_ROOT/scripts/scan-leaks.sh" stdin
   echo "----- public patch (stat) -----"
-  git diff --stat "$BASE_REF" "$SOURCE_REF" -- "${PATCH_PATHS[@]}"
+  git diff --stat "$BASE_REF" "$DIFF_SOURCE_REF" -- "${PATCH_PATHS[@]}"
   echo "----- public patch -----"
   printf '%s\n' "$PATCH"
   exit 0
@@ -165,17 +168,16 @@ log "Porting ${BASE_REF}..${SOURCE_REF} onto ${UPSTREAM_REF}"
 # --- build the backport branch off upstream ---
 SAFE_NAME="$(echo "$SOURCE_REF" | tr '/ ' '--' | tr -cd 'A-Za-z0-9._-')"
 BACKPORT_BRANCH="backport/${SAFE_NAME}"
-reset_skip_worktree_baselines
 log "Creating ${BACKPORT_BRANCH} off ${UPSTREAM_REF}..."
-git branch -f "$BACKPORT_BRANCH" "$UPSTREAM_REF" >/dev/null
-git checkout --quiet "$BACKPORT_BRANCH"
-trap 'restore' EXIT
+git_write branch -f "$BACKPORT_BRANCH" "$UPSTREAM_REF" >/dev/null
+git_write checkout --quiet "$BACKPORT_BRANCH"
+trap 'restore; [[ -z "${SNAPSHOT_DIR:-}" ]] || rm -rf -- "$SNAPSHOT_DIR"; cleanup_git_lock' EXIT
 
 # Apply hunks onto upstream (3-way so public-side templatisation survives). On conflict,
 # git apply aborts non-zero and stages nothing.
-if ! printf '%s\n' "$PATCH" | git apply --index --3way 2>/tmp/devhub-backport-apply.err; then
+if ! printf '%s\n' "$PATCH" | git_write apply --index --3way 2>/tmp/devhub-backport-apply.err; then
   cat /tmp/devhub-backport-apply.err >&2 || true
-  git reset --hard --quiet "$UPSTREAM_REF"
+  git_write reset --hard --quiet "$UPSTREAM_REF"
   fail "Could not cleanly apply the feature onto upstream. Resolve divergence and retry (maybe --base is wrong, or core changed the same lines)."
 fi
 
@@ -183,12 +185,12 @@ fi
 log "Scanning added lines for internal names / secrets..."
 if ! git diff --cached -U0 | grep -E '^\+' | grep -vE '^\+\+\+' \
      | bash "$REPO_ROOT/scripts/scan-leaks.sh" stdin; then
-  git reset --hard --quiet "$UPSTREAM_REF"
+  git_write reset --hard --quiet "$UPSTREAM_REF"
   fail "Leak scan hit denylisted terms. Clean the feature, then re-run."
 fi
 
 [[ -n "$TITLE" ]] || TITLE="Backport: ${SOURCE_REF}"
-git commit --quiet -m "$TITLE"
+git_write commit --quiet -m "$TITLE"
 
 echo "----- backport preview (${BACKPORT_BRANCH} vs ${UPSTREAM_REF}) -----"
 git diff --stat "${UPSTREAM_REF}..${BACKPORT_BRANCH}"
@@ -202,7 +204,7 @@ fi
 # --- execute: push to the PUBLIC core + open PR there ---
 # origin is the private mirror (unrelated history), so the PR head must live in upstream.
 log "Pushing ${BACKPORT_BRANCH} to upstream (${UPSTREAM_SLUG})..."
-git push --quiet -u upstream "$BACKPORT_BRANCH"
+git_write push --quiet -u upstream "$BACKPORT_BRANCH"
 log "Opening PR against ${UPSTREAM_SLUG} (${UPSTREAM_BRANCH})..."
 gh pr create --repo "$UPSTREAM_SLUG" --base "$UPSTREAM_BRANCH" --head "$BACKPORT_BRANCH" \
   --title "$TITLE" --body "Backported from \`${SOURCE_REF}\` via devhub-backport. Personal data excluded."

@@ -13,7 +13,7 @@ related:
 
 # Task checks and review persistence
 
-Open **Task workflows** (`/workflow`), then a task. Its verification results, independent review, publication proposals and updates live on disk rather than in an open chat. Reopening DevHub brings that evidence back; it does not approve, publish or repeat a command for you.
+Open a task on **Storyboard** and choose **Evidence** in its side panel. Its verification results, independent review, publication proposals and updates live on disk rather than in an open chat. Reopening DevHub brings that evidence back; it does not approve, publish or repeat a command for you.
 
 ![Reopening a task workflow with its saved checks, review and decision](../assets/demos/review-persistence.gif)
 

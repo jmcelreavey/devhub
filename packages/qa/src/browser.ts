@@ -24,6 +24,8 @@ export interface BrowserOptions {
   surface?: "dom" | "canvas";
   actions?: QaAction[];
   allowedOrigins?: string[];
+  /** Confine task previews to the managed proxy, including subresource requests. */
+  restrictToAllowedOrigins?: boolean;
   channel?: string;
   headless?: boolean;
   viewport?: { width: number; height: number };
@@ -61,16 +63,17 @@ export class BrowserDriver implements QaDriver {
     const allowed = new Set([new URL(this.options.url).origin, ...(this.options.allowedOrigins ?? [])]);
     await this.context.route("**/*", async route => {
       const request = route.request();
-      if (request.isNavigationRequest() && !allowed.has(new URL(request.url()).origin)) {
-        this.errors.push("Navigation outside the scenario origins was blocked.");
+      if ((request.isNavigationRequest() || this.options.restrictToAllowedOrigins) && !allowed.has(new URL(request.url()).origin)) {
+        this.errors.push(request.isNavigationRequest() ? "Navigation outside the scenario origins was blocked." : "Request outside the scenario origins was blocked.");
         await route.abort(); return;
       }
       await route.continue();
     });
+    if (this.options.restrictToAllowedOrigins) await this.context.routeWebSocket("**/*", socket => socket.close());
     this.page = await this.context.newPage();
     this.page.setDefaultTimeout(4000);
     this.page.setDefaultNavigationTimeout(15000);
-    this.page.on("pageerror", error => this.errors.push(error.message.slice(0, 300)));
+    this.page.on("pageerror", () => this.errors.push("The preview reported a JavaScript error."));
     this.page.on("dialog", dialog => void dialog.dismiss().catch(() => {}));
     // Operations have short native timeouts. Keep the page alive on cancellation
     // until keys are released and the final evidence is captured in runQa.finally.
@@ -148,6 +151,7 @@ export class BrowserDriver implements QaDriver {
     const page = this.currentPage();
     const results: GoalResult[] = [];
     for (const goal of goals) {
+      signal.throwIfAborted();
       let actual = "";
       let passed = false;
       if (goal.assertion === "no-errors") { actual = this.errors.join("; ") || "No page errors."; passed = this.errors.length === 0; }

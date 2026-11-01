@@ -15,6 +15,8 @@ test("installs missing providers without losing user settings or plugins", () =>
   assert.equal(next.daemon.mcp.injectIntoAgents, true);
   assert.equal(next.features.dictation.enabled, true);
   assert.deepEqual(next.agents.providers.codex.command, [options.codex]);
+  assert.deepEqual(next.agents.providers.codex.additionalModels.map(model => model.id), ["gpt-6.1-terra"]);
+  assert.deepEqual(next.agents.providers.codex.additionalModels[0].thinkingOptions.map(option => option.id), ["low", "medium", "high", "xhigh", "max", "ultra"]);
 });
 test("supports the legacy flag and the config-based web UI used since Paseo 0.9", () => {
   assert.ok(paseoDaemonArgs("/cli", "/home", "0.8.0").includes("--web-ui"));

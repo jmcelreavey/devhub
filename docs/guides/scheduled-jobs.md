@@ -48,7 +48,7 @@ The action reuses the worktree report inventory, but is deliberately stricter th
 A whole worktree is removed with `git worktree remove` and `git worktree prune` only when **all** of these hold:
 
 - Its named branch has zero commits beyond `origin/main`. A merged PR, squash-equivalent content or commits pushed to another branch aren't enough. Missing Git evidence blocks removal.
-- There are no staged, modified or untracked source files. Only unstaged/untracked `dashboard/lib/plugin-branding.generated.ts` and `dashboard/app/plugin-branding.generated.css` are disposable generated-file exceptions. Ignored files outside recognised build directories and those exceptions also keep the checkout, including local `.env` files.
+- There are no staged, modified or untracked source files. Ignored files outside recognised build directories also keep the checkout, including local `.env` files.
 - No active task, agent/task run, Paseo workspace or open DevHub terminal refers to it, and no running process has a cwd in it. Queued, paused and waiting-for-input work stays protected. Paseo and `lsof` must both be available; incomplete activity evidence means nothing is deleted.
 - Every file and directory has been idle for at least two days. Nested files, Git index/HEAD/reflog mtimes and recorded run/chat activity count; an old top-level directory timestamp alone isn't enough.
 

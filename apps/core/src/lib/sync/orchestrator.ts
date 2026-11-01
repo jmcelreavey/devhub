@@ -1,0 +1,585 @@
+/**
+ * In-process port of scripts/update_and_sync.sh.
+ *
+ * Pull latest, sync skills + persona, optionally commit + push. On a dirty
+ * tree git operations and collect skip; skill+persona sync still run since
+ * they don't touch tracked files.
+ */
+import fs from "node:fs";
+import path from "node:path";
+import { assertPrivateRepo } from "../setup/private-repo";
+import { isDesktopRuntime } from "../desktop/runtime-paths";
+import { githubCliErrorInfo } from "../gh-exec";
+import { detectGitHookFailure, type GitHookPhase } from "../../../../../packages/shared/git/hook-failure";
+import { withPersistedLog } from "../git/hook-failure-persist";
+import { runGitRepoAsync, type GitRepoRunResult } from "../git/repo-local";
+import { withRepoGitMutation } from "../git/mutation-queue";
+import { redactSecrets } from "../../local/terminal/search";
+import { syncSkills, verifySync } from "./skills";
+import { syncAgents } from "./agents";
+import { buildCoworkPlugin, verifyCoworkPlugin } from "./cowork";
+import { syncPersona } from "./persona";
+import { syncOpencodeConfig } from "./opencode-config";
+import { collectSkills } from "../collect/skills";
+import { collectAgents } from "../collect/agents";
+import { collectOpencodeConfig } from "../collect/opencode-config";
+import { isTaskTimerOverlay } from "../content/sync-paths";
+
+export interface OrchestratorOptions {
+  push?: boolean;
+  force?: boolean;
+  dryRun?: boolean;
+  emit: (line: string) => void;
+  repoRoot: string;
+}
+
+export interface CommitAndPushDirtyOptions {
+  emit: (line: string) => void;
+  repoRoot: string;
+  commitMessage?: string;
+}
+
+export type ScopedCommitMessage = string | ((files: string[]) => string);
+
+export interface CommitAndPushPathsOptions {
+  emit: (line: string) => void;
+  repoRoot: string;
+  paths: string[];
+  commitMessage: ScopedCommitMessage;
+}
+
+export interface DryRunScopedSyncOptions {
+  emit: (line: string) => void;
+  repoRoot: string;
+  paths: string[];
+  commitMessage: ScopedCommitMessage;
+}
+
+export interface PushUnpushedCommitsOptions {
+  emit: (line: string) => void;
+  repoRoot: string;
+}
+
+function resolveCommitMessage(message: ScopedCommitMessage, files: string[]): string {
+  return (typeof message === "function" ? message(files) : message).trim();
+}
+
+function runGit(repoRoot: string, args: string[], env?: Record<string, string>) {
+  return runGitRepoAsync(repoRoot, args, env ? { env } : undefined);
+}
+
+/**
+ * Tells .githooks/pre-push this push comes from the content sync. The hook skips
+ * the slow verify only if every pushed commit is content-only, and always runs
+ * the leak scan. Set on nothing but content pushes.
+ */
+const CONTENT_PUSH_ENV = { DEVHUB_PREPUSH: "content" };
+
+/** Cap hook/verify dumps so a failed push doesn't flood the run log. */
+const GIT_FAIL_TAIL_LINES = 40;
+
+function emitOutputTail(emit: (line: string) => void, text: string): void {
+  // Push output can echo the remote URL, which may carry a token.
+  const lines = redactSecrets(text)
+    .replace(/\r\n/g, "\n")
+    .trim()
+    .split("\n")
+    .filter(Boolean);
+  if (lines.length === 0) return;
+  const omitted = Math.max(0, lines.length - GIT_FAIL_TAIL_LINES);
+  if (omitted > 0) emit(`[… ${omitted} earlier line(s) omitted]`);
+  for (const line of lines.slice(omitted)) emit(line);
+}
+
+function emitGitFailure(
+  emit: (line: string) => void,
+  prefix: string,
+  result: GitRepoRunResult,
+  repoRoot?: string,
+  phase: GitHookPhase = "push",
+): void {
+  emit(prefix);
+  const mapped = githubCliErrorInfo(new Error(result.stderr || result.stdout || prefix), prefix);
+  if (mapped.message !== prefix) emit(redactSecrets(mapped.message));
+  // Pre-push hooks (verify, leak scan) often write the real reason to stdout while
+  // git only puts "failed to push some refs" on stderr — surface both.
+  const out = result.stdout.trim();
+  const err = result.stderr.trim();
+  if (out) emitOutputTail(emit, out);
+  if (err && err !== out) emitOutputTail(emit, err);
+
+  if (repoRoot) {
+    const hook = detectGitHookFailure(result.stdout, result.stderr, phase);
+    if (hook) {
+      const persisted = withPersistedLog(repoRoot, hook);
+      emit(`HOOK_FAILED: ${persisted.hook ?? "git hook"} — see ${persisted.logPath}`);
+      if (persisted.summary) emit(`HOOK_SUMMARY: ${persisted.summary}`);
+    }
+  }
+}
+
+/** Push current HEAD to origin/<branch>; retry with --set-upstream on failure. */
+async function checkPrivateContentOrigin(repoRoot: string): Promise<void> {
+  const contentRoot = process.env.DEVHUB_CONTENT_ROOT?.trim();
+  if (isDesktopRuntime() && contentRoot && path.resolve(repoRoot) === path.resolve(contentRoot)) {
+    await assertPrivateRepo(repoRoot);
+  }
+}
+
+function isRemoteHookRejection(result: GitRepoRunResult): boolean {
+  return result.status !== 0 && detectGitHookFailure(result.stdout, result.stderr, "push")?.remote === true;
+}
+
+async function pushOriginBranch(
+  emit: (line: string) => void,
+  repoRoot: string,
+  branch: string,
+  env?: Record<string, string>,
+): Promise<boolean> {
+  emit(`Pushing to origin/${branch}...`);
+  let p = await runGit(repoRoot, ["push", "origin", branch], env);
+  // The remote reached us and refused the ref. --set-upstream can't change that and
+  // the failure isn't a connection or auth problem.
+  let remoteRejected = isRemoteHookRejection(p);
+  if (p.status !== 0 && !remoteRejected) {
+    emit("Push failed; retrying with --set-upstream...");
+    p = await runGit(repoRoot, ["push", "--set-upstream", "origin", branch], env);
+    remoteRejected = isRemoteHookRejection(p);
+  }
+  if (p.status !== 0) {
+    emitGitFailure(
+      emit,
+      remoteRejected
+        ? "WARNING: Push rejected by the remote's hook."
+        : "WARNING: Push failed — check remote connection and auth.",
+      p,
+      repoRoot,
+    );
+    return false;
+  }
+  // Hooks (leak scan, "skipping verify") and the push summary go to stderr; without
+  // this a successful sync's run log shows no evidence of what the hooks did.
+  emitOutputTail(emit, [p.stdout, p.stderr].map((s) => s.trim()).filter(Boolean).join("\n"));
+  return true;
+}
+
+async function countCommitsAheadOfOrigin(repoRoot: string, branch: string): Promise<string> {
+  const r = await runGit(repoRoot, ["rev-list", "--count", `origin/${branch}..HEAD`]);
+  if (r.status !== 0) return "0";
+  const n = r.stdout.trim();
+  return n && n !== "" ? n : "0";
+}
+
+/**
+ * The scoped folders git can be asked about. `git add -- diagrams` fails with
+ * "pathspec 'diagrams' did not match any files" when the folder was never
+ * created (a fresh private repo has no diagrams/ until the first one is drawn),
+ * and one missing folder used to fail the whole content sync. A folder that was
+ * tracked and then deleted still has to be passed so the deletion is staged.
+ */
+export async function existingScopedPaths(repoRoot: string, paths: string[]): Promise<string[]> {
+  const existing: string[] = [];
+  for (const scopedPath of paths) {
+    if (fs.existsSync(path.join(repoRoot, scopedPath))) {
+      existing.push(scopedPath);
+      continue;
+    }
+    const tracked = await runGit(repoRoot, ["ls-files", "--", scopedPath]);
+    if (tracked.status === 0 && tracked.stdout.trim() !== "") existing.push(scopedPath);
+  }
+  return existing;
+}
+
+async function listChangedFilesForPaths(repoRoot: string, paths: string[]): Promise<string[]> {
+  const groups = await Promise.all([
+    runGit(repoRoot, ["diff", "--name-only", "--", ...paths]),
+    runGit(repoRoot, ["diff", "--cached", "--name-only", "--", ...paths]),
+    runGit(repoRoot, ["ls-files", "--others", "--exclude-standard", "--", ...paths]),
+  ]);
+  const files = new Set<string>();
+  for (const g of groups) {
+    if (g.status !== 0) continue;
+    for (const line of g.stdout.split("\n")) {
+      const file = line.trim();
+      if (file && !isTaskTimerOverlay(file)) files.add(file);
+    }
+  }
+  return [...files].sort();
+}
+
+export function commitAndPushDirty(opts: CommitAndPushDirtyOptions): Promise<number> {
+  return withRepoGitMutation(opts.repoRoot, () => commitAndPushDirtyUnlocked(opts));
+}
+
+async function commitAndPushDirtyUnlocked(opts: CommitAndPushDirtyOptions): Promise<number> {
+  const { emit, repoRoot } = opts;
+  await checkPrivateContentOrigin(repoRoot);
+  const branch = (await runGit(repoRoot, ["branch", "--show-current"])).stdout.trim();
+  if (branch !== "main" && branch !== "master") {
+    emit(`ERROR: Commit & Push expects branch main/master (current: ${branch}).`);
+    emit("Switch branches or commit manually in a terminal.");
+    return 1;
+  }
+
+  const status = await runGit(repoRoot, ["status", "--porcelain"]);
+  if (status.status !== 0) {
+    emit("ERROR: Could not inspect git status.");
+    if (status.stderr.trim()) emit(status.stderr.trim());
+    return 1;
+  }
+  const dirty = status.stdout.trim().length > 0;
+  if (!dirty) {
+    emit("Working tree is already clean. Nothing to commit.");
+    return 0;
+  }
+
+  emit("Staging all tracked + untracked changes...");
+  const add = await runGit(repoRoot, ["add", "-A"]);
+  if (add.status !== 0) {
+    emit("ERROR: git add failed.");
+    if (add.stderr.trim()) emit(add.stderr.trim());
+    return 1;
+  }
+
+  const commitMessage = opts.commitMessage?.trim() || `chore: devhub checkpoint ${new Date().toISOString().slice(0, 10)}`;
+  emit(`Committing with message: ${commitMessage}`);
+  const commit = await runGit(repoRoot, ["commit", "-m", commitMessage]);
+  if (commit.status !== 0) {
+    emitGitFailure(emit, "ERROR: git commit failed.", commit, repoRoot, "commit");
+    return 1;
+  }
+
+  if (!(await pushOriginBranch(emit, repoRoot, branch))) {
+    // Exit 2 = commit landed, push did not. Callers can toast accurately and keep
+    // the unpushed indicator visible instead of looking like a clean success.
+    emit("ERROR: Committed locally but push failed — unpushed commits remain.");
+    return 2;
+  }
+
+  emit("Dirty working tree committed and pushed.");
+  return 0;
+}
+
+export function commitAndPushPaths(opts: CommitAndPushPathsOptions): Promise<number> {
+  return withRepoGitMutation(opts.repoRoot, () => commitAndPushPathsUnlocked(opts));
+}
+
+async function commitAndPushPathsUnlocked(opts: CommitAndPushPathsOptions): Promise<number> {
+  const { emit, repoRoot } = opts;
+  await checkPrivateContentOrigin(repoRoot);
+  const branch = (await runGit(repoRoot, ["branch", "--show-current"])).stdout.trim();
+  if (branch !== "main" && branch !== "master") {
+    emit(`ERROR: Commit & Push expects branch main/master (current: ${branch}).`);
+    emit("Switch branches or commit manually in a terminal.");
+    return 1;
+  }
+
+  const requested = opts.paths.map((p) => p.trim()).filter(Boolean);
+  if (requested.length === 0) {
+    emit("ERROR: No paths were provided for scoped commit.");
+    return 1;
+  }
+  const scoped = await existingScopedPaths(repoRoot, requested);
+  const missing = requested.filter((p) => !scoped.includes(p));
+  if (missing.length > 0) emit(`Skipping folders that don't exist yet: ${missing.join(", ")}`);
+  if (scoped.length === 0) {
+    emit(`Nothing to sync yet: none of ${requested.join(", ")} exist in this repo.`);
+    return 0;
+  }
+
+  const changes = await runGit(repoRoot, ["status", "--porcelain", "--", ...scoped]);
+  if (changes.status !== 0) {
+    emit("ERROR: Could not inspect scoped git status.");
+    if (changes.stderr.trim()) emit(changes.stderr.trim());
+    return 1;
+  }
+  if (!changes.stdout.trim()) {
+    emit(`No changes found under: ${scoped.join(", ")}`);
+    return 0;
+  }
+
+  emit(`Staging changes under: ${scoped.join(", ")}`);
+  const add = await runGit(repoRoot, ["add", "-A", "--", ...scoped]);
+  if (add.status !== 0) {
+    emit("ERROR: git add failed for scoped paths.");
+    if (add.stderr.trim()) emit(add.stderr.trim());
+    return 1;
+  }
+
+  const staged = await runGit(repoRoot, ["diff", "--cached", "--name-only", "--", ...scoped]);
+  if (staged.status !== 0) {
+    emit("ERROR: Unable to inspect staged files for scoped commit.");
+    if (staged.stderr.trim()) emit(staged.stderr.trim());
+    return 1;
+  }
+  if (!staged.stdout.trim()) {
+    emit(`No staged changes found under: ${scoped.join(", ")}`);
+    return 0;
+  }
+
+  const files = staged.stdout.split("\n").map((line) => line.trim()).filter(Boolean);
+  const commitMessage = resolveCommitMessage(opts.commitMessage, files);
+  emit(`Committing scoped changes with message: ${commitMessage}`);
+  const commit = await runGit(repoRoot, ["commit", "-m", commitMessage, "--only", "--", ...scoped]);
+  if (commit.status !== 0) {
+    emitGitFailure(emit, "ERROR: git commit failed.", commit, repoRoot, "commit");
+    return 1;
+  }
+
+  if (!(await pushOriginBranch(emit, repoRoot, branch, CONTENT_PUSH_ENV))) {
+    emit("ERROR: Committed locally but push failed — unpushed commits remain.");
+    return 2;
+  }
+
+  emit("Scoped changes committed and pushed.");
+  return 0;
+}
+
+export async function dryRunScopedSync(opts: DryRunScopedSyncOptions): Promise<number> {
+  const { emit, repoRoot } = opts;
+  const branch = (await runGit(repoRoot, ["branch", "--show-current"])).stdout.trim();
+  if (branch !== "main" && branch !== "master") {
+    emit(`ERROR: Dry-run scoped sync expects branch main/master (current: ${branch}).`);
+    emit("Switch branches or run manually in a terminal.");
+    return 1;
+  }
+
+  const requested = opts.paths.map((p) => p.trim()).filter(Boolean);
+  if (requested.length === 0) {
+    emit("ERROR: No paths were provided for dry-run scoped sync.");
+    return 1;
+  }
+  const scoped = await existingScopedPaths(repoRoot, requested);
+  if (scoped.length === 0) {
+    emit(`[DRY-RUN] Nothing to sync yet: none of ${requested.join(", ")} exist in this repo.`);
+    return 0;
+  }
+
+  emit(`[DRY-RUN] Scope: ${scoped.join(", ")}`);
+
+  const files = await listChangedFilesForPaths(repoRoot, scoped);
+  if (files.length === 0) {
+    emit("[DRY-RUN] No changed files in scope.");
+    return 0;
+  }
+
+  const commitMessage = resolveCommitMessage(opts.commitMessage, files);
+  emit(`[DRY-RUN] Commit message: ${commitMessage}`);
+
+  emit(`[DRY-RUN] ${files.length} file(s) would be committed:`);
+  for (const f of files) emit(`  - ${f}`);
+  emit(`[DRY-RUN] Would run: git add -A -- ${scoped.join(" ")}`);
+  emit(`[DRY-RUN] Would run: git commit -m <message> --only -- ${scoped.join(" ")}`);
+  emit(`[DRY-RUN] Would run: git push origin ${branch}`);
+  return 0;
+}
+
+export function pushUnpushedCommits(opts: PushUnpushedCommitsOptions): Promise<number> {
+  return withRepoGitMutation(opts.repoRoot, () => pushUnpushedCommitsUnlocked(opts));
+}
+
+async function pushUnpushedCommitsUnlocked(opts: PushUnpushedCommitsOptions): Promise<number> {
+  const { emit, repoRoot } = opts;
+  await checkPrivateContentOrigin(repoRoot);
+  const branch = (await runGit(repoRoot, ["branch", "--show-current"])).stdout.trim();
+  if (branch !== "main" && branch !== "master") {
+    emit(`ERROR: Push unpushed commits expects branch main/master (current: ${branch}).`);
+    emit("Switch branches or push manually in a terminal.");
+    return 1;
+  }
+
+  const fetch = await runGit(repoRoot, ["fetch", "origin", branch]);
+  if (fetch.status !== 0) {
+    emit("WARNING: Could not fetch remote branch; trying push anyway.");
+  }
+
+  const hasRemoteBranch =
+    (await runGit(repoRoot, ["rev-parse", "--verify", `refs/remotes/origin/${branch}`])).status === 0;
+
+  if (!hasRemoteBranch) {
+    emit(`origin/${branch} not found. Publishing branch with upstream...`);
+    return (await pushOriginBranch(emit, repoRoot, branch, CONTENT_PUSH_ENV)) ? 0 : 1;
+  }
+
+  const ahead = await countCommitsAheadOfOrigin(repoRoot, branch);
+  if (ahead === "0") {
+    emit(`No unpushed commits on ${branch}.`);
+    return 0;
+  }
+
+  emit(`Found ${ahead} unpushed commit(s) on ${branch}.`);
+  return (await pushOriginBranch(emit, repoRoot, branch, CONTENT_PUSH_ENV)) ? 0 : 1;
+}
+
+export function updateAndSync(opts: OrchestratorOptions): Promise<number> {
+  return withRepoGitMutation(opts.repoRoot, () => updateAndSyncUnlocked(opts));
+}
+
+async function updateAndSyncUnlocked(opts: OrchestratorOptions): Promise<number> {
+  const { emit, repoRoot } = opts;
+  if (opts.push && !opts.dryRun) await checkPrivateContentOrigin(repoRoot);
+
+  const branch = (await runGit(repoRoot, ["branch", "--show-current"])).stdout.trim();
+  if (branch !== "main" && branch !== "master") {
+    emit(`ERROR: Not on main/master branch (current: ${branch}). Switch first.`);
+    return 1;
+  }
+
+  const status = await runGit(repoRoot, ["status", "--porcelain"]);
+  if (status.status !== 0) {
+    emit("ERROR: Could not inspect git status.");
+    if (status.stderr.trim()) emit(status.stderr.trim());
+    return 1;
+  }
+  const dirty = status.stdout.trim().length > 0;
+  if (dirty) {
+    emit("WARNING: Working tree is dirty — git pull / collect / commit / push will be skipped.");
+    emit("WARNING: Commit or stash your changes to enable the full sync flow.");
+  }
+
+  // 1. Staleness check (only when clean)
+  if (!dirty && !opts.force) {
+    emit("Checking for remote changes...");
+    if ((await runGit(repoRoot, ["fetch", "origin", branch])).status === 0) {
+      const localSha = (await runGit(repoRoot, ["rev-parse", "HEAD"])).stdout.trim();
+      const remoteSha = (await runGit(repoRoot, ["rev-parse", `origin/${branch}`])).stdout.trim() || localSha;
+      if (localSha !== remoteSha) {
+        const ahead = (await runGit(repoRoot, ["rev-list", "--count", `${remoteSha}..${localSha}`])).stdout.trim();
+        const behind = (await runGit(repoRoot, ["rev-list", "--count", `${localSha}..${remoteSha}`])).stdout.trim();
+        const diverged =
+          ahead && ahead !== "0" && behind && behind !== "0";
+        if (diverged) {
+          emit(
+            `ERROR: Branch diverged — ${ahead} local commit(s) not on origin and ${behind} on origin not locally. Resolve manually (rebase or merge), then sync.`,
+          );
+          return 1;
+        }
+        if (ahead && ahead !== "0") {
+          emit(`Local is ${ahead} commit(s) ahead of origin — will push after sync if still ahead.`);
+        }
+        if (behind && behind !== "0") emit(`Remote has ${behind} new commit(s). Pulling before sync...`);
+      } else {
+        emit("Local is up to date with remote.");
+      }
+    } else {
+      emit("WARNING: Could not fetch from remote — no remote configured or offline.");
+    }
+  }
+
+  // 2. Pull
+  if (dirty) {
+    emit("Skipping pull — working tree is dirty.");
+  } else if (opts.dryRun) {
+    emit("[DRY-RUN] Would pull latest changes.");
+  } else {
+    emit("Pulling latest changes...");
+    const r = await runGit(repoRoot, ["pull", "--rebase", "origin", branch]);
+    if (r.status !== 0) emit("WARNING: Pull failed or no remote configured. Continuing with local state.");
+  }
+
+  // 3. Sync skills (always safe — read-only on tracked files)
+  emit("Syncing skills to local tools...");
+  await syncSkills({ emit, repoRoot, dryRun: opts.dryRun, prune: false });
+  emit("Syncing agents to local tools...");
+  await syncAgents({ emit, repoRoot, dryRun: opts.dryRun, prune: false });
+
+  // 4. Verify skill writes landed correctly
+  if (!opts.dryRun) {
+    emit("Verifying skill sync health...");
+    await verifySync({ emit, repoRoot });
+  }
+
+  // 4b. Build the Cowork bundle. Cowork is a build target, not a copy target — it has
+  // no directory to sync into, so it sits outside TOOL_DIRS and verifySync. A failure
+  // here is non-fatal: every other tool has already been synced by this point.
+  emit("Building Cowork plugin bundle...");
+  try {
+    const cowork = await buildCoworkPlugin({ emit, repoRoot, dryRun: opts.dryRun });
+    if (cowork.code === 0 && !opts.dryRun && !cowork.unchanged) {
+      const check = verifyCoworkPlugin(repoRoot);
+      if (check.ok) {
+        emit(`Cowork bundle health OK — ${check.skills} skill(s) verified in the bundle.`);
+      } else {
+        emit("=== Cowork Bundle Warnings ===");
+        for (const problem of check.problems) emit(`  ${problem}`);
+      }
+    }
+  } catch (e) {
+    emit(`WARNING: Cowork bundle build failed (${e instanceof Error ? e.message : String(e)}).`);
+    emit("WARNING: Other sync targets were unaffected.");
+  }
+
+  // 5. Sync persona
+  emit("Syncing persona to tool configs...");
+  await syncPersona({ emit, repoRoot, dryRun: opts.dryRun });
+
+  // 6. Sync OpenCode model/provider config (preserves mcp + other keys)
+  emit("Syncing OpenCode config...");
+  await syncOpencodeConfig({ emit, repoRoot, dryRun: opts.dryRun });
+
+  // 7. Collect (only when clean — touches the index)
+  if (dirty) {
+    emit("Skipping local skill collection — working tree is dirty.");
+  } else {
+    emit("Checking for new local skills and agents...");
+    if ((await collectSkills({ emit, repoRoot, dryRun: opts.dryRun })) !== 0) {
+      emit("ERROR: Skill collection failed; changes were left for review.");
+      return 1;
+    }
+    if ((await collectAgents({ emit, repoRoot, dryRun: opts.dryRun })) !== 0) {
+      emit("ERROR: Agent collection failed; changes were left for review.");
+      return 1;
+    }
+    emit("Checking for local OpenCode config changes...");
+    if ((await collectOpencodeConfig({ emit, repoRoot, dryRun: opts.dryRun })) !== 0) {
+      emit("ERROR: OpenCode config collection failed; changes were left for review.");
+      return 1;
+    }
+  }
+
+  // Summary + optional push
+  emit("=== Sync Summary ===");
+  const staged = (await runGit(repoRoot, ["diff", "--cached", "--name-only"])).stdout.trim();
+  if (dirty) {
+    emit(staged ? "Existing staged changes were left untouched." : "Existing changes were left untouched.");
+  } else if (opts.dryRun) {
+    emit(staged ? "[DRY-RUN] Would commit and potentially push staged changes." : "[DRY-RUN] No changes to commit.");
+  } else if (staged && opts.push) {
+    emit("Committing and pushing staged changes...");
+    const commit = await runGit(repoRoot, ["commit", "-m", `sync: automated update ${new Date().toISOString().slice(0, 10)}`]);
+    if (commit.status !== 0) {
+      emitGitFailure(emit, "ERROR: git commit failed.", commit, repoRoot, "commit");
+      return 1;
+    }
+    if (!(await pushOriginBranch(emit, repoRoot, branch))) {
+      emit("ERROR: Committed locally but push failed — unpushed commits remain.");
+      return 2;
+    }
+  } else if (staged) {
+    emit("Changes are staged but not committed.");
+    emit("Review with: git status");
+  } else {
+    emit("No staged changes from collect in this run.");
+  }
+
+  // 8. Push any commits still not on origin (unpushed work from before this run, or if the push above failed)
+  if (!opts.dryRun && !dirty && opts.push) {
+    if ((await runGit(repoRoot, ["fetch", "origin", branch])).status === 0) {
+      const hasRemoteBranch =
+        (await runGit(repoRoot, ["rev-parse", "--verify", `refs/remotes/origin/${branch}`])).status === 0;
+      if (hasRemoteBranch) {
+        const aheadAfter = await countCommitsAheadOfOrigin(repoRoot, branch);
+        if (aheadAfter !== "0") {
+          emit(`Local is still ${aheadAfter} commit(s) ahead of origin/${branch} — pushing...`);
+          if (!(await pushOriginBranch(emit, repoRoot, branch))) return 2;
+        }
+      } else {
+        emit(`origin/${branch} not found on remote — attempting push to publish...`);
+        if (!(await pushOriginBranch(emit, repoRoot, branch))) return 2;
+      }
+    }
+  }
+
+  emit("Done.");
+  return 0;
+}

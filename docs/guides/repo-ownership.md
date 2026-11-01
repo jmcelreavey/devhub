@@ -12,15 +12,15 @@ related:
 
 # Repo ownership
 
-**Own** (`/own`) is a repo-centric workspace for the question "what is happening to code I am accountable for?" It complements **Repos** (clone and edit locally) and **PRs** (your authored and review-requested queue) by focusing on **inbound change** to repositories you mark owned.
+**Owned repos** (`/repos?view=owned`) is a repo-centric workspace for the question "what is happening to code I am accountable for?" It complements **Repos** (clone and edit locally) and **PRs** (your authored and review-requested queue) by focusing on **inbound change** to repositories you mark owned.
 
-The index is folded into **Repos**: `/own` **redirects** to `/repos?view=owned`. Per-repo pages stay at `/own/<owner>/<name>` and remain reachable from ⌘P, radar attention rows, and briefing links. The owned view is gated on GitHub (`gh auth login`); it appears once `GET /api/setup/status` reports `github: true`.
+The index is folded into **Repos**. Per-repo pages stay at `/own/<owner>/<name>` and remain reachable from ⌘P, and radar attention rows. The owned view is gated on GitHub (`gh auth login`); it appears once `GET /api/setup/status` reports `github: true`.
 
 ## Marking repos owned
 
 | Surface | Action |
 | ------- | ------ |
-| **Repos** owned view (`/repos?view=owned`, formerly `/own`) | Enter `owner/repository` and click **Own repo**, or remove with **Stop owning** |
+| **Repos** owned view (`/repos?view=owned`) | Enter `owner/repository` and click **Own repo**, or remove with **Stop owning** |
 | **Repos** (`/repos`) | Toggle **Owned** on a card when the checkout has a GitHub remote |
 
 Ownership is stored in `.devhub/ownership/repos.json` under the DevHub checkout (`version: 1`, `repos[]` with `fullName`, `addedAt`, and optional `domains` / `teams` overrides). You do not need to edit this file by hand. Removing ownership only updates DevHub — it does not change GitHub permissions.
@@ -87,7 +87,7 @@ Summarises what landed since your last watermark (or a **Recent** window). `POST
 
 ## Morning ownership brief
 
-The **`ownership_brief`** action (`POST /api/scripts` with `{ script: "ownership_brief" }`) is the batch counterpart to opening `/own` every morning. It walks every repo in `.devhub/ownership/repos.json`, loads the same obligation and PR-radar panels the UI uses, and writes:
+The **`ownership_brief`** action (`POST /api/scripts` with `{ script: "ownership_brief" }`) is the batch counterpart to opening the owned view every morning. It walks every repo in `.devhub/ownership/repos.json`, loads the same obligation and PR-radar panels the UI uses, and writes:
 
 | Output | Path |
 | ------ | ---- |
@@ -100,10 +100,9 @@ Schedule it from **Actions → Scheduled jobs** (see [Scheduled jobs](scheduled-
 
 ## Cross-surface attention strip
 
-`loadOwnershipSummary()` ranks owned repos by an attention score derived from obligation health and inbound PR state (`lib/ownership/obligations.ts`). Repos with `attention.score > 0` surface outside `/own`:
+`loadOwnershipSummary()` ranks owned repos by an attention score derived from obligation health and inbound PR state (`lib/ownership/obligations.ts`). Repos with `attention.score > 0` surface outside the owned view:
 
 - **Radar** (`GET /api/radar/personal`) — **Owned repositories** rows under the personal radar strip, linking into `/own/<owner>/<name>`.
-- **Morning briefing** (`GET /api/dashboard/morning-briefing`, `/api/briefing/data`) — `ownedRepoAttention[]` in the assembled context (top five by score) for the Today widget and AI canvas.
 
 This is a lightweight nudge, not a full brief — use `ownership_brief` or the per-repo digest for detail.
 

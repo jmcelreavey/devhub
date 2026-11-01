@@ -10,6 +10,8 @@ tags: [plans, plugins, desktop, paseo]
 
 9 October 2026. Implementation plan. The compatibility boundary is deliberate: existing checkout plugins keep working, but they need a portable runtime bundle before the packaged app can execute them.
 
+Slim-core follow-up, 27 October 2026: follow the [simplification audit](slim-core-refactor.md#4-architecture) before extending this design. Don't build another plugin framework just to move existing features. As runtime plugins replace build-time copying, review the registry, materialisation receipts and packaging paths together; remove duplication where safe without weakening plugin disablement, permissions or data protection.
+
 ## Architecture
 
 ### Runtime plugins
@@ -110,7 +112,7 @@ Persist remote command handles outside the immutable plugin tree. Closing a page
 
 Core tests cover permission-constrained workers, changed-artifact receipts, streaming framing, output limits, split UTF-8, timeout and disconnect cleanup. Fixture UI captures demonstrate the generic browser, integrations and editor flows without provider writes. Domain-specific worker verification remains the plugin publisher's responsibility.
 
-## Decisions for John
+## Decisions for the user
 
 - Default: portable request workers first. Large existing plugins need adaptation; no hidden in-app compiler.
 - Default: all local executable plugins are high risk and unsigned unless a future verified signature path says otherwise.

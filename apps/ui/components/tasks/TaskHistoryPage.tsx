@@ -1,0 +1,446 @@
+"use client";
+
+import { useMemo, useState } from "react";
+import Link from "@/lib/navigation";
+import { ArrowRight, ChevronLeft, ChevronRight } from "lucide-react";
+import { TaskItem } from "@/components/tasks/TaskList";
+import type { Task } from "@shared/tasks/types";
+import { FetchError, InlineSearch, SkeletonRows } from "@/components";
+import { paletteCommandScore } from "@/lib/navigation/command-palette-score";
+import { useToast } from "@/lib/hooks/use-toast";
+import { useLive } from "@/lib/hooks/use-fetch";
+import { profileHeaders, profileKey } from "@shared/tasks/profile-scope";
+import { BootScreen, useBootGate } from "@/components/ui/BootScreen";
+import { taskMatchesWorkFilters } from "@/lib/storyboard/view-state";
+import type { BoardCard, BoardFilters } from "../../../../packages/shared/ui-lib/storyboard/notes-board-shared";
+
+const NO_FILTERS: BoardFilters = {};
+const NO_CARDS: readonly BoardCard[] = [];
+
+const PAGE_SIZE = 50;
+const FILTERS = ["all", "open", "done", "abandoned", "moved"] as const;
+
+interface TaskDay {
+  date: string;
+  total: number;
+  completed: number;
+  abandoned: number;
+  moved: number;
+  modified: number;
+  tasks: Task[];
+}
+
+interface TaskRecord {
+  task: Task;
+  date: string;
+  dayLabel: string;
+  status: "open" | "done" | "abandoned" | "moved";
+  score: number;
+}
+
+type StatusFilter = (typeof FILTERS)[number];
+
+function formatDateKey(dateStr: string): string {
+  const d = new Date(dateStr + "T00:00:00");
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const target = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const diff = Math.round((today.getTime() - target.getTime()) / 86400000);
+  if (diff === 0) return "Today";
+  if (diff === 1) return "Yesterday";
+  return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+}
+
+function taskStatus(task: Task): TaskRecord["status"] {
+  if (task.movedAt || task.endReason === "legacy-moved") return "moved";
+  if (task.abandonedAt) return "abandoned";
+  if (task.done) return "done";
+  return "open";
+}
+
+function formatMovedToDate(dateStr: string): string {
+  return formatDateKey(dateStr);
+}
+
+function taskSearchParts(record: Omit<TaskRecord, "score">): string[] {
+  return [
+    record.task.text,
+    record.task.jiraKey ?? "",
+    record.status,
+    record.date,
+    record.dayLabel,
+    record.task.due ?? "",
+    record.task.abandonReason ?? "",
+  ];
+}
+
+function compareTaskRecords(a: TaskRecord, b: TaskRecord): number {
+  if (a.score !== b.score) return b.score - a.score;
+  const aTime = Date.parse(a.task.createdAt || a.date);
+  const bTime = Date.parse(b.task.createdAt || b.date);
+  return bTime - aTime;
+}
+
+function statusBadgeClass(status: TaskRecord["status"]): string {
+  if (status === "done") return "badge badge-success";
+  if (status === "abandoned" || status === "moved") return "badge badge-muted";
+  return "badge badge-accent";
+}
+
+function summarizeDay(day: TaskDay): TaskDay {
+  return {
+    ...day,
+    total: day.tasks.length,
+    completed: day.tasks.filter((t) => t.done).length,
+    abandoned: day.tasks.filter((t) => !!t.abandonedAt).length,
+    moved: day.tasks.filter((t) => !!t.movedAt).length,
+  };
+}
+
+function updateTaskInDays(
+  days: TaskDay[] | undefined,
+  date: string,
+  id: string,
+  update: Task | null | ((task: Task) => Task),
+): TaskDay[] {
+  return (days ?? []).map((day) => {
+    if (day.date !== date) return day;
+    const tasks = typeof update === "function"
+      ? day.tasks.map((task) => (task.id === id ? update(task) : task))
+      : update
+        ? day.tasks.map((task) => (task.id === id ? update : task))
+        : day.tasks.filter((task) => task.id !== id);
+    return summarizeDay({ ...day, tasks });
+  });
+}
+
+function TaskRow({
+  record,
+  onToggle,
+  onEdit,
+  onAbandon,
+  onReactivate,
+  onDelete,
+  showDetailsButton,
+}: {
+  record: TaskRecord;
+  onToggle: () => void;
+  onEdit: (text: string) => void;
+  onAbandon: (reason?: string) => void;
+  onReactivate: () => void;
+  onDelete: () => void;
+  showDetailsButton?: boolean;
+}) {
+  const { task, status } = record;
+
+  return (
+    <div className="card group" style={{ padding: "8px 10px" }}>
+      <div className="mb-1 flex flex-wrap items-center gap-2 px-2">
+        <span className={statusBadgeClass(status)}>{status}</span>
+        <span className="text-xs text-text-subtle">{record.dayLabel}</span>
+        {task.due ? <span className="text-xs text-text-muted">Due {task.due}</span> : null}
+      </div>
+        {status === "moved" && task.movedToDate ? (
+          <span className="text-xs text-text-muted">
+            Continued on {formatMovedToDate(task.movedToDate)}
+          </span>
+        ) : null}
+        {status === "moved" && task.endReason === "legacy-moved" ? (
+          <span className="text-xs text-text-muted">Ended when the later copy was removed</span>
+        ) : null}
+      <TaskItem
+        task={task}
+        date={record.date}
+        readOnly={status === "moved"}
+        showDetailsButton={showDetailsButton}
+        onToggle={status === "abandoned" ? onReactivate : onToggle}
+        onDelete={onDelete}
+        onEdit={onEdit}
+        onAbandon={onAbandon}
+        onReactivate={onReactivate}
+      />
+    </div>
+  );
+}
+
+export default function TasksPage({ embedded = false, query: sharedQuery, filters = NO_FILTERS, cards = NO_CARDS, date, attentionIds, profile }: {
+  embedded?: boolean;
+  query?: string;
+  filters?: BoardFilters;
+  cards?: readonly BoardCard[];
+  date?: string;
+  attentionIds?: ReadonlySet<string>;
+  profile?: string;
+} = {}) {
+  const [localQuery, setQuery] = useState("");
+  const query = sharedQuery ?? localQuery;
+  const [filter, setFilter] = useState<StatusFilter>("all");
+  const pageKey = `${query}\0${date ?? ""}\0${profile ?? ""}`;
+  const [pagination, setPagination] = useState({ page: 1, key: pageKey });
+  const page = pagination.key === pageKey ? pagination.page : 1;
+  const setPage = (next: number | ((current: number) => number)) => setPagination((current) => ({ key: pageKey, page: typeof next === "function" ? next(current.key === pageKey ? current.page : 1) : next }));
+  const historyUrl = profile === undefined ? "/api/tasks/history?includeTasks=1" : profileKey("/api/tasks/history?includeTasks=1", profile);
+  const { data, error, isLoading, mutate } = useLive<TaskDay[]>(historyUrl, { keepPreviousData: false });
+  const boot = useBootGate(data !== undefined || !!error);
+  const toast = useToast();
+  const Heading = embedded ? "h2" : "h1";
+  const byTask = useMemo(() => new Map(cards.map((card) => [card.taskId, card])), [cards]);
+  const noteTagsUrl = profile === undefined ? "/api/tasks/note-tags" : profileKey("/api/tasks/note-tags", profile);
+  const noteTags = useLive<{ tags: Record<string, string[]> }>(filters.tag || query.includes("#") ? noteTagsUrl : null, { keepPreviousData: false });
+
+  const allRecords = useMemo(() => {
+    return (data ?? [])
+      .flatMap((day) => {
+        const dayLabel = formatDateKey(day.date);
+        return day.tasks.map((task) => {
+          const base = { task, date: day.date, dayLabel, status: taskStatus(task) };
+          return { ...base, score: 1 };
+        });
+      })
+      .sort(compareTaskRecords);
+  }, [data]);
+
+  const datedRecords = useMemo(() => date ? allRecords.filter((record) => record.date === date) : allRecords, [allRecords, date]);
+  const counts = useMemo(() => ({
+    all: datedRecords.length,
+    open: datedRecords.filter((r) => r.status === "open").length,
+    done: datedRecords.filter((r) => r.status === "done").length,
+    abandoned: datedRecords.filter((r) => r.status === "abandoned").length,
+    moved: datedRecords.filter((r) => r.status === "moved").length,
+  }), [datedRecords]);
+
+  const records = useMemo(() => {
+    const q = query.trim();
+    return datedRecords
+      .filter((record) => filter === "all" || record.status === filter)
+      .filter((record) => (!attentionIds || attentionIds.has(record.task.id)) && taskMatchesWorkFilters(record.task, filters, byTask.get(record.task.id), noteTags.data?.tags))
+      .map((record) => ({
+        ...record,
+        score: q ? paletteCommandScore(q, [...taskSearchParts(record), ...(noteTags.data?.tags[record.task.id] ?? []).map((tag) => `#${tag}`), ...(byTask.get(record.task.id)?.tags ?? []).map((tag) => `#${tag}`)]) : 1,
+      }))
+      .filter((record) => !q || record.score > 0)
+      .sort(compareTaskRecords);
+  }, [datedRecords, filter, query, filters, byTask, noteTags.data?.tags, attentionIds]);
+
+  const patchTask = async (
+    record: TaskRecord,
+    body: Record<string, unknown>,
+    optimistic: (task: Task) => Task,
+    errorMessage: string,
+  ) => {
+    await mutate((cur) => updateTaskInDays(cur, record.date, record.task.id, optimistic), { revalidate: false });
+    try {
+      const res = await fetch("/api/tasks", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", ...profileHeaders(profile) },
+        body: JSON.stringify({ id: record.task.id, date: record.date, ...body }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const updated = (await res.json()) as Task;
+      await mutate((cur) => updateTaskInDays(cur, record.date, record.task.id, updated), { revalidate: false });
+    } catch (err) {
+      console.error(errorMessage, err);
+      toast.error(errorMessage);
+      await mutate();
+    }
+  };
+
+  const deleteTask = async (record: TaskRecord) => {
+    await mutate((cur) => updateTaskInDays(cur, record.date, record.task.id, null), { revalidate: false });
+    try {
+      const res = await fetch("/api/tasks", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json", ...profileHeaders(profile) },
+        body: JSON.stringify({ id: record.task.id, date: record.date }),
+      });
+      if (!res.ok && res.status !== 404) throw new Error(await res.text());
+    } catch (err) {
+      console.error("delete task:", err);
+      toast.error("Couldn't delete task.");
+      await mutate();
+      return;
+    }
+
+    toast.info("Task deleted.", {
+      duration: 5000,
+      action: {
+        label: "Undo",
+        onClick: async () => {
+          try {
+            const res = await fetch("/api/tasks", {
+              method: "POST",
+              headers: { "Content-Type": "application/json", ...profileHeaders(profile) },
+              body: JSON.stringify({ text: record.task.text, due: record.task.due, date: record.date }),
+            });
+            if (!res.ok) throw new Error(await res.text());
+            await mutate();
+          } catch (err) {
+            console.error("restore task:", err);
+            toast.error("Couldn't restore task.");
+          }
+        },
+      },
+    });
+  };
+
+  const totalPages = Math.max(1, Math.ceil(records.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const pageStart = (safePage - 1) * PAGE_SIZE;
+  const visibleRecords = records.slice(pageStart, pageStart + PAGE_SIZE);
+  const rangeStart = records.length === 0 ? 0 : pageStart + 1;
+  const rangeEnd = Math.min(pageStart + PAGE_SIZE, records.length);
+
+  return (
+    <div className={embedded ? undefined : "page-wrapper"}>
+      {!embedded ? <BootScreen state={boot} /> : null}
+      <div className="page-header">
+        <div>
+          <Heading className="page-title">History</Heading>
+          <div className="text-xs flex flex-wrap gap-x-3 text-text-subtle">
+            <span>{counts.all} total</span>
+            <span>{counts.open} open</span>
+            <span>{counts.done} done</span>
+            <span>{counts.abandoned} abandoned</span>
+            <span>{counts.moved} moved</span>
+          </div>
+        </div>
+        <Link href="/review" className="btn btn-ghost" style={{ fontSize: 12, padding: "4px 10px" }}>
+          Weekly review <ArrowRight size={12} aria-hidden />
+        </Link>
+      </div>
+
+      {error && <FetchError message="Couldn't load task history." onRetry={() => void mutate()} />}
+      {noteTags.error ? <FetchError message="Couldn't load task-note tags. Tag results may be incomplete." onRetry={() => void noteTags.mutate()} /> : null}
+
+      <div className="card card-body mb-4 space-y-3">
+        {sharedQuery === undefined ? <InlineSearch
+          id="tasks-search"
+          label="Search tasks"
+          placeholder="Search tasks, Jira keys, dates, status…"
+          value={query}
+          onChange={(next) => {
+            setQuery(next);
+            setPage(1);
+          }}
+        /> : null}
+
+        <div className="flex flex-wrap gap-1">
+          {FILTERS.map((value) => (
+            <button
+              key={value}
+              type="button"
+              onClick={() => {
+                setFilter(value);
+                setPage(1);
+              }}
+              className="px-3 py-1.5 text-xs font-medium rounded-md transition-colors"
+              style={{
+                background: filter === value ? "var(--accent-dim)" : "var(--bg-elevated)",
+                color: filter === value ? "var(--accent-text, var(--accent))" : "var(--text-muted)",
+                border: filter === value ? "1px solid color-mix(in oklab, var(--accent) 30%, transparent)" : "1px solid var(--border-muted)",
+              }}
+              aria-pressed={filter === value}
+            >
+              {value === "all" ? "All" : value[0].toUpperCase() + value.slice(1)}
+              <span className="ml-1 badge badge-muted" style={{ fontSize: 12 }}>{counts[value]}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {isLoading && !data && <SkeletonRows count={5} height={40} variant="list" />}
+
+      {!isLoading && !error && records.length === 0 && (
+        <p className="text-sm text-text-muted">
+          {query || date || filter !== "all" || Object.keys(filters).length > 0 ? "No matching tasks found." : "No tasks yet."}
+        </p>
+      )}
+
+      {records.length > 0 ? (
+        <>
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <span className="text-xs text-text-subtle">
+              Showing {rangeStart}-{rangeEnd} of {records.length}
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                className="btn btn-ghost"
+                style={{ fontSize: 12, padding: "4px 10px" }}
+                disabled={safePage <= 1}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+              >
+                <ChevronLeft size={12} aria-hidden /> Prev
+              </button>
+              <span className="text-xs text-text-subtle">
+                Page {safePage} of {totalPages}
+              </span>
+              <button
+                type="button"
+                className="btn btn-ghost"
+                style={{ fontSize: 12, padding: "4px 10px" }}
+                disabled={safePage >= totalPages}
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              >
+                Next <ChevronRight size={12} aria-hidden />
+              </button>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            {visibleRecords.map((record) => (
+              <TaskRow
+                key={`${record.date}-${record.task.id}`}
+                record={record}
+                showDetailsButton={embedded}
+                onToggle={() => patchTask(
+                  record,
+                  { completion: !record.task.done },
+                  (task) => ({
+                    ...task,
+                    done: !task.done,
+                    completedAt: !task.done ? new Date().toISOString() : undefined,
+                    abandonedAt: !task.done ? undefined : task.abandonedAt,
+                    abandonReason: !task.done ? undefined : task.abandonReason,
+                  }),
+                  "Couldn't update task.",
+                )}
+                onEdit={(text) => patchTask(
+                  record,
+                  { text },
+                  (task) => ({ ...task, text }),
+                  "Couldn't update task.",
+                )}
+                onAbandon={(reason) => patchTask(
+                  record,
+                  { status: "abandoned", abandonReason: reason },
+                  (task) => ({
+                    ...task,
+                    done: false,
+                    completedAt: undefined,
+                    abandonedAt: new Date().toISOString(),
+                    abandonReason: reason,
+                  }),
+                  "Couldn't abandon task.",
+                )}
+                onReactivate={() => patchTask(
+                  record,
+                  { status: "active" },
+                  (task) => ({
+                    ...task,
+                    done: false,
+                    completedAt: undefined,
+                    abandonedAt: undefined,
+                    abandonReason: undefined,
+                  }),
+                  "Couldn't reactivate task.",
+                )}
+                onDelete={() => deleteTask(record)}
+              />
+            ))}
+          </div>
+        </>
+      ) : null}
+    </div>
+  );
+}

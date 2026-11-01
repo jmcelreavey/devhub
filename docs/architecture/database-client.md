@@ -62,18 +62,9 @@ in the pool.
 
 ### The plugin seam
 
-Providers use the plugin system's generated-import pattern:
-
-- a plugin declares `dashboard.connections` in `devhub-plugin.json`, pointing at a module
-  under its `lib/` that default-exports a `DbConnectionProvider`;
-- `lib/plugins/db-materialize.ts` emits `lib/plugin-db-providers.generated.ts` with a real
-  `import` — the same empty-baseline + `skip-worktree` treatment as
-  `plugin-nav.generated.ts`, so core builds with no plugin installed;
-- the materialiser refuses a module that `dashboard.paths` would never copy, because the
-  generated import would otherwise fail the *whole build* rather than one page.
-
-A work plugin can use this to expose every RDS service your team has IAM for, plus its
-Atlas clusters, per environment.
+Reviewed runtime plugins declare database capabilities in their manifest. The host
+calls the approved worker for listing and resolving connections; built-in adapters
+continue to handle saved connections. See [runtime database providers](plugins.md#runtime-database-providers).
 
 ---
 
@@ -193,7 +184,7 @@ identity exists, editing is disabled **with a reason shown**, never approximated
 | Engines | `lib/db/{postgres,mongo,sqlite}/` |
 | Routes | `app/api/db/**` (all authenticated, GET included) |
 | UI | `app/db/`, `components/db/` |
-| MCP tools | `mcp-servers/devhub-server/src/tools/db.ts` |
+| MCP tools | `packages/mcp/src/tools/db.ts` |
 | Plugin providers | the plugin's own `dashboard.connections` module (see [Plugins](plugins.md)) |
 
 Unlike `/api/repos/*`, **every `/api/db` route calls `requireDashboardAuth`**. Git routes

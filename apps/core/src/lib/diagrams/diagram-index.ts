@@ -1,0 +1,109 @@
+import fs from "node:fs";
+import path from "node:path";
+import { getNotesDir } from "../content/dirs";
+import { DIAGRAMS_DIR, stripJsonExtension, toDiagramRoutePath } from "../../../../../packages/shared/ui-lib/diagrams/utils";
+import {
+  DIAGRAM_ROOT_AREA_ID,
+  groupDiagramsByArea,
+  type DiagramAreaGroup,
+  type DiagramIndex,
+  type DiagramSummary,
+} from "../../../../../packages/shared/diagrams/diagram-browse";
+
+/**
+ * Server FS index over `notes/diagrams/`.
+ * Client browse helpers live in `diagram-browse.ts`.
+ */
+
+export type { DiagramAreaGroup, DiagramIndex, DiagramSummary };
+export { DIAGRAM_ROOT_AREA_ID };
+
+function walkDiagramFiles(absRoot: string, rel = ""): Array<{ rel: string; mtime: number }> {
+  const abs = path.join(absRoot, rel);
+  let entries: fs.Dirent[];
+  try {
+    entries = fs.readdirSync(abs, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+  const out: Array<{ rel: string; mtime: number }> = [];
+  for (const entry of entries) {
+    if (entry.name.startsWith(".")) continue;
+    const childRel = rel ? `${rel}/${entry.name}` : entry.name;
+    if (entry.isDirectory()) {
+      out.push(...walkDiagramFiles(absRoot, childRel));
+    } else if (entry.isFile() && entry.name.endsWith(".json")) {
+      try {
+        const mtime = fs.statSync(path.join(absRoot, childRel)).mtimeMs;
+        out.push({ rel: childRel, mtime });
+      } catch {
+        /* skip unreadable */
+      }
+    }
+  }
+  return out;
+}
+
+function countDirectFolders(absRoot: string, rel: string): number {
+  const abs = path.join(absRoot, rel);
+  let entries: fs.Dirent[];
+  try {
+    entries = fs.readdirSync(abs, { withFileTypes: true });
+  } catch {
+    return 0;
+  }
+  return entries.filter((e) => e.isDirectory() && !e.name.startsWith(".")).length;
+}
+
+function toSummary(relUnderDiagrams: string, modified: number): DiagramSummary {
+  const storagePath = stripJsonExtension(`${DIAGRAMS_DIR}/${relUnderDiagrams}`);
+  const name = storagePath.split("/").pop() ?? storagePath;
+  const area = relUnderDiagrams.includes("/")
+    ? relUnderDiagrams.slice(0, relUnderDiagrams.indexOf("/"))
+    : "";
+  return {
+    path: storagePath,
+    name,
+    href: toDiagramRoutePath(storagePath),
+    area,
+    modified,
+  };
+}
+
+export function getDiagramIndex(): DiagramIndex {
+  const absRoot = path.join(getNotesDir(), DIAGRAMS_DIR);
+  try {
+    if (fs.lstatSync(absRoot).isSymbolicLink()) throw new Error("Diagram directory is a symlink");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  }
+  const files = walkDiagramFiles(absRoot);
+  const diagrams = files
+    .map(({ rel, mtime }) => toSummary(rel, mtime))
+    .sort((a, b) => a.path.localeCompare(b.path));
+
+  let areaIds: string[] = [];
+  try {
+    areaIds = fs
+      .readdirSync(absRoot, { withFileTypes: true })
+      .filter((e) => e.isDirectory() && !e.name.startsWith("."))
+      .map((e) => e.name)
+      .sort((a, b) => a.localeCompare(b));
+  } catch {
+    areaIds = [...new Set(diagrams.map((d) => d.area).filter((id) => id !== ""))].sort();
+  }
+
+  const areas = groupDiagramsByArea(
+    diagrams,
+    areaIds.map((id) => ({ id, folderCount: countDirectFolders(absRoot, id) })),
+  );
+
+  return { diagrams, areas, total: diagrams.length };
+}
+
+export function getRecentDiagrams(limit = 6): DiagramSummary[] {
+  return getDiagramIndex()
+    .diagrams.slice()
+    .sort((a, b) => b.modified - a.modified)
+    .slice(0, limit);
+}

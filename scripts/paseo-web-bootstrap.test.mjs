@@ -1,7 +1,41 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import vm from "node:vm";
-import { withDevHubBootstrap } from "./paseo-web-bootstrap.mjs";
+import { withDevHubBootstrap, installDevHubBootstrap, restoreDevHubPasteGuard } from "./paseo-web-bootstrap.mjs";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { gzipSync, gunzipSync, brotliCompressSync, brotliDecompressSync } from "node:zlib";
+
+for (const version of ["0.12.0", "0.13.0"]) {
+  test("installs and restores " + version + " assets without a version manifest", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "devhub-paste-bootstrap-"));
+    try {
+      const web = path.join(root, "node_modules/@getpaseo/server/dist/server/web-ui");
+      const bundle = path.join(web, "_expo/static/js/web/index-test.js");
+      fs.mkdirSync(path.dirname(bundle), { recursive: true });
+      const original = fs.readFileSync(new URL("./fixtures/paseo-web-paste-" + version + ".txt", import.meta.url), "utf8");
+      fs.writeFileSync(bundle, original);
+      fs.writeFileSync(bundle + ".gz", gzipSync(original));
+      fs.writeFileSync(bundle + ".br", brotliCompressSync(original));
+      for (const extension of [".gz", ".br"]) fs.utimesSync(bundle + extension, 1, 1);
+      fs.writeFileSync(path.join(web, "index.html"), '<script src="/_expo/static/js/web/index-test.js" defer></script>');
+      installDevHubBootstrap(root);
+      const patched = fs.readFileSync(bundle, "utf8");
+      assert.match(patched, /devhub-message-submit/);
+      assert.equal(gunzipSync(fs.readFileSync(bundle + ".gz")).toString(), patched);
+      assert.equal(brotliDecompressSync(fs.readFileSync(bundle + ".br")).toString(), patched);
+      installDevHubBootstrap(root);
+      assert.equal(fs.readFileSync(bundle, "utf8"), patched);
+      restoreDevHubPasteGuard(root);
+      assert.equal(fs.readFileSync(bundle, "utf8"), original);
+      assert.equal(gunzipSync(fs.readFileSync(bundle + ".gz")).toString(), original);
+      assert.equal(brotliDecompressSync(fs.readFileSync(bundle + ".br")).toString(), original);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+}
 
 test("embedded Paseo saves DevHub's local connection before starting its app", () => {
   const html = withDevHubBootstrap('<script src="/_expo/static/js/web/index-test.js" defer></script>');
@@ -32,6 +66,26 @@ test("embedded Paseo saves DevHub's local connection before starting its app", (
   assert.equal(host.serverId, "srv_test");
   assert.equal(host.connections[0].endpoint, "localhost:6767");
   assert.equal(host.connections[0].password, "test-secret");
+});
+
+test("the chrome follows the visible panel rather than a retained hidden composer", () => {
+  const html = withDevHubBootstrap('<script src="/_expo/static/js/web/index-test.js" defer></script>');
+  const bootstrap = html.match(/<script data-devhub-paseo-bootstrap>([\s\S]*?)<\/script>/)?.[1];
+  const listeners = new Map(), posted = [];
+  const parent = { postMessage: value => posted.push(value) };
+  const visible = { background: "rgb(255, 255, 255)" };
+  const document = { createElement: () => ({}), body: { appendChild: () => {} }, addEventListener: () => {},
+    querySelectorAll: () => [{ background: "rgb(30, 30, 30)", getClientRects: () => [] }],
+    elementFromPoint: () => visible };
+  const window = { parent, innerWidth: 1200, innerHeight: 800,
+    location: { host: "localhost:6767", hostname: "localhost", port: "6767", protocol: "http:", href: "http://localhost:6767/" },
+    addEventListener: (type, callback) => listeners.set(type, callback),
+    getComputedStyle: element => ({ backgroundColor: element.background }),
+    requestAnimationFrame: callback => callback() };
+  vm.runInNewContext(bootstrap, { window, document, URL, localStorage: { getItem: () => null, setItem: () => {} },
+    setTimeout: () => 1, clearTimeout: () => {}, setInterval: () => 2, clearInterval: () => {}, console });
+  listeners.get("message")({ source: parent, origin: "http://localhost:1337", data: { type: "devhub:paseo:skip", bridgeConfirm: false } });
+  assert.equal(posted.find(value => value.type === "devhub:paseo:appearance").background, "rgb(255, 255, 255)");
 });
 
 test("re-patching an older bootstrap keeps Paseo's bundle and picks up the new script", () => {
