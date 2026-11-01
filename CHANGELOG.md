@@ -2,6 +2,14 @@
 
 User-visible changes, newest first. Versioned sections describe the public releases; Unreleased, when present, is work that has not shipped yet.
 
+## 2.2.3 — 2026-11-01
+
+### Fixed
+
+- Desktop installers for 2.2.2 changes, plus a release workflow fix.
+
+See the [v2.2.2 release notes](https://github.com/jmcelreavey/devhub/releases/tag/v2.2.2).
+
 ## 2.2.2 — 2026-11-01
 
 ### Added

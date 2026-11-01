@@ -42,8 +42,6 @@ on:
 permissions:
   contents: read
 
-env:
-
 jobs:
   # The build matrix lives here, not in `build`, because a job-level `if:` cannot
   # read `matrix` and a dispatch has to be able to drop legs (macos_intel_only).
