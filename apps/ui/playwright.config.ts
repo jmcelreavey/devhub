@@ -52,6 +52,8 @@ export default defineConfig({
           url: baseURL,
           reuseExistingServer: !process.env.CI,
           timeout: 120_000,
+          // Let the supervisor stop detached children before its process group is killed.
+          gracefulShutdown: { signal: "SIGTERM", timeout: 10_000 },
           stdout: "pipe",
           stderr: "pipe",
           env: {
