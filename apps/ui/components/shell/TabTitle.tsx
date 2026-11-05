@@ -12,7 +12,8 @@ export function TabTitle() {
   const { items } = usePluginNav();
   const { publishLabel, tabs, activeId } = useWorkspaceTabs();
   const active = tabs.find(tab => tab.id === activeId);
-  const href = `${pathname}?${search}`;
+  const query = search.toString();
+  const href = query ? `${pathname}?${query}` : pathname;
   const destination = navDestinationFor(href, items);
   const pluginLabel = destination?.href.startsWith("/plugins/runtime/") ? destination.label : undefined;
 

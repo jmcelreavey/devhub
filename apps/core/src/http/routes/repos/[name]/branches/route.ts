@@ -32,6 +32,36 @@ import {
   parseUpstreamTrack,
 } from "./parsers";
 
+
+/** Progress reporter for streamed network ops: raw git stderr lines, throttled. */
+interface GitOpStream {
+  emit: (line: string) => void;
+  signal?: AbortSignal;
+  onStderr?: (chunk: Buffer) => void;
+}
+
+function makeProgress(emit: (line: string) => void): (chunk: Buffer) => void {
+  let last = "";
+  return (chunk: Buffer) => {
+    for (const raw of chunk.toString("utf8").split(/[\r\n]+/)) {
+      // eslint-disable-next-line no-control-regex -- strip ANSI color codes from git progress
+      const line = raw.replace(/\x1b\[[0-9;]*m/g, "").trim();
+      if (!line || line === last) continue;
+      last = line;
+      emit(line.slice(0, 200));
+    }
+  };
+}
+
+const STREAMABLE_ACTIONS = new Set([
+  "push",
+  "pull",
+  "pull-rebase",
+  "pull-merge",
+  "fetch",
+  "force-push-with-lease",
+]);
+
 function indexLockResponse(repoRoot: string, gitError?: string): Response {
   return Response.json(
     { error: formatIndexLockError(repoRoot, gitError), code: "index_lock" as const },
@@ -139,6 +169,7 @@ async function pushBranch(
   branch: string | null,
   hasUpstream: boolean,
   remote?: string,
+  op?: GitOpStream,
 ): Promise<GitRepoRunResult> {
   // `origin` remains the default, but it is now a default rather than an
   // assumption: on a fork-based workflow the branch belongs on your fork, and
@@ -150,7 +181,7 @@ async function pushBranch(
       : branch
         ? ["push", "--set-upstream", target, branch]
         : ["push"];
-  return runGitRepoAsync(repoRoot, args, { timeout: 300_000 });
+  return runGitRepoAsync(repoRoot, args, { timeout: 300_000, onStderr: op?.onStderr, signal: op?.signal });
 }
 
 function hookFailureResponse(
@@ -435,6 +466,11 @@ export async function POST(req: Request, { params }: Params) {
   }
 
   const body = await req.json().catch(() => ({})) as BranchActionBody;
+  const wantsStream = STREAMABLE_ACTIONS.has(String(body?.action ?? ""))
+    && (req.headers.get("accept") ?? "").includes("application/x-ndjson");
+  if (wantsStream) {
+    return streamBranchAction(rp, body, req);
+  }
   if (body && typeof body === "object") {
     const keys = Object.keys(body);
     const branchInput = { name, action: body.action, branch: body.branch, confirm: true };
@@ -469,7 +505,7 @@ export async function POST(req: Request, { params }: Params) {
   return withRepoGitMutation(rp, () => applyBranchAction(rp, body));
 }
 
-async function applyBranchAction(rp: string, body: BranchActionBody) {
+async function applyBranchAction(rp: string, body: BranchActionBody, op?: GitOpStream) {
   switch (body.action) {
     case "checkout":
     case "checkout-remote": {
@@ -733,7 +769,7 @@ async function applyBranchAction(rp: string, body: BranchActionBody) {
           { status: 400 },
         );
       }
-      const push = await pushBranch(rp, branch, Boolean(upstream), body.remote);
+      const push = await pushBranch(rp, branch, Boolean(upstream), body.remote, op);
       if (push.status !== 0) {
         const hookRes = hookFailureResponse(rp, push.stdout, push.stderr, "push");
         if (hookRes) return hookRes;
@@ -801,6 +837,8 @@ async function applyBranchAction(rp: string, body: BranchActionBody) {
         `HEAD:${remoteRef}`,
       ], {
         timeout: 300_000,
+        onStderr: op?.onStderr,
+        signal: op?.signal,
       });
       if (push.status !== 0) {
         const hookRes = hookFailureResponse(rp, push.stdout, push.stderr, "push");
@@ -1038,7 +1076,7 @@ async function applyBranchAction(rp: string, body: BranchActionBody) {
     }
 
     case "fetch": {
-      const fetch = await runGitRepoAsync(rp, ["fetch", "--all", "--prune"], { timeout: 120_000 });
+      const fetch = await runGitRepoAsync(rp, ["fetch", "--all", "--prune"], { timeout: 120_000, onStderr: op?.onStderr, signal: op?.signal });
       if (fetch.status !== 0) {
         return Response.json(
           { error: fetch.stderr.trim() || fetch.stdout.trim() || "Fetch failed" },
@@ -1058,7 +1096,7 @@ async function applyBranchAction(rp: string, body: BranchActionBody) {
       }
       // --autostash: a dirty tree used to fail with "local changes would be
       // overwritten"; Git now stashes, pulls and re-applies (as GitKraken does).
-      const pull = await runGitRepoAsync(rp, ["pull", "--ff-only", "--autostash"], { timeout: 120_000 });
+      const pull = await runGitRepoAsync(rp, ["pull", "--ff-only", "--autostash"], { timeout: 120_000, onStderr: op?.onStderr, signal: op?.signal });
       const unmerged = await detectUnmergedFiles(rp);
       if (pull.status !== 0 || unmerged.length > 0) {
         // A re-apply that conflicts leaves markers and keeps the stash — the
@@ -1102,7 +1140,7 @@ async function applyBranchAction(rp: string, body: BranchActionBody) {
         body.action === "pull-rebase"
           ? ["pull", "--rebase", "--autostash"]
           : ["pull", "--no-rebase", "--autostash"],
-        { timeout: 120_000 },
+        { timeout: 120_000, onStderr: op?.onStderr, signal: op?.signal },
       );
       const unmerged = await detectUnmergedFiles(rp);
       if (pull.status !== 0 || unmerged.length > 0) {
@@ -1430,4 +1468,44 @@ async function applyBranchAction(rp: string, body: BranchActionBody) {
     default:
       return Response.json({ error: `Unknown action: ${body.action}` }, { status: 400 });
   }
+}
+
+
+/** NDJSON progress stream for network ops: progress frames then one done frame. */
+async function streamBranchAction(rp: string, body: BranchActionBody, req: Request): Promise<Response> {
+  const started = Date.now();
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      let closed = false;
+      let lastSentAt = 0;
+      const send = (frame: Record<string, unknown>) => {
+        if (closed) return;
+        try { controller.enqueue(encoder.encode(`${JSON.stringify(frame)}\n`)); } catch { closed = true; }
+      };
+      const emit = (line: string) => {
+        const now = Date.now();
+        if (now - lastSentAt < 80) return;
+        lastSentAt = now;
+        send({ type: "progress", line, elapsedMs: now - started });
+      };
+      const op: GitOpStream = { emit, signal: req.signal, onStderr: makeProgress(emit) };
+      try {
+        const response = await withRepoGitMutation(rp, () => applyBranchAction(rp, body, op));
+        const text = await response.text();
+        let parsed: unknown;
+        try { parsed = JSON.parse(text); } catch { parsed = { error: text || `HTTP ${response.status}` }; }
+        send({ type: "done", http: response.status, body: parsed });
+      } catch (error) {
+        send({ type: "done", http: 500, body: { error: error instanceof Error ? error.message : "Git operation failed" } });
+      } finally {
+        closed = true;
+        try { controller.close(); } catch { /* already closed */ }
+      }
+    },
+  });
+  return new Response(stream, {
+    status: 200,
+    headers: { "content-type": "application/x-ndjson", "cache-control": "no-store" },
+  });
 }

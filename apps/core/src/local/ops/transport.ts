@@ -90,7 +90,8 @@ export class LocalAgentHub {
     const workspaceId = requestContext()?.workspaceId;
     if (!workspaceId) throw new Error("Remote local operations require a workspace context");
     // Process handles, callbacks and binary IO are deliberately local-only.
-    if (Object.entries(options).some(([key, value]) => value !== undefined && !["cwd", "env", "timeoutMs", "maxBuffer", "collect"].includes(key))) {
+    const localOnly = new Set(["onStdout", "onStderr"]);
+    if (Object.entries(options).some(([key, value]) => value !== undefined && !["cwd", "env", "timeoutMs", "maxBuffer", "collect"].includes(key) && !localOnly.has(key))) {
       throw new Error("Unsupported remote local-op options");
     }
     const parsed = localOperationRequest.safeParse({ id: randomUUID(), workspaceId, cli, args, options: {

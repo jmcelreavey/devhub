@@ -144,8 +144,8 @@ Optional watcher failures mark their domains degraded in the stream. Active even
 | apps/ui/components/storyboard/TaskDetailPanel.tsx:84 | useLive | <code>profileKey(`/api/tasks/workflow?taskId=${encodeURIComponent(card.taskId)}`, profileId)</code> | local |
 | apps/ui/components/storyboard/TaskDetailPanel.tsx:85 | useLive | <code>card.notePath ? profileKey(taskNoteSectionsKey(card.notePath), profileId) : null</code> | local |
 | apps/ui/components/storyboard/TaskFailure.tsx:19 | useLive | <code>logs ? profileKey(`/api/tasks/failure/output?taskId=${encodeURIComponent(card.taskId)}`, profile) : null</code> | local |
+| apps/ui/components/storyboard/TaskPluginActions.tsx:22 | useLive | <code>catalog.slots.some(isCollaborationSlot) ? "/api/team/collaboration" : null</code> | remote — Slack availability and recipients polled every 30 seconds |
 | apps/ui/components/storyboard/TaskSourceContext.tsx:10 | useLive | <code>profileKey(`/api/tasks/source-context?taskId=${encodeURIComponent(taskId)}`, profileId)</code> | local |
-| apps/ui/components/storyboard/WorkflowInboxPanel.tsx:27 | useLive | <code>WORKFLOW_INBOX_KEY</code> | local |
 | apps/ui/components/tasks/AddToJiraModal.tsx:188 | useLive | <code>open &amp;&amp; parentLookupKey &amp;&amp; parentKeyValid ? `/api/jira/ticket/${parentLookupKey}` : null</code> | static — fetched on demand or by explicit refresh |
 | apps/ui/components/tasks/AddToJiraModal.tsx:202 | useLive | <code>open ? `/api/jira/meta?${metaParams.toString()}` : null</code> | static — fetched on demand or by explicit refresh |
 | apps/ui/components/tasks/ImplementTaskDialog.tsx:75 | useLive | <code>readyKey</code> | local |

@@ -74,6 +74,7 @@ const routes: readonly EventRoute[] = [
   { path: /^\/api\/repos\/([^/]+)\/work$/, scope: localScope, binding: (path) => { const repo = repoFromPath(path, /^\/api\/repos\/([^/]+)\/work$/); return repo ? { domains: ["tasks", "notes", "git", "repo-work"], repo } : undefined; } },
   { path: /^\/api\/repos\/([^/]+)\/learn\/status$/, binding: (path) => { try { const repo = decodeURIComponent(path.match(/^\/api\/repos\/([^/]+)\/learn\/status$/)![1]); return repo ? { domains: ["notes", "git"], repo } : undefined; } catch { return undefined; } } },
   { path: /^\/api\/repos\/([^/]+)\/pr$/, scope: localScope, binding: (path) => { const repo = repoFromPath(path, /^\/api\/repos\/([^/]+)\/pr$/); return repo ? { domains: ["git"], repo } : undefined; } },
+  { path: "/api/git/overview", binding: { domains: ["git"], repos: true } },
   { path: "/api/repos", binding: { domains: ["git"], repos: true } },
   { path: /^\/api\/repos\/([^/]+)$/, binding: (path) => { const repo = repoFromPath(path, /^\/api\/repos\/([^/]+)$/); return repo && !["apps", "clone", "github", "init", "worktree-cleanup", "worktree-report"].includes(repo) ? { domains: ["git"], repo } : undefined; } },
   { path: "/api/rebuild", binding: { domains: ["rebuild", "git"], checkout: true } },
@@ -139,7 +140,11 @@ export function useLive<T = unknown>(key: string | null, opts?: SWRConfiguration
     isPaused: () => !visible || !!isPaused?.(),
   });
   const previouslyVisible = useRef(visible);
+  const validating = useRef(result.isValidating);
+  useEffect(() => { validating.current = result.isValidating; }, [result.isValidating]);
+  const pendingRefresh = useRef(false);
   const { mutate } = result;
+  useEffect(() => { pendingRefresh.current = false; }, [key]);
   useEffect(() => {
     if (!binding || !visible) return;
     return subscribeToTaskEvents({
@@ -149,11 +154,21 @@ export function useLive<T = unknown>(key: string | null, opts?: SWRConfiguration
       key: key ?? undefined,
       refresh: () => {
         if (isPaused?.()) return false;
+        // Starting another SWR mutation discards the in-flight response. Busy
+        // event streams must let that response render before refreshing again.
+        if (validating.current) { pendingRefresh.current = true; return true; }
+        validating.current = true;
         void mutate().catch(() => {});
         return true;
       },
     });
   }, [binding, visible, key, mutate, isPaused, cache]);
+  useEffect(() => {
+    if (result.isValidating || !pendingRefresh.current || !visible || isPaused?.()) return;
+    pendingRefresh.current = false;
+    validating.current = true;
+    void mutate().catch(() => {});
+  }, [result.isValidating, visible, key, mutate, isPaused]);
   useEffect(() => {
     const activated = visible && !previouslyVisible.current;
     previouslyVisible.current = visible;

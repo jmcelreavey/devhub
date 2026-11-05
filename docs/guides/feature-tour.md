@@ -13,7 +13,7 @@ related:
 
 # Feature tour
 
-The [README](../../README.md) covers installing DevHub and the main areas: Notifications, Work, PRs, Notes, Agents and Skills. This page is the rest of it. Each section ends with the guide that has the detail.
+The [README](../../README.md) covers installing DevHub and the main areas: Work, PRs, Notes, Agents and Skills. This page is the rest of it. Each section ends with the guide that has the detail.
 
 DevHub keeps your persona, skills, agents, MCP configuration and notes together as files, in a git repo if you link one. It syncs tool configuration into Claude Code, Codex, Cursor, OpenCode and Antigravity, and agents reach shared notes through MCP. Around that sits a dashboard for the rest of the day: tasks, notes, PRs, repos, a git client, a database client, and agents that can work a ticket from plan to pull request.
 

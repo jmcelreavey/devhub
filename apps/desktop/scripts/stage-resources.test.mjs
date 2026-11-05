@@ -9,14 +9,16 @@ import test from "node:test";
 import { stageResources } from "./stage-resources.mjs";
 import { resourcesDir } from "./staging-paths.mjs";
 
-test("installed resources contain a runnable pull bootstrap with all local imports", async () => {
+test("installed resources contain runnable bootstraps with all local imports", async () => {
   const manifest = stageResources();
-  for (const resource of ["package.json", "CHANGELOG.md", "scripts/workspace-paths.mjs", "scripts/checkout-rebuild.mjs", "scripts/checkout-payload-smoke.mjs", "apps/core/src/lib/desktop/build-env.mjs"]) {
+  for (const resource of ["package.json", "CHANGELOG.md", "scripts/workspace-paths.mjs", "scripts/checkout-rebuild.mjs", "scripts/checkout-payload-smoke.mjs", "scripts/paseo-web-keyboard.mjs", "scripts/paseo-web-image-send.mjs", "apps/core/src/lib/desktop/build-env.mjs"]) {
     assert.equal(manifest.filter((entry) => entry.path === resource).length, 1);
   }
   const bootstrap = await import(pathToFileURL(path.join(resourcesDir, "scripts", "checkout-rebuild.mjs")).href);
   assert.equal(bootstrap.optionsFromArgs(["--launcher=systemd-run", "--pull"]).launcher, "systemd-run");
   assert.equal(typeof bootstrap.runRebuild, "function");
+  const paseoBootstrap = await import(pathToFileURL(path.join(resourcesDir, "scripts", "paseo-web-bootstrap.mjs")).href);
+  assert.equal(typeof paseoBootstrap.installDevHubBootstrap, "function");
 });
 
 test("resource staging replaces personal voice files with a generic guide", async () => {
@@ -49,6 +51,8 @@ test("resource staging replaces personal voice files with a generic guide", asyn
       "scripts/paseo-config.mjs",
       "scripts/paseo-service.mjs",
       "scripts/paseo-web-bootstrap.mjs",
+      "scripts/paseo-web-keyboard.mjs",
+      "scripts/paseo-web-image-send.mjs",
       "scripts/paseo-release.json",
       "agents/shared/example.md",
       "persona/shared-persona.md",

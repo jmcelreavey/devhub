@@ -7,6 +7,7 @@ import { ChevronDown, SlidersHorizontal } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "@/lib/navigation";
 import { TASK_NOTE_STATUS_LABEL, type TaskNoteStatus } from "@shared/task-note/meta.ts";
 import { PageHeader } from "@/components/shell/PageHeader";
+import { useDecision } from "@/components/shell/ConfirmDialog";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { FetchError } from "@/components/ui/FetchError";
 import { SearchInput } from "@/components/ui/SearchInput";
@@ -23,16 +24,12 @@ import { OrchestratorStatus } from "./OrchestratorStatus";
 import { CardMenu, type CardMenuActions } from "./CardMenu";
 import { TaskDetailProvider, useTaskDetail } from "@/components/storyboard/TaskDetailProvider";
 import { useContextMenu } from "@/components/shell/ContextMenu";
-import { InboxToggle, WorkflowInboxPanel } from "@/components/storyboard/WorkflowInboxPanel";
 import { useTaskCompletion } from "@/components/storyboard/useTaskCompletion";
 import { workSummary } from "../../../../packages/shared/ui-lib/storyboard/work-summary";
 import { matchesCardQuery, storyboardUrl, storyboardView, workFilters } from "@/lib/storyboard/view-state";
-import { useLive } from "@/lib/hooks/use-fetch";
 import { useMinuteTick } from "@/lib/tickers";
 import { StoryboardCapture } from "@/components/storyboard/StoryboardCapture";
 import { requestStartOnAuto } from "@/lib/storyboard/start-on-auto-request";
-import { PrReviewsColumn } from "./PrReviewsColumn";
-import { reviewedPrs, type ReviewNoteSummary } from "@/lib/storyboard/reviewed-prs";
 import { useProfileWork } from "@/lib/storyboard/use-profile-work";
 import { homeWorkKey, homeWorkSummary } from "../../../../packages/shared/ui-lib/storyboard/home-summary";
 import { WorkSummaryCard } from "@/components/storyboard/WorkSummaryCard";
@@ -59,6 +56,7 @@ export function StoryboardBoard({ embedded = false }: { embedded?: boolean } = {
   const router = useRouter();
   const pathname = usePathname();
   const toast = useToast();
+  const decide = useDecision();
   const view = storyboardView();
   const showAllDone = params.get("done") === "all";
   const focusedTask = params.get("task");
@@ -118,9 +116,7 @@ export function StoryboardBoard({ embedded = false }: { embedded?: boolean } = {
   const home = useMemo(() => homeWorkSummary(data?.cards ?? [], inbox.data?.items ?? [], prs.data?.reviews ?? [], now, prs.data?.authored, owned.data?.repos.map((repo) => repo.fullName), prs.data?.feedbackPrs), [data?.cards, inbox.data?.items, prs.data, now, owned.data]);
   const groupIds = useMemo(() => focusedGroup ? new Set(home[focusedGroup].map(({ card }) => card.taskId)) : null, [home, focusedGroup]);
   const queueIds = useMemo(() => queue ? new Set(home[queue].map(({ card }) => card.taskId)) : null, [home, queue]);
-  const reviewNotes = useLive<{ notes: ReviewNoteSummary[] }>(view === "board" ? "/api/storyboard/pr-review-notes" : null);
   const boardTaskIds = useMemo(() => new Set((data?.cards ?? []).map((card) => card.taskId)), [data?.cards]);
-  const reviewedPeerPrs = useMemo(() => reviewedPrs(prs.data?.reviews ?? [], reviewNotes.data?.notes ?? []), [prs.data?.reviews, reviewNotes.data?.notes]);
   const peerReviews = useMemo(() => home["needs-you"].filter((work) => work.kind === "pr"), [home]);
   const needsYouCount = summary.needsYou.length + peerReviews.length;
   const workflows = summary.workflows;
@@ -199,15 +195,34 @@ export function StoryboardBoard({ embedded = false }: { embedded?: boolean } = {
       if (status !== card.status) toast.info(check.reason);
       return;
     }
-    // A column the user collapsed would swallow the card they just moved, and its keyboard focus with it.
-    setExpanded((current) => ({ ...current, [status]: true }));
-    void run(
-      card,
-      () => setCardStatus(card, status, profileId),
-      `Moved to ${TASK_NOTE_STATUS_LABEL[status]}.`,
-      (cards) => cards.map((item) => (item.taskId === card.taskId ? { ...item, status, statusSetAt: new Date().toISOString(), attention: null } : item)),
-    );
-  }, [run, toast, profileId]);
+    void (async () => {
+      if (card.status === "needs-you" && status === "in-progress" && card.auto?.status === "needs-you") {
+        const canRetry = card.auto.waiting?.kind === "failure" || card.auto.waiting?.kind === "cap";
+        const choice = await decide({
+          title: "Continue this task",
+          message: `Auto is waiting at ${card.auto.label}. Choose how to continue.`,
+          options: [
+            ...(canRetry ? [{ value: "retry", label: card.auto.waiting?.kind === "cap" ? "Run another fix round" : `Retry ${card.auto.label}`, description: "Continue on Auto from the current step; the completed plan is kept." }] : []),
+            { value: "details", label: "Open task details", description: "Review the failure, questions or plan before continuing." },
+            { value: "manual", label: "Move to In progress manually", description: "Pause Auto and move the card without starting an agent." },
+          ],
+        });
+        if (choice === "details") { focusTask(card.taskId); return; }
+        if (choice === "retry") {
+          await run(card, () => card.failure ? recoverCardFailure(card, "retry", profileId) : retryAuto(card.taskId, profileId), `Retrying ${card.auto.label}.`);
+          return;
+        }
+        if (choice !== "manual") return;
+      }
+      setExpanded((current) => ({ ...current, [status]: true }));
+      await run(
+        card,
+        () => setCardStatus(card, status, profileId),
+        `Moved to ${TASK_NOTE_STATUS_LABEL[status]}.`,
+        (cards) => cards.map((item) => (item.taskId === card.taskId ? { ...item, status, statusSetAt: new Date().toISOString(), attention: null } : item)),
+      );
+    })();
+  }, [run, toast, profileId, decide, focusTask]);
 
   /** Drag within a column or Alt+Up/Down: writes the card's rank (and, the first time, ranks for never-ranked cards above it). */
   const reorder = useCallback((card: BoardCard, index: number) => {
@@ -403,7 +418,6 @@ export function StoryboardBoard({ embedded = false }: { embedded?: boolean } = {
 
   const headerActions = <div className={styles.headerActions}>
     <OrchestratorStatus knownTaskIds={boardTaskIds} ticket={focusedTask ?? ""} progress={focusedCard?.auto ? statusLine(focusedCard, now) : undefined} />
-    <InboxToggle open={params.get("inbox") === "1"} onToggle={() => setParam("inbox", params.get("inbox") === "1" ? null : "1")} />
   </div>;
 
   return (
@@ -413,11 +427,9 @@ export function StoryboardBoard({ embedded = false }: { embedded?: boolean } = {
         subtitle="Capture, organise and follow your work in one place."
         actions={headerActions}
       />}
-      {params.get("inbox") === "1" ? <WorkflowInboxPanel onClose={() => setParam("inbox", null)} onOpenCard={focusTask} /> : null}
       {toolbar}
-      {inbox.error ? <FetchError bare message="Couldn't refresh workflow decisions. Needs you and Updates may be incomplete." onRetry={() => void inbox.mutate()} /> : null}
+      {inbox.error ? <FetchError bare message="Couldn't refresh workflow decisions. Needs you may be incomplete." onRetry={() => void inbox.mutate()} /> : null}
       {needsYouOnly && (prs.error || prs.data?.stale) ? <FetchError bare message="GitHub unavailable. Last-known review requests are shown." onRetry={() => void prs.mutate()} /> : null}
-      {view === "board" && !needsYouOnly && !filtering && (prs.error || prs.data?.stale || reviewNotes.error) ? <FetchError bare message="Couldn’t refresh PR reviews. The review column may be incomplete." onRetry={() => { void prs.mutate(); void reviewNotes.mutate(); }} /> : null}
       {needsYouOnly && owned.error ? <FetchError bare message="Owned repositories unavailable. Review totals are unavailable." onRetry={() => void owned.mutate()} /> : null}
       {needsYouOnly && visiblePeerReviews.length > 0 ? <section aria-label="Pull requests needing you">{visiblePeerReviews.map((work) => <WorkSummaryCard key={homeWorkKey(work)} work={work} profile={profileId} onRefresh={() => void prs.mutate()} />)}</section> : null}
       {board.error && !data ? (
@@ -464,7 +476,6 @@ export function StoryboardBoard({ embedded = false }: { embedded?: boolean } = {
                     />
                   );
                 })}
-                {!filtering && reviewedPeerPrs.length > 0 ? <PrReviewsColumn items={reviewedPeerPrs} collapsed={expanded["pr-reviews"] === undefined ? false : !expanded["pr-reviews"]} onToggle={() => setExpanded((current) => ({ ...current, "pr-reviews": expanded["pr-reviews"] === undefined ? false : !expanded["pr-reviews"] }))} /> : null}
               </div>}
               {view === "board" && !focusedGroup && menuCard?.task ? (
                 <CardMenu

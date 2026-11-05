@@ -4,6 +4,7 @@ import { BRAND_BOTTLE_IMAGE_SRC, BRAND_LABEL } from "@/lib/themes/brand-mark";
 import { useRuntimeBrand } from "./RuntimeBrandProvider";
 import { MobileNav } from "@/components/shell/MobileNav";
 import { MobileQuickActionsMenu } from "@/components/shell/MobileQuickActionsMenu";
+import { NotificationBell } from "@/components/shell/NotificationBell";
 import { ContentSyncIndicator } from "@/components/runs/ContentSyncIndicator";
 import { HoverTip } from "@/components/ui/HoverTip";
 
@@ -42,6 +43,7 @@ export function MobileTopBar() {
       </div>
       <div className="ml-auto flex items-center gap-1">
         <ContentSyncIndicator />
+        <NotificationBell />
         <HoverTip label="Search everything" pos="bottom-end">
           <button
             type="button"

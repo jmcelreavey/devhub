@@ -1,0 +1,12 @@
+/* Host primitives also style reviewed plugin pages; the sandbox stays opaque. */
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 13px/1.5 var(--font-sans, system-ui, sans-serif); }
+button, input, select, textarea { font: inherit; }
+h1, h2, h3, p { margin: 0; }
+a { color: var(--accent-text, var(--accent)); text-underline-offset: 3px; }
+::selection { background: var(--accent-dim); color: var(--text); }
+input, textarea { caret-color: var(--accent); }
+* { scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+[hidden] { display: none !important; }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+body[data-motion="off"] *, body[data-motion="off"] *::before, body[data-motion="off"] *::after { animation: none !important; transition: none !important; }

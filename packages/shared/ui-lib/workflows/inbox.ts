@@ -2,8 +2,6 @@ import type { Task } from "../../tasks/types.ts";
 import type { TaskWorkflow } from "./types.ts";
 
 export const WORKFLOW_INBOX_KEY = "/api/tasks/workflow";
-/** Where the inbox lives: a drawer on the Storyboard. */
-export const WORKFLOW_INBOX_HREF = "/storyboard?inbox=1";
 
 export interface WorkflowInboxItem {
   task: Task & { date?: string };

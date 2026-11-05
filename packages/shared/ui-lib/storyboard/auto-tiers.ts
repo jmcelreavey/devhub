@@ -25,6 +25,10 @@ export const LARGE_DIFF = { lines: 800, files: 25 };
 export const TRIVIAL_DIFF = { lines: 30, files: 2 };
 export const MANY_FINDINGS = 5;
 
+export function isCheckoutContention(error: string | null | undefined): boolean {
+  return /Paseo has active work in this checkout|(?:Another agent is using|A terminal is using) this checkout|Another checkout preparation is active|Build cannot safely reuse its checkout/i.test(error ?? "");
+}
+
 export function tierStepForPhase(phase: AutoPhase): TierStep {
   switch (phase) {
     case "plan":

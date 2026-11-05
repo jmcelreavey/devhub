@@ -91,8 +91,9 @@ export interface AutoState {
   /** Fix rounds taken so far. */
   round: number;
   maxRounds: number;
-  /** Retries of the current phase (a retry escalates the tier). */
+  /** Retries of the current phase, including checkout contention. */
   attempt: number;
+  tierAttempt?: number;
   /** Dashboard origin the prompts point agents at. */
   origin: string;
   runs: AutoRun[];

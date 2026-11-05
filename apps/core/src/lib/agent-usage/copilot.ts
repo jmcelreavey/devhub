@@ -11,6 +11,7 @@ const quotaSchema = z.object({
 
 const userSchema = z.object({
   copilot_plan: z.string().optional(),
+  access_type_sku: z.string().optional(),
   quota_reset_date_utc: z.string().optional(),
   quota_snapshots: z.record(z.string(), quotaSchema.partial().passthrough()).optional(),
 });
@@ -42,6 +43,7 @@ export async function loadCopilotUsage(): Promise<ProviderUsage | null> {
   if (response.status === 404 || response.status === 403) return null;
   if (!response.ok) throw new Error(`Copilot usage failed (HTTP ${response.status}).`);
   const user = userSchema.parse(await response.json());
+  if (user.access_type_sku === "free_limited_copilot" || user.copilot_plan === "free") return null;
   const resetsAt = user.quota_reset_date_utc;
   const meters: UsageMeter[] = [];
   for (const [id, quota] of Object.entries(user.quota_snapshots ?? {})) {

@@ -2,20 +2,19 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "@/lib/navigation";
-import { useRouter } from "@/lib/navigation";
 import { runtimePageHref } from "../../../../../../packages/shared/ui-lib/navigation/nav";
 import type { RuntimeContribution } from "../../../../../../packages/shared/ui-lib/plugins/runtime-contract";
-import { useRuntimeBrand } from "@/components/shell/RuntimeBrandProvider";
+import { FetchError } from "@/components/ui/FetchError";
+import { SkeletonRows } from "@/components/ui/SkeletonRows";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { RuntimeFrame, type RuntimeFrameRequest } from "@/components/plugins/RuntimeFrame";
 import { useRuntimePageActions } from "@/components/plugins/useRuntimePageActions";
 import { useLive } from "@/lib/hooks/use-fetch";
 import { runtimePageQuery } from "@/lib/plugins/runtime-page-query";
 
 export default function RuntimePage({ name, initialPage = "", initialSearch = "" }: { name: string; initialPage?: string; initialSearch?: string }) {
-  const branding = useRuntimeBrand();
   const [html, setHtml] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const router = useRouter();
   const [attempt, setAttempt] = useState(0);
   const endpoint = `/api/plugins/runtime/${encodeURIComponent(name)}`;
   const { data: catalog, error: catalogError, mutate } = useLive<{ runtime: RuntimeContribution; revision: string }>(`${endpoint}?view=page`, { refreshInterval: 0 });
@@ -75,14 +74,14 @@ export default function RuntimePage({ name, initialPage = "", initialSearch = ""
     return result;
   }, [endpoint, request, runtime, revision]);
 
-  return <div className="p-6 space-y-4">
-    <div className="flex items-center justify-between gap-3"><h1 className="text-xl font-semibold">{name}</h1><Link href="/plugins" className="btn btn-ghost">Plugins</Link></div>
-    {runtime?.branding ? <button type="button" className="btn btn-ghost" onClick={() => branding.select(branding.selected === name ? "" : name)}>{branding.selected === name ? "Restore default branding" : `Use ${runtime.branding.label} branding`}</button> : null}
-    {runtime?.pages.length ? <label className="flex items-center gap-3">Page<select className="input" value={page} onChange={(event) => router.push(runtimePageHref(name, event.target.value))}>{runtime.pages.map((page) => <option key={page.path} value={page.path}>{page.label}</option>)}</select></label> : null}
-    {error || catalogError ? <div role="alert" className="tone-panel tone-panel--warning"><p>{error || catalogError?.message}</p><button className="btn btn-ghost mt-3" onClick={() => { setError(null); setHtml(null); void mutate(); setAttempt((n) => n + 1); }}>Retry</button></div>
-      : runtime && !runtime.pages.length ? <p>This plugin has no pages.</p>
-        : html === null ? <div aria-label="Loading plugin page" className="skeleton h-64 rounded" />
-          : runtime ? <RuntimeFrame key={`${page}:${revision}`} title={`${name} plugin page`} html={html} routes={runtime.routes} request={frameRequest} hostRequest={host.request} className="min-h-[70vh]" /> : null}
+  return <div className="page-wrapper space-y-4">
+    {runtime && runtime.pages.length > 1 ? <nav aria-label={`${name} pages`} className="flex gap-4 overflow-x-auto border-b border-border">
+      {runtime.pages.map(item => <Link key={item.path} href={runtimePageHref(name, item.path)} aria-current={page === item.path ? "page" : undefined} className={`shrink-0 border-b-2 px-1 py-2 text-sm ${page === item.path ? "border-accent font-medium text-text" : "border-transparent text-text-muted hover:text-text"}`}>{item.label}</Link>)}
+    </nav> : null}
+    {error || catalogError ? <FetchError message={error || catalogError?.message || "Couldn’t load this page"} onRetry={() => { setError(null); setHtml(null); void mutate(); setAttempt(n => n + 1); }} />
+      : runtime && !runtime.pages.length ? <EmptyState title="No pages available" subtitle="This plugin has no pages." />
+        : html === null ? <div aria-label="Loading page"><SkeletonRows count={6} /></div>
+          : runtime ? <RuntimeFrame key={`${page}:${revision}`} title={runtime.pages.find(item => item.path === page)?.label ?? name} html={html} routes={runtime.routes} request={frameRequest} hostRequest={host.request} autoHeight /> : null}
     {host.dialog}
   </div>;
 }

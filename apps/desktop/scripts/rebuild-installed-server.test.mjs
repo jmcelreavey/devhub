@@ -6,7 +6,8 @@ import path from "node:path";
 import crypto from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { gzipSync } from "node:zlib";
-import { archiveFiles } from "./stage-dashboard.mjs";
+import { archiveFiles, missingArchiveUrls } from "./stage-dashboard.mjs";
+import { acquireDashboardBuildLock } from "./dashboard-build-lock.mjs";
 
 import {
   bundleRootFor,
@@ -76,14 +77,21 @@ test("rebuildInstalledServer copies staged services with the core server", async
   fs.writeFileSync(path.join(stagedServer, "ui", "dist", "index.html"), "ui");
   fs.writeFileSync(path.join(stagedServices, "supervisor.mjs"), "fresh-supervisor");
 
+  let ready = false;
   await rebuildInstalledServer({
     serverTarget,
     servicesTarget,
     stagedServer,
     stagedServices,
     async stage() {},
+    async beforeInstall() {
+      ready = true;
+      assert.equal(fs.readFileSync(path.join(serverTarget, "core-server.mjs"), "utf8"), "stale-server");
+      assert.equal(fs.readFileSync(path.join(stagedServer, "core-server.mjs"), "utf8"), "fresh-server");
+    },
   });
 
+  assert.equal(ready, true, "services may only stop once the replacement is ready");
   assert.equal(fs.readFileSync(path.join(serverTarget, "core-server.mjs"), "utf8"), "fresh-server");
   const retained = fs.readdirSync(path.dirname(serverTarget)).find((name) => name.startsWith(".server-rebuild-"));
   assert.ok(retained);
@@ -92,9 +100,29 @@ test("rebuildInstalledServer copies staged services with the core server", async
     fs.readFileSync(path.join(servicesTarget, "supervisor.mjs"), "utf8"),
     "fresh-supervisor",
   );
+  fs.writeFileSync(path.join(stagedServer, "core-server.mjs"), "cancelled build");
+  await assert.rejects(rebuildInstalledServer({
+    serverTarget, servicesTarget, stagedServer, stagedServices, async stage() {},
+    signal: AbortSignal.abort(),
+    beforeInstall() { assert.fail("cancelled builds must not stop the running app"); },
+  }), { name: "AbortError" });
+  assert.equal(fs.readFileSync(path.join(serverTarget, "core-server.mjs"), "utf8"), "fresh-server");
 
   fs.rmSync(root, { recursive: true, force: true });
   fs.rmSync(stagedRoot, { recursive: true, force: true });
+});
+
+test("dashboard builders share a lock and recover after a dead owner", (context) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "devhub-build-lock-"));
+  context.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const release = acquireDashboardBuildLock(root);
+  assert.throws(() => acquireDashboardBuildLock(root), /already running/);
+  release();
+  const lock = path.join(root, ".devhub/dashboard-build.lock");
+  fs.mkdirSync(lock);
+  fs.writeFileSync(path.join(lock, "dead-owner"), JSON.stringify({ pid: 2147483647 }));
+  const recovered = acquireDashboardBuildLock(root);
+  recovered();
 });
 
 test("replaceDirContents keeps a staging tree used directly by desktop:dev", () => {
@@ -251,12 +279,40 @@ test("npm archive provenance rejects altered and escaping entries", (context) =>
   assert.throws(() => archiveFiles(duplicate.integrity, cache), /Duplicate npm archive entry/);
 });
 
+test("missing installed package archives are selected for restoration", (context) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "devhub-archive-restore-"));
+  context.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const cache = path.join(root, "cache");
+  const integrity = (value) => {
+    const digest = crypto.createHash("sha512").update(value).digest();
+    const hex = digest.toString("hex");
+    return {
+      value: `sha512-${digest.toString("base64")}`,
+      file: path.join(cache, "_cacache/content-v2/sha512", hex.slice(0, 2), hex.slice(2, 4), hex.slice(4)),
+    };
+  };
+  const cached = integrity("cached"), missing = integrity("missing");
+  for (const name of ["cached", "missing"]) writeFixture(path.join(root, "node_modules", name, "package.json"), "{}");
+  writeFixture(cached.file, "cached");
+  const lock = { packages: {
+    "node_modules/cached": { integrity: cached.value, resolved: "https://registry.npmjs.org/cached/-/cached.tgz" },
+    "node_modules/missing": { integrity: missing.value, resolved: "https://registry.npmjs.org/missing/-/missing.tgz" },
+    "node_modules/not-installed": { integrity: integrity("absent").value, resolved: "https://registry.npmjs.org/not-installed/-/not-installed.tgz" },
+  } };
+  assert.deepEqual(missingArchiveUrls(lock, cache, root), ["https://registry.npmjs.org/missing/-/missing.tgz"]);
+  writeFixture(missing.file, "missing");
+  assert.deepEqual(missingArchiveUrls(lock, cache, root), []);
+});
+
 test("stageCoreDashboard stages from a real path when the temp root is a symlink", async (context) => {
   const base = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "rebuild-symlink-")));
   context.after(() => fs.rmSync(base, { recursive: true, force: true }));
   const source = path.join(base, "source"), realTemp = path.join(base, "real-tmp"), linkTemp = path.join(base, "link-tmp");
   fs.mkdirSync(path.join(source, "apps/desktop/scripts"), { recursive: true });
   fs.writeFileSync(path.join(source, "package.json"), "{}\n");
+  writeFixture(path.join(source, "apps/ui/edited.ts"), "original");
+  writeFixture(path.join(source, "apps/ui/deleted.ts"), "deleted");
+  writeFixture(path.join(source, "notes/private.json"), "private");
   fs.mkdirSync(realTemp);
   fs.symlinkSync(realTemp, linkTemp);
   const git = (...args) => execFileSync("git", args, { cwd: source, stdio: "ignore" });
@@ -267,4 +323,36 @@ test("stageCoreDashboard stages from a real path when the temp root is a symlink
     assert.ok(seen.startsWith(realTemp + path.sep), `checkout ${seen} should be under ${realTemp}`);
     assert.equal(fs.realpathSync(seen), seen);
   } finally { staged.dispose(); }
+  fs.writeFileSync(path.join(source, "package.json"), '{"name":"uncommitted"}\n');
+  writeFixture(path.join(source, "apps/ui/edited.ts"), "staged");
+  git("add", "apps/ui/edited.ts");
+  writeFixture(path.join(source, "apps/ui/edited.ts"), "working tree");
+  fs.unlinkSync(path.join(source, "apps/ui/deleted.ts"));
+  writeFixture(path.join(source, "apps/ui/new.ts"), "untracked source");
+  writeFixture(path.join(source, "apps/ui/credentials.json"), "secret");
+  const head = execFileSync("git", ["rev-parse", "HEAD"], { cwd: source, encoding: "utf8" });
+  const before = execFileSync("git", ["status", "--porcelain"], { cwd: source, encoding: "utf8" });
+  const dirtyStaged = await stageCoreDashboard({
+    sourceRoot: source, toolsRoot: path.resolve(import.meta.dirname, "../../.."), temporaryRoot: linkTemp,
+    stage: async ({ checkout }) => {
+      assert.equal(fs.readFileSync(path.join(checkout, "package.json"), "utf8"), '{"name":"uncommitted"}\n');
+      assert.equal(fs.readFileSync(path.join(checkout, "apps/ui/new.ts"), "utf8"), "untracked source");
+      assert.equal(fs.readFileSync(path.join(checkout, "apps/ui/edited.ts"), "utf8"), "working tree");
+      assert.equal(fs.existsSync(path.join(checkout, "apps/ui/deleted.ts")), false);
+      assert.equal(fs.existsSync(path.join(checkout, "apps/ui/credentials.json")), false);
+      assert.equal(fs.existsSync(path.join(checkout, "notes/private.json")), false);
+      assert.equal(execFileSync("git", ["status", "--porcelain"], { cwd: checkout, encoding: "utf8" }), "");
+      assert.equal(execFileSync("git", ["show", "HEAD:apps/ui/new.ts"], { cwd: checkout, encoding: "utf8" }), "untracked source");
+    },
+  });
+  dirtyStaged.dispose();
+  assert.equal(execFileSync("git", ["status", "--porcelain"], { cwd: source, encoding: "utf8" }), before);
+  assert.equal(execFileSync("git", ["rev-parse", "HEAD"], { cwd: source, encoding: "utf8" }), head);
+  assert.equal(execFileSync("git", ["show", ":apps/ui/edited.ts"], { cwd: source, encoding: "utf8" }), "staged");
+  const blob = execFileSync("git", ["rev-parse", "HEAD:package.json"], { cwd: source, encoding: "utf8" }).trim();
+  execFileSync("git", ["update-index", "--index-info"], { cwd: source, input: `0 ${"0".repeat(40)}\tpackage.json\n100644 ${blob} 1\tpackage.json\n100644 ${blob} 2\tpackage.json\n` });
+  await assert.rejects(stageCoreDashboard({
+    sourceRoot: source, toolsRoot: path.resolve(import.meta.dirname, "../../.."), temporaryRoot: linkTemp,
+    stage: async () => { assert.fail("unresolved conflicts must not be built"); },
+  }), /Resolve Git conflicts/);
 });

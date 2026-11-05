@@ -14,11 +14,13 @@ import { buildContentBuckets, isDevhubRepoRoot, matchContentBucket } from "../co
 import { runGitRepoAsync } from "../git/repo-local";
 import { parseWorktreeList } from "../../../../../packages/shared/ui-lib/repos/worktree-parsers";
 import { detectRepoUpstart, safeUpstartScriptPath } from "./upstart";
+import { pMap } from "../p-limit";
 
 export { isGithubCliAuthenticated };
 const SEARCH_RESULTS_TTL_MS = 30 * 1000;
 const ACCESSIBLE_REPOS_TTL_MS = 5 * 60 * 1000;
-const searchResultsCache = new Map<string, { repos: GithubRepoInfo[]; expiresAt: number }>();
+const searchResultsCache = new Map<string, { repos: GhApiRepo[]; expiresAt: number }>();
+const pendingGithubSearches = new Map<string, Promise<GhApiRepo[]>>();
 let cachedAccessibleRepos:
   | { repos: GhApiRepo[]; expiresAt: number }
   | null = null;
@@ -258,13 +260,21 @@ export function listRepoNames(): string[] {
     .map((entry) => entry.name);
 }
 
-export async function listRepos(): Promise<RepoInfo[]> {
+const repoScans = new Map<string, Promise<RepoInfo[]>>();
+
+export function listRepos(): Promise<RepoInfo[]> {
   const scanDir = getReposScanDir();
-  // Unbounded on purpose: measured against an 8-wide pool over ~56 repos, the
-  // full fan-out of `git status` finished in ~60% of the time.
-  const repos = await Promise.all(
-    listRepoNames().map((name) => readRepoInfo(name, path.join(scanDir, name))),
-  );
+  const pending = repoScans.get(scanDir);
+  if (pending) return pending;
+  const scan = scanRepos(scanDir).finally(() => { repoScans.delete(scanDir); });
+  repoScans.set(scanDir, scan);
+  return scan;
+}
+
+async function scanRepos(scanDir: string): Promise<RepoInfo[]> {
+  // Each repo starts several git processes. Bound the scan so large workspaces
+  // leave capacity for navigation and other requests instead of timing out together.
+  const repos = await pMap(listRepoNames(), 16, (name) => readRepoInfo(name, path.join(scanDir, name)));
 
   return repos.sort(compareReposByMtime);
 }
@@ -315,26 +325,40 @@ async function getAccessibleGithubRepos(): Promise<GhApiRepo[]> {
   return repos;
 }
 
+async function searchGithubRepos(query: string): Promise<GhApiRepo[]> {
+  const key = query.toLowerCase();
+  const cached = searchResultsCache.get(key);
+  if (cached && cached.expiresAt > Date.now()) return cached.repos;
+  const existing = pendingGithubSearches.get(key);
+  if (existing) return existing;
+
+  const pending = (async () => {
+    try {
+      const repos = await execGhJsonLines<GhApiRepo>([
+        "api", "--method", "GET", "search/repositories",
+        "-f", `q=${query} in:name,description fork:true`, "-F", "per_page=100",
+        "--jq", ".items[] | {name: .name, fullName: .full_name, owner: .owner.login, url: .html_url, description: .description, isPrivate: .private, defaultBranch: .default_branch}",
+      ], { timeoutMs: 10_000 });
+      if (searchResultsCache.size >= 100) searchResultsCache.delete(searchResultsCache.keys().next().value!);
+      searchResultsCache.set(key, { repos, expiresAt: Date.now() + SEARCH_RESULTS_TTL_MS });
+      return repos;
+    } finally {
+      pendingGithubSearches.delete(key);
+    }
+  })();
+  pendingGithubSearches.set(key, pending);
+  return pending;
+}
+
 export async function listGithubRepos(query?: string): Promise<GithubRepoInfo[]> {
   const normalizedQuery = query?.trim();
-  if (!normalizedQuery) {
-    return [];
-  }
+  if (!normalizedQuery) return [];
 
-  const now = Date.now();
-  const cached = searchResultsCache.get(normalizedQuery.toLowerCase());
-  if (cached && cached.expiresAt > now) {
-    return cached.repos;
-  }
-
-  const localRepoMappings = await getLocalGithubMappings();
-  const repos = await getAccessibleGithubRepos();
-  const lowered = normalizedQuery.toLowerCase();
-  const result = repos
-    .filter((repo) => {
-      const haystack = `${repo.fullName} ${repo.description ?? ""}`.toLowerCase();
-      return haystack.includes(lowered);
-    })
+  const [localRepoMappings, repos] = await Promise.all([
+    getLocalGithubMappings(),
+    searchGithubRepos(normalizedQuery),
+  ]);
+  return repos
     .map((repo) => {
       const localRepoName = localRepoMappings.get(repo.fullName.toLowerCase()) ?? null;
       return {
@@ -342,20 +366,13 @@ export async function listGithubRepos(query?: string): Promise<GithubRepoInfo[]>
         localRepoName,
       } satisfies GithubRepoInfo;
     })
-    .sort((a, b) => a.fullName.localeCompare(b.fullName));
-
-  searchResultsCache.set(normalizedQuery.toLowerCase(), {
-    repos: result,
-    expiresAt: now + SEARCH_RESULTS_TTL_MS,
-  });
-
-  return result;
+    .sort((a, b) => Number(Boolean(b.localRepoName)) - Number(Boolean(a.localRepoName)) || Number(b.isPrivate) - Number(a.isPrivate));
 }
 
 /**
  * Every accessible GitHub repo (owner/collaborator/org member), each tagged with
  * its local clone name when one exists. Used by Capability Radar to scan
- * un-cloned repos remotely. Reuses the same 5-min cache as the search path.
+ * un-cloned repos remotely.
  */
 export async function listAccessibleGithubRepos(): Promise<GithubRepoInfo[]> {
   const [localRepoMappings, repos] = await Promise.all([

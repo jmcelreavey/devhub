@@ -14,7 +14,7 @@ import {
   buildBranchMenuGroups,
   type BranchMenuTarget,
 } from "./branchMenuGroups";
-import { CHECKOUT_AUTOSTASH, fetchGitJson, postGitAction, repoApi, switchedToast, type RepoGitTabId } from "./shared";
+import { CHECKOUT_AUTOSTASH, fetchGitJson, gitFailureMessage, postGitAction, repoApi, switchedToast, type RepoGitTabId } from "./shared";
 
 function RailPrBadge({
   pr,
@@ -137,6 +137,7 @@ export function GitRail({
   onMutate,
   onConflict,
   onHookFailure,
+  onIndexLock,
   onOpenTab,
   pushing,
   onPush,
@@ -146,6 +147,7 @@ export function GitRail({
   onMutate: () => void;
   onConflict: (c: StashConflictPayload) => Promise<void>;
   onHookFailure: (f: GitHookFailurePayload) => void;
+  onIndexLock?: (message: string) => void;
   onOpenTab: (tab: RepoGitTabId) => void;
   pushing: boolean;
   onPush: () => void;
@@ -241,7 +243,7 @@ export function GitRail({
           await onConflict(result.conflict);
           return;
         }
-        throw new Error(result.kind === "error" ? result.message : result.kind);
+        throw new Error(gitFailureMessage(result));
       }
       toast.success(switchedToast(branch, Boolean(result.json.stashed)));
       onMutate();
@@ -273,6 +275,10 @@ export function GitRail({
         }
         if (result.kind === "hook") {
           onHookFailure(result.hook);
+          return;
+        }
+        if (result.kind === "index-lock") {
+          onIndexLock?.(result.message);
           return;
         }
         throw new Error(result.message);
@@ -355,7 +361,7 @@ export function GitRail({
           await onConflict(result.conflict);
           return;
         }
-        throw new Error(result.kind === "error" ? result.message : result.kind);
+        throw new Error(gitFailureMessage(result));
       }
       toast.success(switchedToast(suggested, Boolean(result.json.stashed)));
       onMutate();

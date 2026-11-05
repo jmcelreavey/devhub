@@ -308,14 +308,17 @@ body[data-motion="off"] .terminal-block-chip[data-pending]::after {
 }
 
 .terminal-wterm-wrap,
-.terminal-wterm {
+.terminal-wterm.wterm {
   height: 100%;
   min-height: 0;
 }
-.terminal-wterm {
+.terminal-wterm.wterm {
   --term-fg: var(--text);
   --term-bg: var(--bg-surface);
   --term-font-family: "JetBrainsMono Nerd Font", "MesloLGM Nerd Font", ui-monospace, Menlo, monospace;
+  padding: 0;
+  border-radius: 0;
+  box-shadow: none;
 }
 .terminal-wterm-loading {
   height: 70%;

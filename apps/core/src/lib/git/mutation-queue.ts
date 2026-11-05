@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { tryAcquireProcessDirectoryLock } from "../process-lock.ts";
 
-const PROCESS_LOCK_WAIT_MS = 20 * 60_000;
+const PROCESS_LOCK_WAIT_MS = 2 * 60_000;
 const PROCESS_LOCK_POLL_MS = 100;
 
 interface Lease {
@@ -100,11 +100,20 @@ async function acquireProcessLock(commonDir: string, signal?: AbortSignal): Prom
   }
   const file = path.join(commonDir, "devhub-mutation.lock");
   const deadline = Date.now() + PROCESS_LOCK_WAIT_MS;
+  let announced = false;
   for (;;) {
     if (signal?.aborted) throw aborted();
     const release = tryAcquireProcessDirectoryLock(file);
     if (release) return release;
-    if (Date.now() >= deadline) throw new Error(`Git operations are busy for ${commonDir}. Try again.`);
+    if (!announced) {
+      announced = true;
+      // A silent multi-minute wait is indistinguishable from a dead dashboard;
+      // leave a breadcrumb so this shows up in logs before someone files a bug.
+      console.warn(`[git] waiting for mutation lock: ${commonDir}`);
+    }
+    if (Date.now() >= deadline) {
+      throw new Error(`Git operations are busy for ${commonDir}. Another git operation did not finish — check /api/status/exec.`);
+    }
     await cancellable(new Promise((resolve) => setTimeout(resolve, PROCESS_LOCK_POLL_MS)), signal);
   }
 }

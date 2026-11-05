@@ -38,7 +38,7 @@ export function CollapsibleSidebar() {
   const setup = useSetupStatus();
 
   const mounted = useClientMounted();
-  const { counts, unseen, calendarRemaining, notificationsUnread } = useNavBadges();
+  const { counts, unseen, calendarRemaining, gitAttention } = useNavBadges();
   const navCounts = mounted ? counts : undefined;
   const navCalendarRemaining = mounted ? calendarRemaining : 0;
 
@@ -104,7 +104,7 @@ export function CollapsibleSidebar() {
             counts={navCounts}
             unseen={unseen}
             calendarRemaining={navCalendarRemaining}
-            notificationsUnread={mounted ? notificationsUnread : 0}
+            gitAttention={mounted ? gitAttention : 0}
           />
         ))}
         {!collapsed && pluginNav.isLoading && <div className="px-4"><SkeletonRows count={1} height={24} /></div>}
@@ -153,7 +153,7 @@ function NavSection({
   counts,
   unseen,
   calendarRemaining,
-  notificationsUnread,
+  gitAttention,
 }: {
   label: string;
   items: NavItem[];
@@ -162,7 +162,7 @@ function NavSection({
   counts: NavBadges["counts"];
   unseen: NavBadges["unseen"];
   calendarRemaining: number;
-  notificationsUnread: number;
+  gitAttention: number;
 }) {
   if (items.length === 0) return null;
   return (
@@ -173,7 +173,7 @@ function NavSection({
         </div>
       )}
       {items.map((item) => {
-        const count = countForItem(item.icon, counts, { calendarRemaining, notificationsUnread });
+        const count = countForItem(item.icon, counts, { calendarRemaining, gitAttention });
         const hasUnseen = unseenForItem(item.icon, unseen);
         const link = (
           <NavLink

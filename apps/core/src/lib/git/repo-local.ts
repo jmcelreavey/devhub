@@ -23,10 +23,28 @@ interface GitRepoRunOptions {
   maxBuffer?: number;
   /** Extra variables for this one command, e.g. DEVHUB_PREPUSH for a content-sync push. */
   env?: Record<string, string>;
+  /** Observe stderr as it arrives (git progress). Local ops only; forces --progress. */
+  onStderr?: (chunk: Buffer) => void;
+  /** Kill the child (and its process group) when the client goes away. */
+  signal?: AbortSignal;
 }
 
+/**
+ * GIT_TERMINAL_PROMPT covers git's own credential prompts; ssh ignores it and
+ * reads /dev/tty, so an unknown host key would stall a fetch/push until the
+ * network ceiling instead of failing fast. BatchMode refuses to ask, and a
+ * 10s connect timeout turns "no route" into an error.
+ */
+const DEFAULT_GIT_SSH_COMMAND = "ssh -o BatchMode=yes -o ConnectTimeout=10";
+
 export function gitEnv(extra: Record<string, string> = {}): NodeJS.ProcessEnv {
-  return { ...terminalShellEnv(augmentedPathEnv({ GIT_TERMINAL_PROMPT: "0" })), ...extra } as NodeJS.ProcessEnv;
+  return {
+    ...terminalShellEnv(augmentedPathEnv({
+      GIT_TERMINAL_PROMPT: "0",
+      GIT_SSH_COMMAND: process.env.GIT_SSH_COMMAND ?? DEFAULT_GIT_SSH_COMMAND,
+    })),
+    ...extra,
+  } as NodeJS.ProcessEnv;
 }
 
 /** Git commands that talk to remotes and need GitHub CLI credential helper in the dashboard server. */
@@ -91,13 +109,19 @@ export async function runGitRepoAsync(
     opts?.timeout ??
     (isGitNetworkCommand(args) ? GIT_NETWORK_TIMEOUT_MS : GIT_LOCAL_TIMEOUT_MS);
   const maxBuffer = opts?.maxBuffer ?? GIT_MAX_BUFFER_BYTES;
+  // Non-TTY git prints no progress without --progress, which is what the
+  // streamed UI needs; inject it only for streamed network calls.
+  const streamed = opts?.onStderr && isGitNetworkCommand(args);
+  const effectiveArgs = streamed ? [args[0]!, "--progress", ...args.slice(1)] : args;
   try {
-    const { stdout, stderr } = await execExternal("git", gitArgsForRepo(repoRoot, args, useGh), {
+    const { stdout, stderr } = await execExternal("git", gitArgsForRepo(repoRoot, effectiveArgs, useGh), {
       env: gitEnv(),
       gitEnvOverrides: opts?.env,
       maxBuffer,
       timeoutMs: timeout,
       label: `git:${args[0] ?? "?"}`,
+      onStderr: opts?.onStderr,
+      signal: opts?.signal,
     });
     return { stdout, stderr, status: 0 };
   } catch (err: unknown) {

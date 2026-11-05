@@ -6,10 +6,15 @@ import { ExternalLink, RotateCw, X } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "@/lib/navigation";
 import { SkeletonRows } from "@/components/ui/SkeletonRows";
 import { useConfirm } from "@/components/shell/ConfirmDialog";
+import { SidePanel, SidePanelControls } from "@/components/shell/SidePanel";
+import { HoverTip } from "@/components/ui/HoverTip";
+import { useIsMobile } from "@/lib/hooks/use-is-mobile";
 import { AGENT_CONVERSATION_EVENT } from "@/lib/agent-handoff";
 import { isDesktop, openInBrowser } from "@/lib/desktop/bridge";
 import { requestErrorMessage } from "@/lib/request-error";
 import { setPaseoBackground, usePaseoChrome } from "@/lib/paseo/appearance";
+import { resolvePaseoLink } from "@/lib/paseo/link";
+import { useWorkspaceTabs } from "@/components/shell/WorkspaceTabs";
 
 /**
  * Paseo syncs its stack with history.go() inside the Send gesture. That call
@@ -22,12 +27,18 @@ const PASEO_FRAME_SANDBOX = "allow-scripts allow-same-origin allow-forms allow-p
 /** This frame has no activity subscriptions: only local navigation can select a chat. */
 export function PersistentAgents({ sideRun }: { sideRun?: { id: string; conversationId?: string } } = {}) {
   const router = useRouter();
+  const { openHref } = useWorkspaceTabs();
   const chrome = usePaseoChrome();
   const pathname = usePathname();
   const params = useSearchParams();
-  const active = Boolean(sideRun) || (pathname === "/agents" && params.get("view") !== "connection" && params.get("view") !== "usage");
-  const conversation = sideRun?.conversationId ?? (sideRun ? null : params.get("conversation"));
-  const runLink = sideRun?.id ?? params.get("run");
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const isMobile = useIsMobile();
+  const desktopKeyboard = (sidebarOpen || Boolean(sideRun)) && !isMobile;
+  const desktopKeyboardRef = useRef(desktopKeyboard);
+  const fullPage = pathname === "/agents" && params.get("view") !== "connection" && params.get("view") !== "usage";
+  const active = Boolean(sideRun) || sidebarOpen || fullPage;
+  const conversation = sideRun?.conversationId ?? (!sideRun && fullPage ? params.get("conversation") : null);
+  const runLink = sideRun?.id ?? (fullPage ? params.get("run") : null);
   const [origin, setOrigin] = useState<string>();
   const [error, setError] = useState<string>();
   const [setupHelp, setSetupHelp] = useState<{ detail: string | null; setupHref: string | null }>({ detail: null, setupHref: null });
@@ -46,6 +57,27 @@ export function PersistentAgents({ sideRun }: { sideRun?: { id: string; conversa
   const pendingSince = useRef(0);
   const pendingQuery = useRef("");
   const confirm = useConfirm();
+  useEffect(() => {
+    if (sideRun) return;
+    const toggle = () => setSidebarOpen(value => !value);
+    const close = () => setSidebarOpen(false);
+    const events = ["devhub:notes-toggle", "devhub:notes-open-today", "devhub:notes-open-path", "devhub:tasks-toggle", "devhub:diagrams-toggle"];
+    window.addEventListener("devhub:agents-toggle", toggle);
+    for (const event of events) window.addEventListener(event, close);
+    return () => {
+      window.removeEventListener("devhub:agents-toggle", toggle);
+      for (const event of events) window.removeEventListener(event, close);
+    };
+  }, [sideRun]);
+  useEffect(() => {
+    if (sideRun) return;
+    window.dispatchEvent(new CustomEvent("devhub:agents-sidebar", { detail: sidebarOpen }));
+  }, [sidebarOpen, sideRun]);
+  useEffect(() => { setSidebarOpen(false); }, [pathname]);
+  useEffect(() => {
+    desktopKeyboardRef.current = desktopKeyboard;
+    if (origin) frame.current?.contentWindow?.postMessage({ type: "devhub:paseo:keyboard", desktopKeyboard }, origin);
+  }, [desktopKeyboard, origin]);
   useEffect(() => { if (!conversation && !runLink) dismissedLink.current = ""; }, [conversation, runLink]);
   useEffect(() => {
     if (!origin) return;
@@ -70,9 +102,9 @@ export function PersistentAgents({ sideRun }: { sideRun?: { id: string; conversa
       if (event.data?.type === "devhub:paseo:confirm") { void answerConfirm(source as Window, event.data); return; }
       // The desktop webview blocks window.open() inside the frame, so Paseo sends links here instead.
       if (event.data?.type === "devhub:paseo:open-link") {
-        if (typeof event.data.url === "string" && event.data.url.length <= 4096) {
-          try { const target = new URL(event.data.url); if (["http:", "https:"].includes(target.protocol)) void openInBrowser(target.href); } catch { /* Ignore malformed links. */ }
-        }
+        const link = resolvePaseoLink(event.data.url, window.location.origin);
+        if (link?.kind === "internal") openHref(link.href, { newTab: true });
+        else if (link) void openInBrowser(link.href);
         return;
       }
       if (event.data?.type !== "devhub:paseo:ready") return;
@@ -80,19 +112,19 @@ export function PersistentAgents({ sideRun }: { sideRun?: { id: string; conversa
       inFlight.add(source);
       try {
         const response = await fetch("/api/agent/connection/bootstrap", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}", cache: "no-store", signal: AbortSignal.timeout(15_000) });
-        if (response.status === 204) { (source as Window).postMessage({ type: "devhub:paseo:skip", bridgeConfirm }, origin); return; }
+        if (response.status === 204) { (source as Window).postMessage({ type: "devhub:paseo:skip", bridgeConfirm, desktopKeyboard: desktopKeyboardRef.current }, origin); return; }
         const data = await response.json() as { serverId?: string; password?: string; error?: string };
         if (!response.ok || !data.serverId || !data.password) throw new Error(data.error || "Could not prepare the Paseo connection.");
-        (source as Window).postMessage({ type: "devhub:paseo:credentials", serverId: data.serverId, password: data.password, bridgeConfirm }, origin);
+        (source as Window).postMessage({ type: "devhub:paseo:credentials", serverId: data.serverId, password: data.password, bridgeConfirm, desktopKeyboard: desktopKeyboardRef.current }, origin);
       } catch (err) {
-        (source as Window).postMessage({ type: "devhub:paseo:skip", bridgeConfirm }, origin);
+        (source as Window).postMessage({ type: "devhub:paseo:skip", bridgeConfirm, desktopKeyboard: desktopKeyboardRef.current }, origin);
         setChatRetryable(false);
         setChatError(requestErrorMessage(err, "Could not prepare the Paseo connection."));
       } finally { inFlight.delete(source); }
     };
     window.addEventListener("message", onFrameMessage);
     return () => window.removeEventListener("message", onFrameMessage);
-  }, [origin, confirm, sideRun]);
+  }, [origin, confirm, sideRun, openHref]);
   useEffect(() => {
     const open = (event: Event) => {
       if (sideRun) return;
@@ -197,9 +229,14 @@ export function PersistentAgents({ sideRun }: { sideRun?: { id: string; conversa
 
   if (!active && !origin) return null;
   return (
-    <section aria-label="Agents chats" hidden={!active} style={{ position: "absolute", inset: sideRun ? "0" : "40px 0 0", display: active ? "flex" : "none", flexDirection: "column", background: "var(--bg)", ...chrome }}>
-      {origin && <div className={`flex items-center justify-end px-3 text-xs ${sideRun ? "border-b border-border bg-bg-surface" : "absolute right-0 -top-10 h-10 z-10"}`}>
-        <button className="btn btn-ghost gap-1" onClick={() => void openInBrowser(resolvedUrl ?? origin)}><ExternalLink size={12} />Open in Paseo</button>
+    <SidePanel open={active} onClose={() => setSidebarOpen(false)} storageKey="chat-panel-width" defaultWidth={480} ariaLabel="Agents chats" mode={sidebarOpen ? "panel" : "inline"} keepMounted inlineStyle={{ position: "absolute", inset: sideRun ? "0" : "40px 0 0", background: "var(--bg)" }} style={chrome}>
+      {(origin || sidebarOpen) && <div data-panel-drag-handle className={`flex shrink-0 items-center justify-end gap-2 px-3 text-xs ${sideRun || sidebarOpen ? "border-b border-border bg-bg-surface h-12" : "absolute right-0 -top-10 h-10 z-10"}`}>
+        {sidebarOpen && <span className="mr-auto font-medium">Chat</span>}
+        {origin && <HoverTip label="Open in Paseo"><button type="button" className="hub-icon-btn relative" aria-label="Open in Paseo" onClick={() => void openInBrowser(resolvedUrl ?? origin)}><span aria-hidden className="block h-5 w-5 bg-current" style={{ mask: "url(/icons/paseo.svg) center / contain no-repeat" }} /><ExternalLink size={9} aria-hidden className="absolute -right-0.5 -top-0.5" /></button></HoverTip>}
+        {sidebarOpen && <>
+          <button className="hub-icon-btn" aria-label="Open chat in full page" title="Open in full page" onClick={() => { setSidebarOpen(false); router.push("/agents"); }}><ExternalLink size={14} /></button>
+          <SidePanelControls closeLabel="Close chat panel" />
+        </>}
       </div>}
       {startingLabel && active ? <p className="px-4 py-2 text-xs text-text-muted" role="status">{startingLabel}</p> : null}
       {error && <div className="tone-panel tone-panel--warning m-4" role="alert">
@@ -227,6 +264,6 @@ export function PersistentAgents({ sideRun }: { sideRun?: { id: string; conversa
       </div>}
       {!origin && !error && <div className="p-6" aria-label="Loading Agents"><SkeletonRows count={5} variant="list" height={48} /></div>}
       {origin && <iframe ref={frame} src={`${origin}/`} title="Agents — Paseo" className="w-full flex-1 border-0 min-h-0" sandbox={PASEO_FRAME_SANDBOX} allow="clipboard-read; clipboard-write" />}
-    </section>
+    </SidePanel>
   );
 }

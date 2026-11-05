@@ -61,8 +61,8 @@ export async function execGh(
   return root ? withRepoGitMutation(root, run, opts?.signal) : run();
 }
 
-export async function execGhJsonLines<T>(args: string[]): Promise<T[]> {
-  const { stdout } = await execGh(args);
+export async function execGhJsonLines<T>(args: string[], opts?: Parameters<typeof execGh>[1]): Promise<T[]> {
+  const { stdout } = await execGh(args, opts);
   return stdout
     .split("\n")
     .map((line) => line.trim())
@@ -90,7 +90,7 @@ export async function isGithubCliAuthenticated(): Promise<boolean> {
 
 const GH_TIMED_OUT_INFO: GithubCliErrorInfo = {
   kind: "other",
-  message: "GitHub timed out — showing the last cached PR list if available.",
+  message: "GitHub timed out. Try again.",
   httpStatus: 504,
 };
 

@@ -3,7 +3,10 @@ import { loadClaudeUsage } from "./claude";
 import { loadCodexUsage } from "./codex";
 import { loadCopilotUsage } from "./copilot";
 import { loadCursorUsage } from "./cursor";
+import { loadExperientialUsage } from "./experiential";
+import { loadOpenCodeGoUsage } from "./opencode-go";
 import { loadOpenRouterUsage } from "./openrouter";
+import { loadVercelUsage } from "./vercel";
 import { loadZaiUsage } from "./zai";
 import { UsageLoadError } from "./load-error";
 import type { ProviderUsage, UsageProviderId } from "./types";
@@ -13,9 +16,12 @@ const CACHE_MS = 5 * 60_000;
 const sources: { id: UsageProviderId; name: string; load: TtlCached<ProviderUsage | null> }[] = [
   { id: "claude", name: "Claude", load: ttlCache(loadClaudeUsage, CACHE_MS) },
   { id: "codex", name: "Codex", load: ttlCache(() => loadCodexUsage(), CACHE_MS) },
+  { id: "opencode-go", name: "OpenCode Go", load: ttlCache(loadOpenCodeGoUsage, CACHE_MS) },
+  { id: "experiential", name: "Experiential Labs", load: ttlCache(loadExperientialUsage, CACHE_MS) },
   { id: "cursor", name: "Cursor", load: ttlCache(loadCursorUsage, CACHE_MS) },
   { id: "copilot", name: "GitHub Copilot", load: ttlCache(loadCopilotUsage, CACHE_MS) },
   { id: "openrouter", name: "OpenRouter", load: ttlCache(loadOpenRouterUsage, CACHE_MS) },
+  { id: "vercel", name: "Vercel AI Gateway", load: ttlCache(loadVercelUsage, CACHE_MS) },
   { id: "zai", name: "z.ai", load: ttlCache(loadZaiUsage, CACHE_MS) },
 ];
 

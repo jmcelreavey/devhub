@@ -5,7 +5,7 @@ import { useCallback, useState, type MouseEvent, type ReactNode } from "react";
 import Link from "@/lib/navigation";
 import { useRouter } from "@/lib/navigation";
 import { mutate } from "swr";
-import { Ban, Bot, CheckCircle2, ClipboardCopy, FilePen, Flag, Hand, LayoutGrid, Rocket, RotateCcw, SkipForward, Undo2, Wrench, X, Zap } from "lucide-react";
+import { Ban, Bot, CheckCircle2, ClipboardCopy, FilePen, Flag, Hand, LayoutGrid, MessageSquare, Rocket, RotateCcw, SkipForward, Undo2, Wrench, X, Zap } from "lucide-react";
 import type { ContextMenuItem } from "@/components/shell/ContextMenu";
 import { HoverTip } from "@/components/ui/HoverTip";
 import { TaskUpstartButton, useTaskUpstart } from "@/components/tasks/TaskUpstartButton";
@@ -35,6 +35,7 @@ import { canSwitchMode, isManual, isOrchestrating, orchestrationChip, storyboard
 import { ORCHESTRATIONS_KEY, useTaskOrchestration } from "@/lib/storyboard/use-orchestrations";
 import { startAuto } from "@/app/storyboard/board-actions";
 import { runTaskAction, useTaskActionPending } from "@/lib/storyboard/task-action";
+import { chatAboutTask } from "@/lib/agent/chat-about";
 
 const refreshTasks = () =>
   mutate((key) => typeof key === "string" && key.startsWith("/api/tasks"), undefined, { revalidate: true });
@@ -182,7 +183,10 @@ export function useTaskAgentActions({
     onSelect,
   });
 
-  const menuItems: ContextMenuItem[] = [];
+  // Chat works on done and read-only tasks too: it only reads and recaps.
+  const menuItems: ContextMenuItem[] = [
+    item("chat-agent", "Chat about task…", <MessageSquare size={12} aria-hidden />, () => chatAboutTask(task, { cwd, repoName: taskRepo, notePath: noteExists ? notePath : undefined, prUrl: agentChip?.prUrl, branch: latestRun?.branch })),
+  ];
   if (enabled && taskRepo) {
     menuItems.push({
       id: "upstart", label: upstart.busy ? "Preparing checkout…" : "Upstart",

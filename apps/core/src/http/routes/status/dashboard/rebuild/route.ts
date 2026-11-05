@@ -24,12 +24,17 @@ function rebuildCapability(): RebuildCapability {
     };
   }
 
-  if (process.env.DEVHUB_SHELL_SUPERVISED === "1" || process.env.DEVHUB_SUPERVISED !== "1") {
+  // dev.mjs supervises core whether or not a desktop shell launched it (systemd
+  // sets INVOCATION_ID, which dev.mjs reports as shell-supervised). The rebuild
+  // builds in-process and lets that supervisor restart core, so shell
+  // supervision is not a reason to refuse. Only an unsupervised core cannot
+  // come back after the build.
+  if (process.env.DEVHUB_SUPERVISED !== "1") {
     return {
       available: false,
       mode: process.env.NODE_ENV === "development" ? "dev" : "production",
       checkout: getCheckoutRoot(),
-      reason: "Use the desktop app's rebuild menu or restart the checkout server from its terminal.",
+      reason: "This core process was not started by the DevHub launcher, so it cannot restart after a build. Start it with `npm run dev` or `npm start`.",
     };
   }
 

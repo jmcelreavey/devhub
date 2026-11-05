@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, expect, it } from "vitest";
 import type { Notification } from "../../../../../packages/shared/notifications/types";
-import { applyNotificationState, filterOwnedNotifications, updateNotificationState } from "./state";
+import { applyNotificationState, filterBySourcePrefs, filterOwnedNotifications, readNotificationSourcePrefs, updateNotificationState, writeNotificationSourcePrefs } from "./state";
 import { pluginNotifications } from "./sources";
 
 const roots: string[] = [];
@@ -24,6 +24,17 @@ it("isolates profiles and resurfaces changed versions; prunes old state and caps
   const many = Array.from({ length: 510 }, (_, i) => item(String(i)));
   await updateNotificationState("work", many, many.map(row => row.id), "read", file, now);
   expect(Object.keys(JSON.parse(fs.readFileSync(file, "utf8")).profiles.work)).toHaveLength(500);
+});
+it("source prefs default on, filter predictable sources, preserve the toggle mapping and round-trip", async () => {
+  expect(readNotificationSourcePrefs("/nonexistent/prefs.json")).toEqual({ github: true, ci: true, agent: true, plugin: true, datadog: true });
+  const items = [item("github"), { ...item("ci"), source: "ci" as const }, { ...item("agent"), source: "agent" as const }, { ...item("plugin"), source: "plugin" as const }, { ...item("trust"), source: "plugin-trust" as const }, { ...item("dd"), source: "datadog" as const }];
+  expect(filterBySourcePrefs(items, { github: true, ci: true, agent: true, plugin: false, datadog: true }).map(row => row.id)).toEqual(["github", "ci", "agent", "dd"]);
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "notification-prefs-")); roots.push(root);
+  const file = path.join(root, "ui-prefs.json");
+  await writeNotificationSourcePrefs({ agent: false }, file);
+  await writeNotificationSourcePrefs({}, file);
+  expect(readNotificationSourcePrefs(file)).toEqual({ github: true, ci: true, agent: false, plugin: true, datadog: true });
+  expect(JSON.parse(fs.readFileSync(file, "utf8"))).toMatchObject({ notificationSources: { agent: false } });
 });
 it("keeps everything when ownership is unknown and preserves items without a repo", () => {
   const items = [{ ...item(), repo: "mine/repo" }, { ...item("other"), repo: "other/repo" }, item("agent")];

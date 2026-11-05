@@ -39,14 +39,13 @@ function PrReviewCard({ pr, note }: ReviewedPr) {
   );
 }
 
-/** Reviews others asked the user for that have been through the review skill and have a note. Read-only: nothing here moves a task. */
 export function PrReviewsColumn({ items, collapsed, onToggle }: { items: ReviewedPr[]; collapsed: boolean; onToggle: () => void }) {
   return (
-    <section className={`${styles.column} ${styles.reviewsColumn}`} data-collapsed={collapsed || undefined} data-empty={items.length === 0 || undefined} aria-label="PR reviews">
+    <section className={`${styles.column} ${styles.reviewsColumn}`} data-collapsed={collapsed || undefined} data-empty={items.length === 0 || undefined} aria-label="Saved review notes">
       <h2 className={styles.columnHead}>
         <button type="button" className={styles.columnToggle} aria-expanded={!collapsed} aria-controls="column-pr-reviews" onClick={onToggle}>
           <ChevronRight size={14} aria-hidden className={styles.chevron} />
-          <span className={styles.columnLabel}>PR reviews</span>
+          <span className={styles.columnLabel}>Saved review notes</span>
           <span className={styles.columnCount}>{items.length}</span>
         </button>
       </h2>

@@ -97,7 +97,8 @@ async function tick(): Promise<void> {
       );
     }
   } catch (err) {
-    console.error("[auto-pr-review] tick failed:", err);
+    // Subprocess errors also carry the entire PR response in stdout.
+    console.error("[auto-pr-review] tick failed:", err instanceof Error ? err.message : String(err));
   } finally {
     inFlight = false;
   }

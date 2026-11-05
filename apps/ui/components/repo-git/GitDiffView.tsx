@@ -20,6 +20,9 @@ export interface DiffHunkAction {
   lineIndexes?: number[];
 }
 
+/** Diffs longer than this render a chunk at a time — full-DOM diffs freeze the tab. */
+const DIFF_RENDER_CHUNK = 1200;
+
 interface GitDiffViewProps {
   lines: DiffLine[];
   emptyMessage?: string;
@@ -174,6 +177,9 @@ export function GitDiffView({
   const [prevLines, setPrevLines] = useState(lines);
   /** Rendered line indexes the user has ticked for line-level staging. */
   const [selectedLines, setSelectedLines] = useState<Set<number>>(() => new Set());
+  // Long diffs render in chunks: thousands of highlighted rows lock the tab,
+  // and nobody reads a 40k-line diff in one scroll anyway.
+  const [renderLimit, setRenderLimit] = useState(DIFF_RENDER_CHUNK);
   const lineCoords = useMemo(() => buildLineCoords(lines), [lines]);
 
   // Dismiss a stale AI selection when the diff content changes.
@@ -182,6 +188,7 @@ export function GitDiffView({
     setAiPopup(null);
     // The indexes refer to the diff that just changed underneath them.
     setSelectedLines(new Set());
+    setRenderLimit(DIFF_RENDER_CHUNK);
   }
 
   const hunkSpans = useMemo(() => buildHunkSpans(lines), [lines]);
@@ -191,6 +198,9 @@ export function GitDiffView({
     [view, lines],
   );
   const selectable = Boolean(hunkMode && onHunkAction);
+  const wideVisible = lines.slice(0, renderLimit);
+  const splitVisible = splitRows ? splitRows.slice(0, renderLimit) : null;
+  const hiddenCount = splitRows ? Math.max(0, splitRows.length - renderLimit) : Math.max(0, lines.length - renderLimit);
 
   // --- Review comments (line notes shipped to the agent in bulk) ---
   const allComments = useReviewComments();
@@ -752,8 +762,8 @@ export function GitDiffView({
         onMouseUp={onMouseUp}
         onContextMenu={onContextMenu}
       >
-        {splitRows
-          ? splitRows.flatMap((row) => {
+        {splitVisible
+          ? splitVisible.flatMap((row) => {
               const cells =
                 row.kind === "wide"
                   ? [renderLineCell(row.wide, "wide")]
@@ -762,7 +772,19 @@ export function GitDiffView({
               const extras = anchors.flatMap((index) => (index === undefined ? [] : commentRowsFor(index)));
               return [...cells, ...extras];
             })
-          : lines.flatMap((line, i) => [renderLineCell({ index: i, line }, "wide"), ...commentRowsFor(i)])}
+          : wideVisible.flatMap((line, i) => [renderLineCell({ index: i, line }, "wide"), ...commentRowsFor(i)])}
+        {hiddenCount > 0 ? (
+          <div className="repo-git-diff-more">
+            <span>{hiddenCount.toLocaleString()} more line{hiddenCount === 1 ? "" : "s"} not rendered</span>
+            <button
+              type="button"
+              className="btn btn-ghost"
+              onClick={() => setRenderLimit((limit) => limit + DIFF_RENDER_CHUNK)}
+            >
+              Show {Math.min(DIFF_RENDER_CHUNK, hiddenCount).toLocaleString()} more
+            </button>
+          </div>
+        ) : null}
       </pre>
       {aiPopup && (onSendSelectionToAi || selectable) ? (
         <div

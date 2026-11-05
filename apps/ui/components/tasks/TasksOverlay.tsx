@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { X, RefreshCw, CheckCircle2, Ban } from "lucide-react";
-import { SidePanel } from "@/components/shell/SidePanel";
+import { RefreshCw, CheckCircle2, Ban } from "lucide-react";
+import { SidePanel, SidePanelControls } from "@/components/shell/SidePanel";
 import { HoverTip } from "@/components/ui/HoverTip";
 import { SearchInput } from "@/components/ui/SearchInput";
 import {
@@ -114,6 +114,7 @@ export function TasksOverlay({ open, onClose }: TasksOverlayProps) {
         ariaLabel="Tasks"
     >
       <div
+        data-panel-drag-handle
         className="flex items-center gap-2 px-4 py-3 border-b shrink-0"
         style={{ borderColor: "var(--border)" }}
       >
@@ -144,9 +145,7 @@ export function TasksOverlay({ open, onClose }: TasksOverlayProps) {
             />
           </button>
         </HoverTip>
-        <button type="button" onClick={handleClose} aria-label="Close tasks panel">
-          <X size={16} className="text-text-muted" aria-hidden />
-        </button>
+        <SidePanelControls closeLabel="Close tasks panel" />
       </div>
 
       <div

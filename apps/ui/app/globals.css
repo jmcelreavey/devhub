@@ -1,6 +1,7 @@
 @import "tailwindcss";
 @import "./graphite.css";
 @import "./theme-effects.css";
+@import "./primitives.css";
 
 .notification-alert-bar {
   position: relative;
@@ -336,12 +337,12 @@
 }
 :root[data-theme-preset="graphite"] :is(.card, .hub-card) {
   border-color: var(--border-muted);
-  background-image: linear-gradient(var(--graphite-sheen), transparent 72px);
-  box-shadow: var(--graphite-card-shadow);
+  background-image: none;
+  box-shadow: none;
 }
 :root:not([data-runtime-theme]):is([data-theme-preset="forest"], [data-theme-preset="midnight"], [data-theme-preset="tokyo"], [data-theme-preset="catppuccin"]) :is(.card, .hub-card) {
-  background-image: linear-gradient(color-mix(in oklab, var(--accent) 4%, transparent), transparent 72px);
-  box-shadow: var(--shadow-raised);
+  background-image: none;
+  box-shadow: none;
 }
 :root:not([data-runtime-theme]):is([data-theme-preset="graphite"], [data-theme-preset="forest"], [data-theme-preset="midnight"], [data-theme-preset="tokyo"], [data-theme-preset="catppuccin"]) .hub-topbar {
   background-image: linear-gradient(100deg, color-mix(in oklab, var(--accent) 4%, transparent), transparent 65%);
@@ -778,173 +779,6 @@ h3,
   background: var(--accent-dim);
 }
 
-/* ─── Shared card component ─── */
-.card {
-  background: var(--bg-surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  overflow: hidden;
-}
-
-/* Static cards don't shift on hover — hover chrome is reserved for
-   interactive surfaces (rows, tiles, buttons). A global card:hover read as
-   "clickable" everywhere, which was a lie for most of them. */
-
-.card-header {
-  padding: 10px 16px;
-  border-bottom: 1px solid var(--border-muted);
-  background: var(--bg-elevated);
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  text-transform: none;
-  color: var(--text-muted);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-/* Hover-reveal actions: always visible on touch / coarse pointers */
-.reveal-on-hover {
-  opacity: 1;
-  transition: opacity var(--dur-quick) var(--ease-swift);
-}
-@media (hover: hover) and (pointer: fine) {
-  .reveal-on-hover {
-    opacity: 0;
-  }
-  .group:hover .reveal-on-hover,
-  .group:focus-within .reveal-on-hover,
-  .group\/item:hover .reveal-on-hover,
-  .group\/item:focus-within .reveal-on-hover,
-  .reveal-on-hover:has(:focus-visible),
-  .reveal-on-hover:focus-visible {
-    opacity: 1;
-  }
-}
-
-.card-body {
-  padding: 16px;
-}
-
-/* ─── Badge ─── */
-.badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 2px 8px;
-  border-radius: var(--radius-sm);
-  font-size: 11px;
-  font-weight: 500;
-  line-height: 1.5;
-}
-.badge-success {
-  background: var(--success-dim);
-  color: var(--success);
-}
-.badge-warning {
-  background: var(--warning-dim);
-  color: var(--warning);
-}
-.badge-danger {
-  background: var(--danger-dim);
-  color: var(--danger);
-}
-.badge-muted {
-  background: var(--bg-overlay);
-  color: var(--text-muted);
-}
-.badge-accent {
-  background: var(--accent-dim);
-  color: var(--accent-text, var(--accent));
-}
-
-/* ─── Button ─── */
-.btn {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: 5px var(--space-3);
-  border-radius: var(--radius-sm);
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  transition:
-    background var(--dur-quick) var(--ease-swift),
-    color var(--dur-quick) var(--ease-swift),
-    border-color var(--dur-quick) var(--ease-swift),
-    opacity var(--dur-quick) var(--ease-swift);
-  border: 1px solid transparent;
-  line-height: 1.4;
-}
-.btn-primary {
-  background: var(--accent);
-  color: var(--accent-fg);
-  border-color: var(--accent);
-}
-.btn-primary:hover {
-  background: var(--accent-hover);
-}
-.btn-ghost {
-  background: transparent;
-  color: var(--text-muted);
-  border-color: var(--border);
-}
-.btn-ghost:hover {
-  background: var(--bg-elevated);
-  color: var(--text);
-}
-.btn-danger-ghost {
-  background: transparent;
-  color: var(--danger);
-  border-color: var(--danger);
-}
-.btn-danger-ghost:hover {
-  background: var(--danger-dim);
-}
-.btn:not(:disabled):active,
-.btn.is-active {
-  opacity: 0.88;
-}
-.btn:disabled {
-  background: var(--bg-overlay);
-  color: var(--text-subtle);
-  border-color: var(--border-muted);
-  opacity: 1;
-  cursor: not-allowed;
-}
-.btn-primary:disabled {
-  background: var(--bg-overlay);
-  color: var(--text);
-  border-color: var(--border);
-}
-.btn[data-state="error"],
-.btn.is-error {
-  border-color: var(--danger);
-  color: var(--danger);
-  background: var(--danger-dim);
-}
-.btn[data-state="success"],
-.btn.is-success {
-  border-color: var(--success);
-  color: var(--success);
-  background: var(--success-dim);
-}
-
-/* ─── Input ─── */
-.input {
-  background: var(--bg-elevated);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  color: var(--text);
-  font-size: 13px;
-  padding: 6px 10px;
-  width: 100%;
-}
-.input::placeholder {
-  color: var(--text-subtle);
-}
-
 /*
   Shared search field — InlineSearch (in a card) and SearchInput (boxed).
   The wrapper carries the focus ring (see the a11y block) so it sits around
@@ -1184,73 +1018,23 @@ body[data-motion="off"] .search-field {
   width: 100%;
 }
 
-/* ─── Page layout ─── */
-/* Constrained measure: full-bleed reading width on a 27" monitor is
-   hostile. Content centers beyond --page-max; tables still get 1240px. */
-.page-wrapper {
-  width: 100%;
-  max-width: var(--page-max);
-  min-width: 0;
-  margin: 0 auto;
-  padding: var(--space-6);
-}
-
-@media (max-width: 640px) {
-  .page-wrapper {
-    padding: var(--space-4);
-  }
-}
-
-.page-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: var(--space-5);
-  gap: var(--space-3);
-  /* Action bars grow with the page (repo pages carry branch badges plus
-     Terminal/IDE/Upstart launchers). Without wrapping they run off a phone
-     viewport and the last control is clipped at the edge. */
-  flex-wrap: wrap;
-}
-
-.page-title {
-  font-size: 19px;
-  font-weight: 600;
-  letter-spacing: -0.015em;
-  color: var(--text);
-  line-height: 1.25;
-}
-
-.page-subtitle {
-  font-size: 12.5px;
-  color: var(--text-subtle);
-  margin-top: 3px;
-}
-
-/* ─── Loading skeleton ─── */
-.skeleton {
-  background: linear-gradient(
-    90deg,
-    var(--bg-elevated) 25%,
-    var(--bg-overlay) 50%,
-    var(--bg-elevated) 75%
-  );
-  background-size: 200% 100%;
-  animation: shimmer 1.5s ease-in-out infinite;
-  border-radius: var(--radius-sm);
-}
-@keyframes shimmer {
-  0% {
-    background-position: 200% 0;
-  }
-  100% {
-    background-position: -200% 0;
-  }
-}
-
 /* ─── BlockNote overrides for breathing room ─── */
 .bn-root {
   padding: 4px 0;
+}
+.notes-panel-body:has(.notes-panel-editor) {
+  display: flex;
+  flex-direction: column;
+}
+.notes-panel-editor,
+.notes-panel-editor > div,
+.notes-panel-editor .bn-container,
+.notes-panel-editor .bn-editor {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  width: 100%;
+  max-width: none;
 }
 .bn-block-outer {
   padding: 2px 0;
@@ -1398,52 +1182,6 @@ body[data-motion="off"] .search-field {
 [data-devhub-shared-checklist-id] svg {
   display: block;
   flex-shrink: 0;
-}
-
-/* ─── Focus ring (a11y) — the one definition ───
-   Every theme inherits this. A theme retunes the three tokens; it never
-   re-declares `outline` on :focus-visible (three theme files used to, with a
-   3px outer offset, and stacked on top of the component rules).
-
-   - Keyboard focus only (:focus-visible). A mouse click on a button or menu
-     item shows nothing; text fields always match, so they ring when clicked.
-   - One ring per control, on its outer visual box. A wrapper around a bare
-     input rings through :has() and silences the input inside it.
-   - Inset: a ring inside the control is never clipped by an overflow:hidden
-     parent and never lands on a neighbour.
-   - No border-radius here: the ring follows the control's own shape. */
-:root {
-  --focus-ring-color: var(--accent-text, var(--accent));
-  --focus-ring-width: 2px;
-  --focus-ring-offset: -2px;
-}
-:focus-visible {
-  outline: var(--focus-ring-width) solid var(--focus-ring-color);
-  outline-offset: var(--focus-ring-offset);
-}
-/* An accent fill would swallow an accent ring. */
-:is(.btn-primary, .welcome-action.primary):focus-visible {
-  outline-color: var(--accent-fg);
-}
-/* Inline links have no box to sit inside; hug the glyphs instead. */
-a:not([class]):focus-visible,
-.markdown-body a:focus-visible {
-  outline-offset: 1px;
-  border-radius: 2px;
-}
-/* Wrapper fields: .focus-host is the opt-in for a box that draws the border
-   around a bare <input>. The wrapper rings; the input inside does not. The
-   command palette marks focus with its own bottom bar instead. */
-:is(.focus-host, .search-field, .repo-git-filter-search, .repo-git-branch-filter):has(
-    :is(input, textarea, select):focus-visible
-  ) {
-  outline: var(--focus-ring-width) solid var(--focus-ring-color);
-  outline-offset: var(--focus-ring-offset);
-}
-:is(.focus-host, .search-field, .repo-git-filter-search, .repo-git-branch-filter, .palette-input)
-  :is(input, textarea, select):focus-visible,
-.palette-input:focus-visible {
-  outline: none;
 }
 
 /* ─── Route crossfade (View Transitions) — REMOVED ───
@@ -6183,8 +5921,8 @@ main,
    four repos per screen; a grid shows the whole folder at a glance. */
 .repos-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr));
+  gap: 12px;
 }
 .repo-card {
   transition: border-color var(--dur-quick) var(--ease-swift);
@@ -6333,31 +6071,6 @@ body[data-motion="off"] .evolution-arrow {
   }
 }
 
-/* ── Theme quarantine: tone panels (avoid multi-prop style={{}}) ── */
-.tone-panel {
-  border-radius: var(--radius-md, 8px);
-  border: 1px solid var(--border-muted);
-  background: var(--bg-elevated);
-  padding: 1rem;
-}
-.tone-panel--danger {
-  border-color: color-mix(in oklab, var(--danger) 30%, transparent);
-}
-.tone-panel--warning {
-  border-color: color-mix(in oklab, var(--warning) 30%, transparent);
-}
-.tone-panel--accent {
-  border-color: color-mix(in oklab, var(--accent) 35%, transparent);
-  background: color-mix(in oklab, var(--accent) 8%, var(--bg-elevated));
-}
-.tone-panel--muted {
-  border-color: color-mix(in oklab, var(--text-subtle) 35%, transparent);
-  background: color-mix(in oklab, var(--text-subtle) 8%, var(--bg-elevated));
-}
-.tone-panel--warning-banner {
-  border-color: color-mix(in oklab, var(--warning) 35%, transparent);
-  background: color-mix(in oklab, var(--warning) 8%, var(--bg-elevated));
-}
 .tone-dot {
   display: inline-block;
   flex-shrink: 0;
@@ -6533,6 +6246,17 @@ body[data-motion="off"] .evolution-arrow {
   font-size: 11px;
   padding: 3px 8px;
   gap: 5px;
+}
+.repo-git-push-progress {
+  max-width: min(42vw, 320px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-subtle);
+  align-self: center;
 }
 .repo-git-tabs {
   display: flex;
@@ -12575,4 +12299,501 @@ a.repo-git-context-chip[data-kind="pr"][data-checks="pending"] {
   .repo-git-page .repo-git-tab {
     min-height: 40px;
   }
+}
+
+/* ── Notification bell (the notifications surface) ─────────────────────────
+   Badge counts against an otherwise-icon-only top bar button; the popover
+   carries the list and the per-source "Show" toggles. */
+.notification-bell {
+  position: relative;
+}
+
+.notification-bell-btn {
+  position: relative;
+}
+
+.notification-bell-badge {
+  position: absolute;
+  top: 0;
+  right: 0;
+  min-width: 15px;
+  height: 15px;
+  padding: 0 3px;
+  border-radius: 8px;
+  background: var(--accent);
+  color: var(--bg, #111);
+  font-size: 9.5px;
+  font-weight: 700;
+  line-height: 15px;
+  text-align: center;
+  font-variant-numeric: "tabular-nums";
+  pointer-events: none;
+}
+
+.notification-bell-badge[data-urgent] {
+  background: var(--danger);
+  color: var(--bg, #111);
+}
+
+.notification-bell-pop {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  width: 380px;
+  max-width: min(92vw, 380px);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 50;
+  box-shadow: var(--shadow-popover);
+  animation: plus-pop var(--dur-fast) var(--ease-swift) both;
+  max-height: min(calc(100dvh - 56px), 640px);
+  overflow-y: auto;
+}
+
+.notification-bell-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.notification-bell-markall {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+}
+
+.notification-bell-degraded {
+  margin: 0;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.notification-bell-empty {
+  padding: 14px 8px;
+  margin: 0;
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.notification-bell-list {
+  display: flex;
+  flex-direction: column;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--border-muted);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.notification-bell-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 10px;
+  background: transparent;
+  border-bottom: 1px solid var(--border-muted);
+}
+.notification-bell-row:last-child {
+  border-bottom: none;
+}
+.notification-bell-row[data-unread] {
+  background: color-mix(in oklab, var(--accent) 6%, transparent);
+}
+
+.notification-bell-dot {
+  flex-shrink: 0;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  margin-top: 5px;
+  background: var(--text-subtle, #888);
+}
+.notification-bell-dot[data-severity="action"] {
+  background: var(--accent);
+}
+.notification-bell-dot[data-severity="urgent"] {
+  background: var(--danger);
+}
+
+.notification-bell-title {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+}
+.notification-bell-title:hover .notification-bell-title-text {
+  text-decoration: underline;
+}
+
+.notification-bell-title-text {
+  font-size: 12.5px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.notification-bell-row[data-unread] .notification-bell-title-text {
+  font-weight: 600;
+}
+
+.notification-bell-reason {
+  font-size: 11px;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.notification-bell-repo {
+  font-family: var(--font-mono, monospace);
+  font-size: 10px;
+}
+
+.notification-bell-source {
+  align-self: flex-start;
+  flex-shrink: 0;
+  font-size: 9px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--text-subtle, var(--text-muted));
+  border: 1px solid var(--border-muted);
+  border-radius: 4px;
+  padding: 1px 4px;
+}
+
+.notification-bell-dismiss {
+  flex-shrink: 0;
+}
+
+.notification-bell-toggles {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  border-top: 1px solid var(--border-muted);
+  padding-top: 8px;
+}
+
+.notification-bell-toggles-label {
+  width: 100%;
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-subtle, var(--text-muted));
+}
+
+.notification-bell-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  cursor: pointer;
+  user-select: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .notification-bell-pop {
+    animation: none;
+  }
+}
+
+/* ─── Git hub (/git) ───
+   Pinned to #main-content like the repo git page: the embedded workspace
+   needs a definite height, and percentage heights would otherwise grow with
+   the commit log. */
+.git-hub {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-columns: minmax(230px, 300px) minmax(0, 1fr);
+  min-height: 0;
+  overflow: hidden;
+}
+.git-hub-loading {
+  position: static;
+  display: block;
+  overflow: auto;
+  padding: 16px;
+}
+.git-hub-rail {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-right: 1px solid var(--border);
+  background: var(--bg-surface);
+}
+.git-hub-rail-head {
+  display: flex;
+  gap: 6px;
+  padding: 10px;
+  border-bottom: 1px solid var(--border);
+}
+.git-hub-search {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 6px);
+  background: var(--bg-elevated);
+  color: var(--text-subtle);
+}
+.git-hub-search:focus-within {
+  border-color: var(--accent);
+}
+.git-hub-search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font-size: 12px;
+  outline: none;
+}
+.git-hub-refresh {
+  padding: 4px 6px;
+}
+.git-hub-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+}
+.git-hub-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 7px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 10.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.git-hub-filter:hover {
+  color: var(--text);
+  background: color-mix(in oklab, var(--accent) 8%, transparent);
+}
+.git-hub-filter[data-active] {
+  color: var(--accent-text, var(--text));
+  background: color-mix(in oklab, var(--accent) 14%, transparent);
+  border-color: color-mix(in oklab, var(--accent) 35%, transparent);
+}
+.git-hub-filter-count {
+  font-size: 9.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-subtle);
+}
+.git-hub-filter[data-active] .git-hub-filter-count {
+  color: inherit;
+}
+.git-hub-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 6px;
+  list-style: none;
+}
+.git-hub-row {
+  width: 100%;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm, 6px);
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+.git-hub-row:hover {
+  background: color-mix(in oklab, var(--accent) 7%, transparent);
+}
+.git-hub-row[data-active] {
+  background: color-mix(in oklab, var(--accent) 13%, transparent);
+  border-color: color-mix(in oklab, var(--accent) 28%, transparent);
+}
+.git-hub-row-main {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.git-hub-row-name {
+  font-size: 12.5px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.git-hub-row-branch {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--text-subtle);
+}
+.git-hub-row-meta {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  padding-top: 1px;
+}
+.git-hub-row-age {
+  min-width: 22px;
+  text-align: right;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-subtle);
+}
+.git-hub-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 4px;
+  border-radius: 999px;
+  font-size: 9.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 14px;
+}
+.git-hub-pill[data-kind="ahead"] {
+  color: var(--info);
+  background: color-mix(in oklab, var(--info) 14%, transparent);
+}
+.git-hub-pill[data-kind="behind"],
+.git-hub-pill[data-kind="dirty"] {
+  color: var(--warning);
+  background: color-mix(in oklab, var(--warning) 14%, transparent);
+}
+.git-hub-pill[data-kind="conflict"] {
+  color: var(--danger);
+  background: color-mix(in oklab, var(--danger) 16%, transparent);
+}
+.git-hub-list-empty {
+  padding: 10px 8px;
+  font-size: 11px;
+  color: var(--text-subtle);
+}
+.git-hub-rail-foot {
+  padding: 8px 10px;
+  border-top: 1px solid var(--border);
+  font-size: 10.5px;
+  color: var(--text-subtle);
+}
+.git-hub-main {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+.git-hub-main .repo-git-workspace {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+.git-hub-main-empty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+@media (max-width: 900px) {
+  .git-hub {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(0, 34vh) minmax(0, 1fr);
+  }
+  .git-hub-rail {
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+}
+
+/* ─── Git surface polish ───
+   One type scale for the workspace: list rows lead, SHAs/meta recede, and
+   remote ops read as a group instead of loose buttons. */
+.repo-git-graph-subject {
+  font-size: 12.5px;
+}
+.repo-git-graph-meta {
+  font-size: 10.5px;
+  line-height: 1.3;
+}
+.repo-git-tab {
+  font-size: 11.5px;
+  font-weight: 600;
+}
+.repo-git-lane-chip {
+  font-size: 10.5px;
+  font-weight: 600;
+}
+.repo-git-header-push-group {
+  align-items: center;
+}
+.repo-git-header-push-group .repo-git-push-progress {
+  padding: 0 8px 0 10px;
+  border-left: 1px solid var(--border);
+}
+.repo-git-diff-more {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-surface);
+  font-family: var(--font-sans);
+  font-size: 11.5px;
+  white-space: normal;
+  color: var(--text-muted);
+}
+
+.repo-git-file-more {
+  width: 100%;
+  margin: 6px 0 4px;
+  padding: 5px 8px;
+  font-size: 11px;
+  color: var(--text-muted);
+  justify-content: center;
 }

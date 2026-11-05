@@ -1,6 +1,6 @@
 .tabs {
   display: flex;
-  gap: 4px;
+  gap: 24px;
   margin-bottom: 24px;
   border-bottom: 1px solid var(--border-muted);
   overflow-x: auto;
@@ -16,7 +16,7 @@
   align-items: center;
   gap: 8px;
   flex-shrink: 0;
-  padding: 12px 16px;
+  padding: 10px 0;
   margin-bottom: -1px;
   border-bottom: 2px solid transparent;
   background: transparent;
@@ -33,13 +33,9 @@
 
 .tab:hover {
   color: var(--text);
-  background: var(--bg-elevated);
 }
 
 .count {
-  padding: 1px 6px;
-  border-radius: var(--radius-sm);
-  background: var(--bg-elevated);
   color: var(--text-muted);
   font-size: 11px;
   font-variant-numeric: tabular-nums;
@@ -90,7 +86,7 @@
   }
 
   .tab {
-    padding: 12px;
+    padding: 10px 0;
   }
 
   .tabHint {

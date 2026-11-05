@@ -1,8 +1,8 @@
 "use client";
 
 import { useRouter } from "@/lib/navigation";
-import { GraduationCap, Maximize2, Minimize2, X } from "lucide-react";
-import { SidePanel } from "@/components/shell/SidePanel";
+import { GraduationCap, ExternalLink, PanelBottomClose } from "lucide-react";
+import { SidePanel, SidePanelControls } from "@/components/shell/SidePanel";
 import { HoverTip } from "@/components/ui/HoverTip";
 import { LearnContent } from "./LearnContent";
 import type { RepoInfo } from "@shared/repos/types";
@@ -30,7 +30,7 @@ export function LearnPanel({
 
   return (
     <SidePanel open={!!repo} onClose={onClose} storageKey="repos-learn-panel-width" defaultWidth={560} minWidth={420} ariaLabel="Repo learning panel">
-      <div className="repos-learn-chrome">
+      <div className="repos-learn-chrome" data-panel-drag-handle>
         <div className="min-w-0 flex-1">
           <div className="repos-learn-kicker">
             <GraduationCap size={13} aria-hidden />
@@ -53,7 +53,7 @@ export function LearnPanel({
               onClick={expand}
               aria-label="Open dedicated learning screen"
             >
-              <Maximize2 size={14} />
+              <ExternalLink size={14} />
             </button>
           </HoverTip>
           <HoverTip label="Hide and keep generating in the dock">
@@ -63,19 +63,10 @@ export function LearnPanel({
               onClick={onHide}
               aria-label="Hide learning panel to dock"
             >
-              <Minimize2 size={14} />
+              <PanelBottomClose size={14} />
             </button>
           </HoverTip>
-          <HoverTip label="Close without docking">
-            <button
-              type="button"
-              className="btn btn-ghost hub-icon-btn"
-              onClick={onClose}
-              aria-label="Close learning panel"
-            >
-              <X size={14} />
-            </button>
-          </HoverTip>
+          <SidePanelControls closeLabel="Close learning panel" />
         </div>
       </div>
 

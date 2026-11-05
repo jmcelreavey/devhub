@@ -14,6 +14,7 @@ export interface LocalRunOptions {
   input?: string | Buffer;
   binary?: boolean;
   onStdout?: (chunk: Buffer) => void;
+  onStderr?: (chunk: Buffer) => void;
   signal?: AbortSignal;
   managedService?: boolean;
   /** Use the process-group-aware collector, including for plain Git commands. */
@@ -49,7 +50,7 @@ export interface LocalOps {
 
 async function run(cli: string, args: readonly string[], opts: LocalRunOptions = {}): Promise<LocalRunResult> {
   const timeoutMs = opts.timeoutMs ?? 30_000;
-  if (opts.collect || opts.binary || opts.input !== undefined || opts.signal || opts.onStdout || opts.managedService) {
+  if (opts.collect || opts.binary || opts.input !== undefined || opts.signal || opts.onStdout || opts.onStderr || opts.managedService) {
     return spawnCollected(cli, [...args], {
       cwd: opts.cwd,
       env: opts.env,
@@ -58,6 +59,7 @@ async function run(cli: string, args: readonly string[], opts: LocalRunOptions =
       input: opts.input,
       binary: opts.binary === true,
       onStdout: opts.onStdout,
+      onStderr: opts.onStderr,
       signal: opts.signal,
       managedService: opts.managedService,
     });
@@ -101,6 +103,7 @@ interface SpawnCollectedOptions {
   input?: string | Buffer;
   binary: boolean;
   onStdout?: (chunk: Buffer) => void;
+  onStderr?: (chunk: Buffer) => void;
   signal?: AbortSignal;
   managedService?: boolean;
 }
@@ -127,9 +130,22 @@ function spawnCollected(file: string, args: string[], opts: SpawnCollectedOption
     let stderrLen = 0;
     let settled = false;
     let stopped: Error | null = null;
+    // Armed only once we actually stop the child: a normal long-running command
+    // must never be failed by a timer that started at spawn.
+    let settleSoon: ReturnType<typeof setTimeout> | undefined;
     const stop = (err: Error) => {
       if (stopped) return;
       stopped = err;
+      // Force the pipes shut so our side cannot dangle on a setsid'd child.
+      try { child.stdout?.destroy(); } catch { /* best-effort */ }
+      try { child.stderr?.destroy(); } catch { /* best-effort */ }
+      // A killed process group can still leave a setsid'd grandchild holding
+      // the pipe, and 'close' then never fires. Settle on a short deadline so
+      // a hung child can never pin the mutation lock (or a request) forever.
+      settleSoon ??= setTimeout(() => {
+        fail(stopped ?? Object.assign(new Error("Command was stopped"), { killed: true, signal: "SIGKILL" }));
+      }, 2_000);
+      settleSoon.unref();
       // Git helpers share the process group. Wait for close before callers
       // remove staging; rejecting on abort lets the child race that cleanup.
       try {
@@ -148,6 +164,10 @@ function spawnCollected(file: string, args: string[], opts: SpawnCollectedOption
     const timer = setTimeout(() => {
       stop(Object.assign(new Error("Command timed out"), { killed: true, signal: "SIGKILL" }));
     }, opts.timeoutMs);
+    const settleDeadline = setTimeout(() => {
+      fail(Object.assign(new Error("Command timed out"), { killed: true, signal: "SIGKILL" }));
+    }, opts.timeoutMs + 10_000);
+    settleDeadline.unref();
 
     const onAbort = () => {
       stop(abortError());
@@ -156,6 +176,8 @@ function spawnCollected(file: string, args: string[], opts: SpawnCollectedOption
       if (settled) return;
       settled = true;
       clearTimeout(timer);
+      clearTimeout(settleDeadline);
+      if (settleSoon) clearTimeout(settleSoon);
       opts.signal?.removeEventListener("abort", onAbort);
       reject(err);
     };
@@ -178,6 +200,8 @@ function spawnCollected(file: string, args: string[], opts: SpawnCollectedOption
         return;
       }
       stderrChunks.push(chunk);
+      try { opts.onStderr?.(chunk); }
+      catch (error) { stop(error instanceof Error ? error : new Error(String(error))); }
     });
     // A child that exits before reading its input raises EPIPE here; the exit
     // status is what callers act on, so don't let it become an uncaught error.
@@ -200,6 +224,8 @@ function spawnCollected(file: string, args: string[], opts: SpawnCollectedOption
       if (settled) return;
       settled = true;
       clearTimeout(timer);
+      clearTimeout(settleDeadline);
+      if (settleSoon) clearTimeout(settleSoon);
       opts.signal?.removeEventListener("abort", onAbort);
       if (stopped) { reject(stopped); return; }
       const stdoutBuffer = Buffer.concat(stdoutChunks);

@@ -34,7 +34,7 @@ export type { RepoRevealContext, RepoRevealResult } from "./repos.ts";
 export { repoGitRange, repoGitRangeInput } from "./repos.ts";
 export { repoDashboardQueryInput, repoGitLogDashboard, repoGitLogDashboardInput, repoGitShowDashboard, repoGitShowDashboardInput, repoGitDiffDashboard, repoGitDiffDashboardInput, repoGitBlameDashboard, repoGitBlameDashboardInput, repoGitRangeDashboard, repoGitRangeDashboardInput, repoGitCiDashboard, repoGitCiDashboardInput, repoLearnDashboard, repoLearnDashboardInput, repoWorktreesDashboard, repoWorktreesDashboardInput } from "./repos.ts";
 export { repoGitDashboardBranch, repoGitDashboardBranchInput } from "./repos.ts";
-export { coreGitConflicts, coreGitConflictsInput, coreGitResolveConflict, coreGitResolveConflictInput } from "./repos.ts";
+export { coreGitConflicts, coreGitConflictsInput, coreGitOverview, coreGitOverviewInput, coreGitResolveConflict, coreGitResolveConflictInput } from "./repos.ts";
 export type { RepoGitRangeContext, RepoGitRangeResult } from "./repos.ts";
 export { repoLearn, repoLearnInput } from "./repos.ts";
 export type { RepoLearnContext } from "./repos.ts";

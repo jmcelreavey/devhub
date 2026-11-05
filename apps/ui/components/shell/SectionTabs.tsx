@@ -30,6 +30,10 @@ export function SectionTabs() {
   const desktop = useIsDesktopPointer();
   const setup = useSetupStatus();
 
+  // Runtime pages provide their own reviewed sibling navigation. The generic
+  // /plugins settings prefix is only for managing installations.
+  if (path.startsWith("/plugins/runtime/")) return null;
+
   const entry = Object.entries(sections).map(([family, tabs]) => ({
     family, tabs, match: Math.max(0, ...tabs.filter(tab => matchesNavRoute(pathname, tab.href)).map(tab => tab.href.length)),
   })).filter(entry => entry.match > 0).sort((a, b) => b.match - a.match)[0];

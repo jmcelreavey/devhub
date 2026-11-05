@@ -77,6 +77,7 @@ export const routes: RouteDefinition[] = [
   { pattern: "/api/entity-links", file: "apps/core/src/http/routes/entity-links/route.ts", methods: ["GET"], load: () => import("./routes/entity-links/route.ts"), },
   { pattern: "/api/events", file: "apps/core/src/http/routes/events/route.ts", methods: ["GET"], load: () => import("./routes/events/route.ts"), },
   { pattern: "/api/git/conflicts", file: "apps/core/src/http/routes/git/conflicts/route.ts", methods: ["GET","POST"], load: () => import("./routes/git/conflicts/route.ts"), },
+  { pattern: "/api/git/overview", file: "apps/core/src/http/routes/git/overview/route.ts", methods: ["GET"], load: () => import("./routes/git/overview/route.ts"), },
   { pattern: "/api/github/pr-state", file: "apps/core/src/http/routes/github/pr-state/route.ts", methods: ["GET"], load: () => import("./routes/github/pr-state/route.ts"), },
   { pattern: "/api/github/prs/auto-review", file: "apps/core/src/http/routes/github/prs/auto-review/route.ts", methods: ["GET","POST"], load: () => import("./routes/github/prs/auto-review/route.ts"), },
   { pattern: "/api/github/prs/auto-review/settings", file: "apps/core/src/http/routes/github/prs/auto-review/settings/route.ts", methods: ["GET","PUT"], load: () => import("./routes/github/prs/auto-review/settings/route.ts"), },

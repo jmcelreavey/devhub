@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState, type ReactNode } from "react";
-import Link from "@/lib/navigation";
+import { useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import Link, { useHistory, useSearchParams } from "@/lib/navigation";
 import { mutate as globalMutate } from "swr";
 import { AlertTriangle, ChevronDown, ChevronRight, NotebookPen, RefreshCw } from "lucide-react";
 import { FetchError, SkeletonRows } from "@/components";
@@ -60,6 +60,15 @@ function matchesWorkSearch(work: TaskWork, query: string): boolean {
 /** Past this many queued items the backlog starts collapsed. */
 const BACKLOG_AUTO_COLLAPSE = 4;
 
+const HUB_TABS = [
+  { id: "overview", label: "Overview" },
+  { id: "work", label: "Active work" },
+  { id: "notes", label: "Notes" },
+  { id: "prs", label: "My PRs" },
+] as const;
+
+type HubTab = (typeof HUB_TABS)[number]["id"];
+
 function asCalendarEvent(event: WorkHubEvent): CalendarEvent {
   return {
     id: event.id,
@@ -96,6 +105,7 @@ function HubCappedList<T>({
         <button
           type="button"
           className="repo-hub-show-more"
+          aria-expanded={expanded}
           onClick={() => setExpanded((prev) => !prev)}
         >
           {expanded ? "Show less" : `Show more (${hidden})`}
@@ -112,6 +122,12 @@ export function RepoWorkHub({
   repo: RepoInfo;
   onMutate: () => void;
 }) {
+  const searchParams = useSearchParams();
+  const history = useHistory();
+  const requestedTab = searchParams.get("tab");
+  const tab = HUB_TABS.find((item) => item.id === requestedTab)?.id ?? "overview";
+  const tabId = useId();
+  const tabsRef = useRef<HTMLDivElement>(null);
   const workUrl = `/api/repos/${encodeURIComponent(repo.name)}/work`;
   const work = useLive<RepoWorkPayload>(`${workUrl}?scope=local`);
   const remote = useLive<{ ok: boolean }>(`${workUrl}?scope=external`, { /* GitHub work status changes independently. */ refreshInterval: 20_000 });
@@ -192,6 +208,25 @@ export function RepoWorkHub({
     [doneTasks, doneQuery],
   );
 
+  function changeTab(next: HubTab) {
+    if (next === tab) return;
+    const params = new URLSearchParams(searchParams);
+    params.set("tab", next);
+    history.push(`/repos/${encodeURIComponent(repo.name)}?${params}${window.location.hash}`, history.getState());
+  }
+
+  function onTabKeyDown(event: KeyboardEvent<HTMLButtonElement>, index: number) {
+    const nextIndex = event.key === "ArrowRight" ? (index + 1) % HUB_TABS.length
+      : event.key === "ArrowLeft" ? (index + HUB_TABS.length - 1) % HUB_TABS.length
+      : event.key === "Home" ? 0
+      : event.key === "End" ? HUB_TABS.length - 1
+      : null;
+    if (nextIndex === null) return;
+    event.preventDefault();
+    changeTab(HUB_TABS[nextIndex].id);
+    tabsRef.current?.querySelectorAll<HTMLButtonElement>('[role="tab"]')[nextIndex]?.focus();
+  }
+
   function refreshTasks() {
     void board.mutate();
     void inbox.mutate();
@@ -222,7 +257,7 @@ export function RepoWorkHub({
       <NoteListRow key={note.slug} note={{ ...note, title }} className="repo-hub-row">
         <NotebookPen size={14} className="lib-card-icon" />
         <span className="repo-hub-row-main">
-          <span className="repo-hub-row-title">{title}</span>
+          <span className="repo-hub-row-title break-words">{title}</span>
           {age ? <span className="repo-hub-row-meta">{age}</span> : null}
         </span>
       </NoteListRow>
@@ -235,11 +270,24 @@ export function RepoWorkHub({
 
   return (
     <>
-      <section className="mt-4">
-        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-sm font-semibold text-text">Active work</h2>
-          <Link className="text-xs text-text-muted hover:text-accent" href={`/storyboard?repo=${encodeURIComponent(repo.name)}`}>Open Storyboard</Link>
-        </div>
+      <div ref={tabsRef} role="tablist" aria-label="Repository views" className="mt-4 flex flex-wrap gap-x-4 border-b border-border">
+        {HUB_TABS.map(({ id, label }, index) => {
+          const count = id === "work" ? !tasksLoading && !tasksError ? taskWork.active.length : undefined
+            : id === "notes" ? work.data && !work.error ? notes.length : undefined
+            : id === "prs" ? work.data && !work.error && !degraded.some((entry) => entry.source === "GitHub") ? mine.length : undefined
+            : undefined;
+          return (
+            <button key={id} type="button" role="tab" id={`${tabId}-tab-${id}`}
+              aria-controls={`${tabId}-panel-${id}`} aria-selected={tab === id} tabIndex={tab === id ? 0 : -1}
+              className={`flex min-h-11 items-center gap-2 border-b-2 px-1 text-sm ${tab === id ? "border-accent font-semibold text-text" : "border-transparent text-text-muted hover:text-text"}`}
+              onClick={() => changeTab(id)} onKeyDown={(event) => onTabKeyDown(event, index)}>
+              {label}
+              {count !== undefined && count > 0 ? <span className="repo-hub-section-count">{count}</span> : null}
+            </button>
+          );
+        })}
+      </div>
+      <div className="mt-4">
         {degraded.length > 0 ? (
           <div className="mb-3 rounded-lg border border-border p-3">
             <div className="flex flex-wrap items-center gap-2">
@@ -267,9 +315,18 @@ export function RepoWorkHub({
             </details>
           </div>
         ) : null}
-        {tasksError ? <FetchError bare message={profile.error ? "Couldn’t confirm the task profile." : "Task status unavailable. Refresh before starting work."} onRetry={() => { void profile.mutate(); refreshTasks(); }} /> : null}
         {work.error ? <FetchError bare message={work.error.message} onRetry={() => void work.mutate()} /> : null}
         {remote.error ? <FetchError bare message={remote.error.message} onRetry={() => void remote.mutate()} /> : null}
+      </div>
+
+      {/* Keep each view mounted so switching tabs preserves drafts and open context panels. */}
+      <div role="tabpanel" id={`${tabId}-panel-work`} aria-labelledby={`${tabId}-tab-work`} hidden={tab !== "work"} tabIndex={0}>
+      <section>
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-sm font-semibold text-text">Active work</h2>
+          <Link className="text-xs text-text-muted hover:text-accent" href={`/storyboard?repo=${encodeURIComponent(repo.name)}`}>Open Storyboard</Link>
+        </div>
+        {tasksError ? <FetchError bare message={profile.error ? "Couldn’t confirm the task profile." : "Task status unavailable. Refresh before starting work."} onRetry={() => { void profile.mutate(); refreshTasks(); }} /> : null}
         {tasksLoading ? <SkeletonRows count={3} /> : taskWork.active.length ? (
           <div className="space-y-2">{taskWork.active.map(renderTask)}</div>
         ) : !tasksError ? (
@@ -336,13 +393,16 @@ export function RepoWorkHub({
           )}
         </HubSection>
       ) : null}
+      </div>
 
-      <section className="mt-5">
-        <div className="flex items-center justify-between gap-3 mb-2">
+      <div role="tabpanel" id={`${tabId}-panel-overview`} aria-labelledby={`${tabId}-tab-overview`} hidden={tab !== "overview"} tabIndex={0}>
+      <section>
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-3">
           <button
             type="button"
-            className="flex items-center gap-1 text-sm font-semibold text-text"
+            className="flex min-h-11 items-center gap-1 text-sm font-semibold text-text"
             aria-expanded={historyOpen}
+            aria-controls={`${tabId}-commits`}
             onClick={() => setHistoryOpen(!historyOpen)}
           >
             {historyOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
@@ -364,7 +424,7 @@ export function RepoWorkHub({
             onFocusPathConsumed={() => setGitFocusPath(null)}
           />
         </div>
-        <div className="repo-hub-history repo-git-tab-body" data-collapsed={historyOpen ? undefined : ""}>
+        <div id={`${tabId}-commits`} className="repo-hub-history repo-git-tab-body" data-collapsed={historyOpen ? undefined : ""}>
           <HistoryPanel
             repoName={repo.name}
             repoPath={repo.path}
@@ -378,8 +438,17 @@ export function RepoWorkHub({
       <section className="mt-5">
         <HubWorkingTree repoName={repo.name} onOpenFile={openFileInGit} />
       </section>
+      {calendar.length > 0 ? (
+        <section className="mt-5">
+          <h2 className="mb-2 text-sm font-semibold text-text">Calendar</h2>
+          <div className="divide-y divide-border">
+            <HubCappedList items={calendar} limit={HUB_LONG_LIST_PREVIEW} render={renderEvent} />
+          </div>
+        </section>
+      ) : null}
+      </div>
 
-      <div className="repo-hub-columns mt-5">
+      <div role="tabpanel" id={`${tabId}-panel-prs`} aria-labelledby={`${tabId}-tab-prs`} hidden={tab !== "prs"} tabIndex={0}>
         <section>
           <h2 className="text-sm font-semibold text-text mb-2">My PRs</h2>
           {work.isLoading ? (
@@ -400,7 +469,10 @@ export function RepoWorkHub({
               className="repo-hub-other-prs"
               onToggle={(event) => setOtherPrsOpen(event.currentTarget.open)}
             >
-              <summary>Other PRs ({others.length})</summary>
+              <summary className="flex min-h-11 items-center gap-1">
+                {otherPrsOpen ? <ChevronDown size={14} aria-hidden /> : <ChevronRight size={14} aria-hidden />}
+                Other PRs ({others.length})
+              </summary>
               {/* A closed <details> still mounts its children, and every PrRow
                   checks for a review note — ~20 requests per visit for a list
                   nobody had opened, queued ahead of the hub's own data. */}
@@ -416,6 +488,8 @@ export function RepoWorkHub({
             </details>
           ) : null}
         </section>
+      </div>
+      <div role="tabpanel" id={`${tabId}-panel-notes`} aria-labelledby={`${tabId}-tab-notes`} hidden={tab !== "notes"} tabIndex={0}>
         <section>
           <div className="mb-2 flex items-center justify-between gap-2">
             <h2 className="text-sm font-semibold text-text">Notes</h2>
@@ -434,18 +508,6 @@ export function RepoWorkHub({
           ) : (
             <p className="text-xs text-text-subtle">{work.error ? "Notes could not be loaded." : "No notes linked to this repo."}</p>
           )}
-          {calendar.length > 0 ? (
-            <div className="mt-4">
-              <h2 className="text-sm font-semibold text-text mb-2">Calendar</h2>
-              <div className="divide-y divide-border">
-                <HubCappedList
-                  items={calendar}
-                  limit={HUB_LONG_LIST_PREVIEW}
-                  render={renderEvent}
-                />
-              </div>
-            </div>
-          ) : null}
         </section>
       </div>
     </>

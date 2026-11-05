@@ -9,13 +9,26 @@ export const notificationsRead = defineAction<typeof notificationsReadInput, Con
   mcp: { reason: "Notifications are a profile-scoped dashboard view." },
   handler: (input, context) => context.execute(input),
 });
-export const notificationsUpdateInput = z.object({ ids: z.array(z.string().min(1).max(1000)).min(1).max(500), action: z.enum(["read", "dismiss", "restore"]) }).strict();
+export const notificationsUpdateInput = z.object({
+  ids: z.array(z.string().min(1).max(1000)).min(1).max(500),
+  action: z.enum(["read", "dismiss", "restore"]),
+  versions: z.array(z.object({ id: z.string().min(1).max(1000), version: z.string().min(1).max(128) }).strict()).max(500).optional(),
+}).strict();
 export const notificationsUpdate = defineAction<typeof notificationsUpdateInput, Context<z.output<typeof notificationsUpdateInput>>, unknown>({
   input: notificationsUpdateInput, http: { method: "POST", path: "/api/notifications" },
   mcp: { reason: "Read and dismissal state belongs to the dashboard." },
   handler: (input, context) => context.execute(input),
 });
-export const notificationsPrefsInput = z.object({ ownedReposOnly: z.boolean() }).strict();
+export const notificationsPrefsInput = z.object({
+  ownedReposOnly: z.boolean().optional(),
+  sources: z.object({
+    github: z.boolean().optional(),
+    ci: z.boolean().optional(),
+    agent: z.boolean().optional(),
+    plugin: z.boolean().optional(),
+    datadog: z.boolean().optional(),
+  }).strict().optional(),
+}).strict().refine((value) => value.ownedReposOnly !== undefined || value.sources !== undefined, { message: "Provide ownedReposOnly or sources." });
 export const notificationsPrefs = defineAction<typeof notificationsPrefsInput, Context<z.output<typeof notificationsPrefsInput>>, unknown>({
   input: notificationsPrefsInput, http: { method: "PUT", path: "/api/notifications" },
   mcp: { reason: "Notification filtering is a dashboard preference." },

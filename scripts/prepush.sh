@@ -42,8 +42,10 @@ non_content_reason() {
     while read -r local_ref local_sha remote_ref remote_sha; do
         [[ -n "$local_sha" ]] || continue
         [[ "$local_sha" =~ ^0+$ ]] && continue # deleting a ref pushes no commits
-        if [[ "$remote_sha" =~ ^0+$ ]]; then
-            # New remote ref: everything the remote doesn't already have.
+        if [[ "$remote_sha" =~ ^0+$ ]] || ! git cat-file -e "${remote_sha}^{commit}" 2>/dev/null; then
+            # New remote ref, or a tip this clone has not fetched yet (the
+            # content-sync service moves it constantly). Everything the remote
+            # doesn't already have is still the right question.
             commits="$(git rev-list "$local_sha" --not --remotes="$remote" 2>/dev/null)" \
                 || { echo "could not list the new commits on $local_ref"; return; }
         else
@@ -139,7 +141,7 @@ trap 'rm -f "$CHANGED_FILES"' EXIT
 if [[ $# -gt 0 ]]; then
     while read -r local_ref local_sha remote_ref remote_sha; do
         [[ -n "$local_sha" && ! "$local_sha" =~ ^0+$ ]] || continue
-        if [[ "$remote_sha" =~ ^0+$ ]]; then
+        if [[ "$remote_sha" =~ ^0+$ ]] || ! git cat-file -e "${remote_sha}^{commit}" 2>/dev/null; then
             commits="$(git rev-list "$local_sha" --not --remotes="$1")"
         else
             commits="$(git rev-list "$remote_sha..$local_sha")"

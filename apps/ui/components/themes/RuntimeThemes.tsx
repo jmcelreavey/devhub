@@ -2,7 +2,7 @@
 
 import { useEffect, useSyncExternalStore } from "react";
 import { applyThemeSelection, resolveMode, sanitizeModeSetting, sanitizePreset, THEME_CALENDAR_EVENT, THEME_MODE_KEY, THEME_PRESET_KEY } from "@/lib/themes/presets";
-import { getRuntimeThemes, getManagedThemePlugins, replaceRuntimeThemes, runtimeThemeCss, runtimeThemeKey, subscribeRuntimeThemes } from "@/lib/plugins/runtime-theme-client";
+import { getRuntimeThemes, replaceRuntimeThemes, runtimeThemeCss, runtimeThemeKey, subscribeRuntimeThemes } from "@/lib/plugins/runtime-theme-client";
 import { runtimeThemeCatalogSchema, type PublicRuntimeTheme } from "../../../../packages/shared/ui-lib/plugins/runtime-theme-contract";
 import { subscribeToTaskEvents } from "@/lib/events/task-subscription";
 
@@ -15,6 +15,8 @@ export function RuntimeThemes() {
   useEffect(() => {
     let active = true;
     let request: AbortController | undefined;
+    let retryTimer: ReturnType<typeof setTimeout> | undefined;
+    let retryDelay = 1000;
     function reconcile() {
       let preset = document.documentElement.getAttribute("data-theme-preset") ?? "graphite";
       let mode = sanitizeModeSetting(document.documentElement.getAttribute("data-theme-mode"));
@@ -28,10 +30,11 @@ export function RuntimeThemes() {
       window.dispatchEvent(new Event(THEME_CALENDAR_EVENT));
     }
     async function refresh() {
+      clearTimeout(retryTimer);
       request?.abort();
       const controller = new AbortController();
       request = controller;
-      const timeout = window.setTimeout(() => controller.abort(), 5000);
+      const timeout = window.setTimeout(() => controller.abort(), 15_000);
       try {
         const response = await fetch("/api/plugins/themes", { signal: controller.signal, cache: "no-store" });
         if (!response.ok) throw new Error("Theme catalogue unavailable");
@@ -40,16 +43,18 @@ export function RuntimeThemes() {
         const next = runtimeThemeCatalogSchema.parse(JSON.parse(body));
         if (!active || request !== controller) return;
         replaceRuntimeThemes(next.themes, next.managedPlugins);
+        retryDelay = 1000;
         reconcile();
       } catch {
         if (!active || request !== controller) return;
-        replaceRuntimeThemes([], getManagedThemePlugins());
-        reconcile();
+        // A transport failure is not an uninstall. Asset endpoints still enforce current trust.
+        retryTimer = setTimeout(() => { void refresh(); }, retryDelay);
+        retryDelay = Math.min(retryDelay * 2, 30_000);
       } finally { window.clearTimeout(timeout); }
     }
     void refresh();
     const unsubscribe = subscribeToTaskEvents({ plugins: true, domains: ["plugins"], connection: () => {}, refresh: () => { void refresh(); } });
-    return () => { active = false; request?.abort(); unsubscribe(); };
+    return () => { active = false; clearTimeout(retryTimer); request?.abort(); unsubscribe(); };
   }, []);
   return <style data-runtime-theme-palettes>{runtimeThemeCss(themes)}</style>;
 }

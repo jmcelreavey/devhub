@@ -46,7 +46,45 @@ export function previewConfigPath(repoName: string): string {
   return path.join(getUpstartsDir(), sanitizeUpstartRepoName(repoName), PREVIEW_CONFIG_NAME);
 }
 
-function loadPreviewConfig(repoName: string | undefined): LoadedConfig | { reason: string } {
+function readProjectJson(cwd: string, name: string): Record<string, unknown> | null {
+  try {
+    const value: unknown = JSON.parse(fs.readFileSync(path.join(cwd, name), "utf8"));
+    return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
+  } catch { return null; }
+}
+
+function hasDependency(pkg: Record<string, unknown> | null, name: string): boolean {
+  return [pkg?.dependencies, pkg?.devDependencies, pkg?.peerDependencies].some(value => value && typeof value === "object" && Object.prototype.hasOwnProperty.call(value, name));
+}
+
+function detectedPreviewConfig(cwd: string): PreviewConfig | null {
+  const pkg = readProjectJson(cwd, "package.json");
+  const expo = isExpoProject(cwd);
+  const command = expo ? "./node_modules/.bin/expo start --web --localhost --port {port}"
+    : hasDependency(pkg, "next") ? "./node_modules/.bin/next dev --hostname 127.0.0.1 --port {port}"
+      : hasDependency(pkg, "vite") ? "./node_modules/.bin/vite --host 127.0.0.1 --port {port} --strictPort"
+        : null;
+  return command ? PreviewConfigSchema.parse({ autoStart: true, kind: expo ? "expo-web" : "dev", trustCommand: true, command }) : null;
+}
+
+function createPreviewConfig(file: string, cwd: string): { reason: string } | null {
+  const config = detectedPreviewConfig(cwd);
+  if (!config) return { reason: "no browser preview was detected; add upstarts/<repo>/preview.json for this app" };
+  try {
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    const root = fs.realpathSync(getUpstartsDir());
+    if (fs.realpathSync(path.dirname(file)) !== path.join(root, path.basename(path.dirname(file)))) {
+      return { reason: "the managed preview config directory must stay inside upstarts" };
+    }
+    fs.writeFileSync(file, JSON.stringify(config, null, 2) + "\n", { flag: "wx", mode: 0o600 });
+    return null;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "EEXIST") return null;
+    return { reason: "the managed preview config could not be created; check upstarts directory permissions" };
+  }
+}
+
+function loadPreviewConfig(repoName: string | undefined, cwd?: string): LoadedConfig | { reason: string } {
   if (!repoName) return { reason: "the task has no repo to start a managed preview from" };
   const upstartName = repoName.match(/^[\w-]+\/([\w.-]+)$/)?.[1] ?? repoName;
   let file: string;
@@ -55,7 +93,11 @@ function loadPreviewConfig(repoName: string | undefined): LoadedConfig | { reaso
   } catch {
     return { reason: "the task's repo name is not valid for a managed preview" };
   }
-  if (!fs.existsSync(file)) return { reason: "the repo has no upstarts/<repo>/preview.json" };
+  if (!fs.existsSync(file)) {
+    if (!cwd) return { reason: "the repo has no upstarts/<repo>/preview.json" };
+    const failure = createPreviewConfig(file, cwd);
+    if (failure) return failure;
+  }
   let contents: string;
   try {
     contents = fs.readFileSync(file, "utf8");
@@ -78,21 +120,13 @@ function loadPreviewConfig(repoName: string | undefined): LoadedConfig | { reaso
 }
 
 export function isExpoProject(cwd: string): boolean {
-  const read = (name: string): Record<string, unknown> | null => {
-    try {
-      const value: unknown = JSON.parse(fs.readFileSync(path.join(cwd, name), "utf8"));
-      return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
-    } catch { return null; }
-  };
-  const pkg = read("package.json");
-  const dependencies = [pkg?.dependencies, pkg?.devDependencies, pkg?.peerDependencies];
-  if (dependencies.some(value => value && typeof value === "object" && Object.prototype.hasOwnProperty.call(value, "expo"))) return true;
-  const app = read("app.json");
+  if (hasDependency(readProjectJson(cwd, "package.json"), "expo")) return true;
+  const app = readProjectJson(cwd, "app.json");
   return Boolean(app && Object.prototype.hasOwnProperty.call(app, "expo") && app.expo && typeof app.expo === "object" && !Array.isArray(app.expo));
 }
 
 function previewConfig(repoName: string | undefined, cwd: string | undefined): LoadedConfig | { reason: string } {
-  const found = loadPreviewConfig(repoName);
+  const found = loadPreviewConfig(repoName, cwd);
   if ("reason" in found || found.config.kind === "static" || found.config.command) return found;
   if (cwd && isExpoProject(cwd)) {
     return { ...found, config: { ...found.config, kind: "expo-web", command: "npx --no-install expo start --web --port {port}" }, fingerprint: found.fingerprint + ":expo-web" };
@@ -294,7 +328,7 @@ function startDynamic(entry: Running, command: string): void {
   const script = `printf '${marker}%s\\n' "$$"\n${command.replaceAll("{port}", String(dynamic.backendPort))}`;
   void execExternal("/bin/sh", ["-c", script], {
     cwd: entry.cwd,
-    env: { ...process.env, PORT: String(dynamic.backendPort), HOST: "127.0.0.1", HOSTNAME: "127.0.0.1", BROWSER: "none" },
+    env: { ...process.env, PORT: String(dynamic.backendPort), HOST: "127.0.0.1", HOSTNAME: "127.0.0.1", BROWSER: "none", ...(command.startsWith("./node_modules/.bin/expo ") ? { CI: "1", EXPO_NO_WEB_SETUP: "1" } : {}) },
     timeoutMs: 4 * 60 * 60 * 1000,
     label: "preview:dynamic",
     managedService: true,
@@ -379,6 +413,15 @@ export async function ensurePreview(input: { taskId: string; repoName?: string; 
     return { state: "none", url: null, reason: "Command previews require explicit trustCommand opt-in." };
   }
   if (!input.cwd) return { state: "none", url: null, reason: isStatic ? "No checkout to serve the static preview from." : "No checkout to start the preview from." };
+  if (found.config.command?.startsWith("./node_modules/.bin/")) {
+    const binary = found.config.command.split(" ")[0];
+    if (!fs.existsSync(path.join(input.cwd, binary))) return { state: "none", url: null, reason: "The preview config is ready, but checkout dependencies are missing. Install them and retry QA." };
+    if (found.config.kind === "expo-web") {
+      const pkg = readProjectJson(input.cwd, "package.json");
+      const missing = ["react-dom", "react-native-web"].filter(name => !hasDependency(pkg, name));
+      if (missing.length) return { state: "none", url: null, reason: `The Expo preview config is ready, but web support needs ${missing.join(" and ")} in the checkout. Add web support and retry QA.` };
+    }
+  }
   let root: string | null;
   if (isStatic) root = staticRoot(input.cwd, found.config.directory!);
   else {

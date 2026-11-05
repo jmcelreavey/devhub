@@ -2,6 +2,21 @@
 
 User-visible changes, newest first. Versioned sections describe the public releases; Unreleased, when present, is work that has not shipped yet.
 
+## Unreleased
+
+### Added
+
+- **Git hub** (`/git`): a cross-repo rail with every local clone's branch, unpushed/behind counts, changed files, conflicts and last activity, plus the full git workspace for the selected repo. Filters include Needs attention, Conflicts, Changed, Behind and Unpushed; the sidebar row badges how many repos need attention.
+- Push, pull and fetch report **live progress**: elapsed seconds plus git's last line (object counts, hook output) instead of a silent spinner, and the operation is cancelled if the request goes away.
+
+### Changed
+
+- Git operations no longer wedge behind a leaked mutation lock. A child that is killed while stalled now settles within two seconds, the cross-process lock wait is bounded at 2 minutes with a warning, and a lease older than any legitimate operation is recovered automatically. SSH network operations fail fast (BatchMode, 10s connect timeout) instead of hanging until the timeout ceiling.
+- Long diffs render in chunks (1,200 lines at a time) and long changed-file lists cap at 300 rows with "show more", so a 40k-file repo no longer freezes the tab. The Changes/History header now has a Fetch / Pull / Push toolbar with counts, `⌘1-8` jumps between tabs, and SSE git events refresh the graph after external fetches.
+- The Git hub's overview snapshot is cached per repo (slow repositories back off for five minutes) and painted from the last snapshot on reload.
+
+- Notifications are the top-bar bell: a count badge (red for urgent), a popover with per-item open/dismiss and Mark all seen, per-source Show toggles (Pull requests, CI failing, Agent needs input, Plugins, Datadog on-call) and the Only PRs I own preference. The `/notifications` page and the urgent alert bar are removed; `/notifications` and `/briefing` redirect to `/work`.
+
 ## 2.2.4 — 2026-11-01
 
 ### Fixed

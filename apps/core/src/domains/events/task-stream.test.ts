@@ -1,4 +1,5 @@
 import fs from "node:fs/promises";
+import { readFileSync, readdirSync, readlinkSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, expect, it, onTestFinished, vi } from "vitest";
@@ -758,3 +759,41 @@ it("invalidates directory replacements even when no JSON filename is reported", 
     await fs.rm(root, { recursive: true, force: true });
   }
 });
+
+it.skipIf(process.platform !== "linux")("does not register watches inside ignored subtrees", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "devhub-stream-"));
+  const abort = new AbortController();
+  const countWatches = () => {
+    let total = 0;
+    for (const fd of readdirSync("/proc/self/fd")) {
+      try {
+        if (readlinkSync(`/proc/self/fd/${fd}`) !== "anon_inode:inotify") continue;
+        const info = readFileSync(`/proc/self/fdinfo/${fd}`, "utf8");
+        total += info.split("\n").filter((line) => line.startsWith("inotify")).length;
+      } catch {
+        // fd closed while iterating
+      }
+    }
+    return total;
+  };
+  try {
+    await fs.mkdir(path.join(root, "src"));
+    for (let index = 0; index < 100; index += 1) {
+      await fs.mkdir(path.join(root, "node_modules", `package-${index}`, "nested"), { recursive: true });
+    }
+    const baseline = countWatches();
+    const reader = taskEventStream([{
+      path: root,
+      domain: "git",
+      ignore: (relative) => relative.split(path.sep).includes("node_modules"),
+    }], abort.signal).getReader();
+    const decoder = new TextDecoder();
+    expect(decoder.decode((await reader.read()).value)).toContain("event: ready");
+    expect(countWatches() - baseline).toBeLessThan(20);
+    await fs.writeFile(path.join(root, "src", "file.ts"), "changed");
+    expect(decoder.decode((await reader.read()).value)).toContain("event: invalidate");
+  } finally {
+    abort.abort();
+    await fs.rm(root, { recursive: true, force: true });
+  }
+}, 15_000);

@@ -1,14 +1,12 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useId, type ReactNode } from "react";
 import { ChevronDown, ChevronRight, Search } from "lucide-react";
 
 /**
  * A counted, collapsible hub section with an optional filter box.
  *
- * The repo hub used to render every backlog item at full weight, so a repo with
- * a dozen queued tickets buried the two things actually in progress. Anything
- * that isn't active work lives behind one of these instead.
+ * Backlog and completed work stay compact until the user needs their rows.
  */
 export function HubSection({
   title,
@@ -37,14 +35,16 @@ export function HubSection({
   sharedChips?: ReactNode;
   children: ReactNode;
 }) {
+  const contentId = useId();
   const searchable = Boolean(onQueryChange) && count >= searchThreshold;
   return (
     <section className="mt-5">
       <div className="flex items-center justify-between gap-3 mb-2">
         <button
           type="button"
-          className="flex items-center gap-1 text-sm font-semibold text-text"
+          className="flex min-h-11 items-center gap-1 text-sm font-semibold text-text"
           aria-expanded={open}
+          aria-controls={contentId}
           onClick={() => onOpenChange(!open)}
         >
           {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
@@ -53,8 +53,8 @@ export function HubSection({
         </button>
         {open ? actions : null}
       </div>
-      {open ? (
-        <>
+      <div id={contentId} hidden={!open}>
+        {open ? <>
           {sharedChips ? <div className="repo-hub-section-shared">{sharedChips}</div> : null}
           {searchable ? (
             <div className="repo-hub-section-search">
@@ -69,8 +69,8 @@ export function HubSection({
             </div>
           ) : null}
           {children}
-        </>
-      ) : null}
+        </> : null}
+      </div>
     </section>
   );
 }

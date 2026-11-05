@@ -200,6 +200,13 @@ async function currentBranchUnpushedArgs(cwd: string): Promise<string[] | null> 
  */
 export async function gitUnpushedCount(cwd: string): Promise<number> {
   try {
+    // Read the current branch and its tracking count together. Repo grids call
+    // this for every checkout, so separate rev-parse/log calls add up quickly.
+    const tracking = await execExternal("git", [
+      "for-each-ref", "--format=%(HEAD)%09%(upstream)%09%(upstream:track)", "refs/heads",
+    ], { cwd });
+    const current = tracking.stdout.split("\n").find(line => line.startsWith("*\t"))?.split("\t");
+    if (current?.[1]) return Number(/ahead (\d+)/.exec(current[2] ?? "")?.[1] ?? 0);
     const rangeArgs = await currentBranchUnpushedArgs(cwd);
     if (!rangeArgs) return 0;
     const { stdout } = await execExternal(

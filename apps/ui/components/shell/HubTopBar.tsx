@@ -6,6 +6,7 @@ import { ContentSyncIndicator } from "@/components/runs/ContentSyncIndicator";
 import { AccentPicker } from "@/components/shell/AccentPicker";
 import { ProfileSwitcher } from "@/components/shell/ProfileSwitcher";
 import { QuickActions } from "@/components/shell/QuickActions";
+import { NotificationBell } from "@/components/shell/NotificationBell";
 import { SectionTabs } from "@/components/shell/SectionTabs";
 import { FocusTimer } from "@/components/tasks/FocusTimer";
 import { HoverTip } from "@/components/ui/HoverTip";
@@ -52,6 +53,7 @@ export function HubTopBar() {
           </div>
         </div>
         <div role="group" className="hub-toolbar-group hub-preferences" aria-label="Preferences">
+          <NotificationBell />
           <AccentPicker />
           <SetupHeaderButton />
           <ProfileSwitcher />

@@ -145,7 +145,7 @@ function AgentControls({ card, onRefresh }: { card: BoardCard & { task: NonNulla
   const complete = useTaskCompletion();
   const toast = useToast();
   const agent = useTaskAgentActions({ task: card.task, date: card.date, enabled: !card.taskDone && !card.task.abandonedAt, repoName: card.repo, onComplete: () => void complete(card), onAbandon: (reason) => void abandonTask(card.taskId, reason).then((result) => { if (!result.ok) toast.error(result.error ?? "Couldn't abandon the task."); onRefresh(); }), onAutoStarted: onRefresh });
-  const items = agent.menuItems.filter((item) => ["plan-agent", "implement-agent", "resume-agent", "start-auto-tiers", "start-auto-without-review", "copy-plan", "auto-mode"].includes(item.id));
+  const items = agent.menuItems.filter((item) => ["chat-agent", "plan-agent", "implement-agent", "resume-agent", "start-auto-tiers", "start-auto-without-review", "copy-plan", "auto-mode"].includes(item.id));
   return <>
     <div className={styles.links}>{items.map((item) => <button type="button" key={item.id} className="btn btn-ghost" disabled={item.disabled} onClick={() => void item.onSelect()}>{item.label}</button>)}</div>
     {agent.dialogs}

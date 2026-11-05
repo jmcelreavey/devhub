@@ -15,6 +15,7 @@ import { GitDiffView } from "./GitDiffView";
 import { RepoSplit } from "./SplitResize";
 import {
 fetchGitJson,
+gitFailureMessage,
 IconBtn,
 postGitAction,
 readError,
@@ -129,7 +130,7 @@ export function StashPanel({
           await refresh();
           return;
         }
-        throw new Error(result.kind === "error" ? result.message : result.kind);
+        throw new Error(gitFailureMessage(result));
       }
       toast.success(
         action === "save"

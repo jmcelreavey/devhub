@@ -7,7 +7,7 @@ import { FetchError } from "@/components/ui/FetchError";
 import { formatRelative } from "@/lib/utils";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { InlineCodeText } from "@/components/ui/InlineCodeText";
-import type { ProviderUsage, UsageMeter, UsageSpend } from "../../../core/src/lib/agent-usage/types";
+import type { ProviderUsage, UsageBalance, UsageMeter, UsageSpend } from "../../../core/src/lib/agent-usage/types";
 
 // The server caches each provider for five minutes; polling faster only re-reads that cache.
 const REFRESH_MS = 5 * 60_000;
@@ -27,8 +27,8 @@ export default function Usage() {
   }
   return <div className="max-w-3xl mx-auto p-6 space-y-4">
     <div>
-      <h2 className="text-xl font-semibold">Plan usage</h2>
-      <p className="text-sm text-text-muted mt-1">How much of each subscription you&apos;ve used, read from this machine&apos;s sign-ins. Updates every five minutes. Providers you don&apos;t use need no setup.</p>
+      <h2 className="text-xl font-semibold">AI usage</h2>
+      <p className="text-sm text-text-muted mt-1">Subscriptions and API credits read from this machine&apos;s sign-ins and saved keys. Updates every five minutes. Providers you don&apos;t use need no setup.</p>
     </div>
     {retryError && <p role="alert" className="text-sm text-danger">{retryError}</p>}
     {error ? <FetchError message="Could not load usage." onRetry={() => void mutate()} /> : !data ? <SkeletonRows count={5} height={96} /> : data.providers.map((provider) => <ProviderCard key={provider.id} provider={provider} retry={() => void retry(provider.id)} busy={retrying !== undefined} />)}
@@ -45,7 +45,10 @@ function ProviderCard({ provider, retry, busy }: { provider: ProviderUsage; retr
       {provider.status === "unavailable" && <span className="badge badge-muted ml-auto">Not available</span>}
     </header>
     {provider.meters.map((meter) => <Meter key={meter.label} meter={meter} />)}
-    {provider.spend.length > 0 && <dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">{provider.spend.map((spend) => <SpendRow key={`${spend.source}:${spend.label}`} spend={spend} />)}</dl>}
+    {(provider.balance || provider.spend.length > 0) && <dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
+      {provider.balance && <BalanceRow balance={provider.balance} />}
+      {provider.spend.map((spend) => <SpendRow key={`${spend.source}:${spend.label}`} spend={spend} />)}
+    </dl>}
     {muted ? <UnavailableBody provider={provider} retry={retry} busy={busy} /> : provider.message && <p className="text-xs text-text-subtle"><InlineCodeText text={provider.message} /></p>}
   </section>;
 }
@@ -58,7 +61,7 @@ function UnavailableBody({ provider, retry, busy }: { provider: ProviderUsage; r
     <p className={provider.status === "error" ? "text-sm text-danger" : "text-sm"}>{headline}</p>
     {provider.command && <div className="flex items-center gap-2"><code className="px-2 py-1 rounded bg-bg text-xs">{provider.command}</code><CopyButton text={provider.command} label={provider.command} /></div>}
     <div className="flex items-center gap-3 flex-wrap">
-      <button type="button" className="btn btn-ghost" disabled={busy} onClick={retry}>Retry {provider.name} usage</button>
+      {provider.retryable !== false && <button type="button" className="btn btn-ghost" disabled={busy} onClick={retry}>Retry {provider.name} usage</button>}
       {hasDetails && <details className="text-xs text-text-muted flex-1 min-w-0">
         <summary className="cursor-pointer">Details</summary>
         <div className="mt-2 space-y-1.5">
@@ -91,6 +94,13 @@ function Meter({ meter }: { meter: UsageMeter }) {
 
 function formatMoney(amount: number, currency: string): string {
   return new Intl.NumberFormat(undefined, { style: "currency", currency }).format(amount);
+}
+
+function BalanceRow({ balance }: { balance: UsageBalance }) {
+  return <div>
+    <dt className="text-text-muted text-xs">{balance.label}</dt>
+    <dd className="tabular-nums font-medium mt-0.5">{formatMoney(balance.amount, balance.currency)}</dd>
+  </div>;
 }
 
 function SpendRow({ spend }: { spend: UsageSpend }) {

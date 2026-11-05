@@ -67,6 +67,7 @@ import { shareGitShowPatch } from "./shareGitPatch";
 import {
 CHECKOUT_AUTOSTASH,
 fetchGitJson,
+gitFailureMessage,
 postGitAction,
 repoApi,
 switchedToast,
@@ -159,6 +160,7 @@ export function HistoryPanel({
   onMutate,
   onConflict,
   onHookFailure,
+  onIndexLock,
   pushing = false,
   onPush,
   wip = null,
@@ -176,6 +178,7 @@ export function HistoryPanel({
   /** Shared with the other tabs so a sync conflict lands in the same place. */
   onConflict?: (c: StashConflictPayload) => Promise<void>;
   onHookFailure?: (f: GitHookFailurePayload) => void;
+  onIndexLock?: (message: string) => void;
   /** Workspace-level push so History shows the same spinner as the header. */
   pushing?: boolean;
   onPush?: () => void;
@@ -750,7 +753,7 @@ export function HistoryPanel({
         repoApi(repoName, "/branches"),
         opts.body,
       );
-      if (!result.ok) throw new Error(result.kind === "error" ? result.message : result.kind);
+      if (!result.ok) throw new Error(gitFailureMessage(result));
       toast.success(opts.successToast(result.json));
       opts.onSuccess?.();
       onMutate();
@@ -797,6 +800,10 @@ export function HistoryPanel({
         }
         if (result.kind === "hook") {
           onHookFailure?.(result.hook);
+          return;
+        }
+        if (result.kind === "index-lock") {
+          onIndexLock?.(result.message);
           return;
         }
         throw new Error(result.message);
@@ -860,6 +867,10 @@ export function HistoryPanel({
         }
         if (result.kind === "hook") {
           onHookFailure?.(result.hook);
+          return;
+        }
+        if (result.kind === "index-lock") {
+          onIndexLock?.(result.message);
           return;
         }
         throw new Error(result.message);
@@ -938,7 +949,7 @@ export function HistoryPanel({
             await refresh();
             return;
           }
-          throw new Error(result.kind === "error" ? result.message : result.kind);
+          throw new Error(gitFailureMessage(result));
         }
         const labels: Record<string, string> = {
           "cherry-pick": `Cherry-picked ${commit.shortHash}`,

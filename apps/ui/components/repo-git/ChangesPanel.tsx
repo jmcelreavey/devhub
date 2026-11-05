@@ -51,6 +51,7 @@ IconBtn,
 postGitAction,
 readCommitModePref,
 readError,
+gitFailureMessage,
 repoApi,
 writeCommitModePref,
 type CommitMode,
@@ -223,6 +224,7 @@ export function ChangesPanel({
   onMutate,
   onConflict,
   onHookFailure,
+  onIndexLock,
   onVisibleDirtyChange,
   pushing,
   onPush,
@@ -505,7 +507,13 @@ export function ChangesPanel({
             : { action };
       if (action === "discard") payload.scope = options?.scope ?? "unstaged";
       const result = await postGitAction(repoApi(repoName, "/git/stage"), payload);
-      if (!result.ok) throw new Error(result.kind === "error" ? result.message : result.kind);
+      if (!result.ok) {
+        if (result.kind === "index-lock") {
+          onIndexLock?.(result.message);
+          return;
+        }
+        throw new Error(gitFailureMessage(result));
+      }
       toast.success(
         options?.successLabel ??
           (action === "stage" ? "Staged" : action === "unstage" ? "Unstaged" : "Discarded"),
@@ -526,7 +534,7 @@ export function ChangesPanel({
     } finally {
       setActing(null);
     }
-  }, [confirm, onMutate, refresh, repoName, selected, toast]);
+  }, [confirm, onIndexLock, onMutate, refresh, repoName, selected, toast]);
 
   async function discardAllVisible(kind: "staged" | "unstaged", files: StatusFile[]) {
     const paths = files.map((f) => f.path);
@@ -569,7 +577,13 @@ export function ChangesPanel({
         hunkIndex: opts.hunkIndex,
         lineIndexes: opts.lineIndexes,
       });
-      if (!result.ok) throw new Error(result.kind === "error" ? result.message : result.kind);
+      if (!result.ok) {
+        if (result.kind === "index-lock") {
+          onIndexLock?.(result.message);
+          return;
+        }
+        throw new Error(gitFailureMessage(result));
+      }
       const count = opts.lineIndexes?.length ?? 0;
       const what = count > 0 ? `${count} line${count === 1 ? "" : "s"}` : "hunk";
       toast.success(selected.staged ? `Unstaged ${what}` : `Staged ${what}`);
@@ -610,6 +624,10 @@ export function ChangesPanel({
         }
         if (result.kind === "hook") {
           onHookFailure(result.hook);
+          return;
+        }
+        if (result.kind === "index-lock") {
+          onIndexLock?.(result.message);
           return;
         }
         throw new Error(result.message);
@@ -1369,6 +1387,9 @@ function DirectoryPreview({
   );
 }
 
+/** File rows render a chunk at a time — a 46k-change repo must not freeze the tab. */
+const FILE_LIST_CHUNK = 300;
+
 function FileSection({
   title,
   files,
@@ -1395,6 +1416,9 @@ function FileSection({
   onRowDragStart?: (event: React.PointerEvent, file: StatusFile) => void;
   onRowContextMenu?: (event: React.MouseEvent, file: StatusFile) => void;
 }) {
+  const [renderLimit, setRenderLimit] = useState(FILE_LIST_CHUNK);
+  const shown = files.length > renderLimit ? files.slice(0, renderLimit) : files;
+  const hidden = files.length - shown.length;
   return (
     <div
       className="repo-git-file-section"
@@ -1411,7 +1435,7 @@ function FileSection({
       {files.length === 0 ? (
         <div className="repo-git-empty-sm">Nothing here</div>
       ) : (
-        files.map((f) => {
+        shown.map((f) => {
           const active = selected?.path === f.path && selected.staged === selectStaged;
           return (
             <div
@@ -1433,6 +1457,15 @@ function FileSection({
           );
         })
       )}
+      {hidden > 0 ? (
+        <button
+          type="button"
+          className="btn btn-ghost repo-git-file-more"
+          onClick={() => setRenderLimit((limit) => limit + FILE_LIST_CHUNK)}
+        >
+          Show {Math.min(FILE_LIST_CHUNK, hidden).toLocaleString()} more files ({hidden.toLocaleString()} hidden)
+        </button>
+      ) : null}
     </div>
   );
 }

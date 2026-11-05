@@ -2,7 +2,8 @@
 import { useState } from "react";
 import { useRouter } from "@/lib/navigation";
 import { mutate } from "swr";
-import { Bot, Copy, ExternalLink, FilePen, FileText, Link2, ListPlus, RefreshCw } from "lucide-react";
+import { Bot, Copy, ExternalLink, FilePen, FileText, Link2, ListPlus, MessageSquare, RefreshCw } from "lucide-react";
+import { chatAboutTicket } from "@/lib/agent/chat-about";
 import type { JiraTicket } from "../../../core/src/lib/jira/client";
 import { copyTextAndToast } from "@/lib/pr-slack";
 import { createOrOpenVaultNote } from "@/lib/create-vault-note";
@@ -164,6 +165,12 @@ export function useJiraTicketMenu(ticket: JiraTicket, onTransitioned?: () => voi
             label: noteExists ? "Open note" : "Create note",
             icon: <FileText size={12} />,
             onSelect: () => void openNote(),
+          },
+          {
+            id: "chat-ticket",
+            label: "Chat about ticket…",
+            icon: <MessageSquare size={12} aria-hidden />,
+            onSelect: () => chatAboutTicket(ticket),
           },
         ],
       },

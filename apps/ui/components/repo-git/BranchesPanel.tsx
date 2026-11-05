@@ -48,6 +48,7 @@ export function BranchesPanel({
   onMutate,
   onConflict,
   onHookFailure,
+  onIndexLock,
   pushing,
   onPush,
 }: GitPanelHandlers & {
@@ -121,6 +122,10 @@ export function BranchesPanel({
             onHookFailure(result.hook);
             return false;
           }
+          if (result.kind === "index-lock") {
+            onIndexLock?.(result.message);
+            return false;
+          }
           throw new Error(result.message);
         }
         const label = (extra?.newBranch ?? extra?.branch) as unknown;
@@ -150,7 +155,7 @@ export function BranchesPanel({
         setActing(null);
       }
     },
-    [repoName, onConflict, onHookFailure, onMutate, refresh, toast],
+    [repoName, onConflict, onHookFailure, onIndexLock, onMutate, refresh, toast],
   );
 
   const checkoutBranch = useCallback(

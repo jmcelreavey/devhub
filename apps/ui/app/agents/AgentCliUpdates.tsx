@@ -69,6 +69,6 @@ export function AgentCliUpdates() {
         </li>
       )}</ol> : <p className="mt-2 text-xs text-text-subtle">No checks recorded yet.</p>}
     </details>
-    <p className="text-xs text-text-subtle">npm installations continue through Safe-Chain. Holding a version prevents future updates; it does not downgrade an installed CLI.</p>
+    <p className="text-xs text-text-subtle">npm-based updates run outside Safe-Chain so they can&apos;t be blocked. Holding a version prevents future updates; it does not downgrade an installed CLI.</p>
   </section>;
 }

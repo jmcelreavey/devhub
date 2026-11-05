@@ -1,0 +1,305 @@
+/* ─── Shared card component ─── */
+.card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+/* Static cards don't shift on hover — hover chrome is reserved for
+   interactive surfaces (rows, tiles, buttons). A global card:hover read as
+   "clickable" everywhere, which was a lie for most of them. */
+
+.card-header {
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border-muted);
+  background: var(--bg-elevated);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  text-transform: none;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* Hover-reveal actions: always visible on touch / coarse pointers */
+.reveal-on-hover {
+  opacity: 1;
+  transition: opacity var(--dur-quick) var(--ease-swift);
+}
+@media (hover: hover) and (pointer: fine) {
+  .reveal-on-hover {
+    opacity: 0;
+  }
+  .group:hover .reveal-on-hover,
+  .group:focus-within .reveal-on-hover,
+  .group\/item:hover .reveal-on-hover,
+  .group\/item:focus-within .reveal-on-hover,
+  .reveal-on-hover:has(:focus-visible),
+  .reveal-on-hover:focus-visible {
+    opacity: 1;
+  }
+}
+
+.card-body {
+  padding: 16px;
+}
+
+/* ─── Badge ─── */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.5;
+}
+.badge-success {
+  background: var(--success-dim);
+  color: var(--success);
+}
+.badge-warning {
+  background: var(--warning-dim);
+  color: var(--warning);
+}
+.badge-danger {
+  background: var(--danger-dim);
+  color: var(--danger);
+}
+.badge-muted {
+  background: var(--bg-overlay);
+  color: var(--text-muted);
+}
+.badge-accent {
+  background: var(--accent-dim);
+  color: var(--accent-text, var(--accent));
+}
+
+/* ─── Button ─── */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 5px var(--space-3);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background var(--dur-quick) var(--ease-swift),
+    color var(--dur-quick) var(--ease-swift),
+    border-color var(--dur-quick) var(--ease-swift),
+    opacity var(--dur-quick) var(--ease-swift);
+  border: 1px solid transparent;
+  line-height: 1.4;
+}
+.btn-primary {
+  background: var(--accent);
+  color: var(--accent-fg);
+  border-color: var(--accent);
+}
+.btn-primary:hover {
+  background: var(--accent-hover);
+}
+.btn-ghost {
+  background: transparent;
+  color: var(--text-muted);
+  border-color: var(--border);
+}
+.btn-ghost:hover {
+  background: var(--bg-elevated);
+  color: var(--text);
+}
+.btn-danger-ghost {
+  background: transparent;
+  color: var(--danger);
+  border-color: var(--danger);
+}
+.btn-danger-ghost:hover {
+  background: var(--danger-dim);
+}
+.btn:not(:disabled):active,
+.btn.is-active {
+  opacity: 0.88;
+}
+.btn:disabled {
+  background: var(--bg-overlay);
+  color: var(--text-subtle);
+  border-color: var(--border-muted);
+  opacity: 1;
+  cursor: not-allowed;
+}
+.btn-primary:disabled {
+  background: var(--bg-overlay);
+  color: var(--text);
+  border-color: var(--border);
+}
+.btn[data-state="error"],
+.btn.is-error {
+  border-color: var(--danger);
+  color: var(--danger);
+  background: var(--danger-dim);
+}
+.btn[data-state="success"],
+.btn.is-success {
+  border-color: var(--success);
+  color: var(--success);
+  background: var(--success-dim);
+}
+
+/* ─── Input ─── */
+.input {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: 13px;
+  padding: 6px 10px;
+  width: 100%;
+}
+.input::placeholder {
+  color: var(--text-subtle);
+}
+
+
+/* ─── Page layout ─── */
+/* Constrained measure: full-bleed reading width on a 27" monitor is
+   hostile. Content centers beyond --page-max; tables still get 1240px. */
+.page-wrapper {
+  width: 100%;
+  max-width: var(--page-max);
+  min-width: 0;
+  margin: 0 auto;
+  padding: var(--space-6);
+}
+
+@media (max-width: 640px) {
+  .page-wrapper {
+    padding: var(--space-4);
+  }
+}
+
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-5);
+  gap: var(--space-3);
+  /* Action bars grow with the page (repo pages carry branch badges plus
+     Terminal/IDE/Upstart launchers). Without wrapping they run off a phone
+     viewport and the last control is clipped at the edge. */
+  flex-wrap: wrap;
+}
+
+.page-title {
+  font-size: 19px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  color: var(--text);
+  line-height: 1.25;
+}
+
+.page-subtitle {
+  font-size: 12.5px;
+  color: var(--text-subtle);
+  margin-top: 3px;
+}
+
+/* ─── Loading skeleton ─── */
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--bg-elevated) 25%,
+    var(--bg-overlay) 50%,
+    var(--bg-elevated) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+  border-radius: var(--radius-sm);
+}
+@keyframes shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+
+/* ─── Focus ring (a11y) — the one definition ───
+   Every theme inherits this. A theme retunes the three tokens; it never
+   re-declares `outline` on :focus-visible (three theme files used to, with a
+   3px outer offset, and stacked on top of the component rules).
+
+   - Keyboard focus only (:focus-visible). A mouse click on a button or menu
+     item shows nothing; text fields always match, so they ring when clicked.
+   - One ring per control, on its outer visual box. A wrapper around a bare
+     input rings through :has() and silences the input inside it.
+   - Inset: a ring inside the control is never clipped by an overflow:hidden
+     parent and never lands on a neighbour.
+   - No border-radius here: the ring follows the control's own shape. */
+:root {
+  --focus-ring-color: var(--accent-text, var(--accent));
+  --focus-ring-width: 2px;
+  --focus-ring-offset: -2px;
+}
+:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-ring-offset);
+}
+/* An accent fill would swallow an accent ring. */
+:is(.btn-primary, .welcome-action.primary):focus-visible {
+  outline-color: var(--accent-fg);
+}
+/* Inline links have no box to sit inside; hug the glyphs instead. */
+a:not([class]):focus-visible,
+.markdown-body a:focus-visible {
+  outline-offset: 1px;
+  border-radius: 2px;
+}
+/* Wrapper fields: .focus-host is the opt-in for a box that draws the border
+   around a bare <input>. The wrapper rings; the input inside does not. The
+   command palette marks focus with its own bottom bar instead. */
+:is(.focus-host, .search-field, .repo-git-filter-search, .repo-git-branch-filter):has(
+    :is(input, textarea, select):focus-visible
+  ) {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-ring-offset);
+}
+:is(.focus-host, .search-field, .repo-git-filter-search, .repo-git-branch-filter, .palette-input)
+  :is(input, textarea, select):focus-visible,
+.palette-input:focus-visible {
+  outline: none;
+}
+
+
+/* ── Theme quarantine: tone panels (avoid multi-prop style={{}}) ── */
+.tone-panel {
+  border-radius: var(--radius-md, 8px);
+  border: 1px solid var(--border-muted);
+  background: var(--bg-elevated);
+  padding: 1rem;
+}
+.tone-panel--danger {
+  border-color: color-mix(in oklab, var(--danger) 30%, transparent);
+}
+.tone-panel--warning {
+  border-color: color-mix(in oklab, var(--warning) 30%, transparent);
+}
+.tone-panel--accent {
+  border-color: color-mix(in oklab, var(--accent) 35%, transparent);
+  background: color-mix(in oklab, var(--accent) 8%, var(--bg-elevated));
+}
+.tone-panel--muted {
+  border-color: color-mix(in oklab, var(--text-subtle) 35%, transparent);
+  background: color-mix(in oklab, var(--text-subtle) 8%, var(--bg-elevated));
+}
+.tone-panel--warning-banner {
+  border-color: color-mix(in oklab, var(--warning) 35%, transparent);
+  background: color-mix(in oklab, var(--warning) 8%, var(--bg-elevated));
+}

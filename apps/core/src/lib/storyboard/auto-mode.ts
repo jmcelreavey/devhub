@@ -14,7 +14,7 @@ import type { TaskNoteStatus } from "../../../../../packages/shared/task-note/me
 import type { TaskNoteView } from "../../../../../packages/shared/task-note/sections.ts";
 import type { ModelTier } from "../../../../../packages/shared/ui-lib/storyboard/model-tiers-shared";
 import { autoLaunchCheckout, autoLaunchPrompt, autoStepChoice, autoTierDispatch } from "../../../../../packages/shared/ui-lib/storyboard/launch-options";
-import { tierStepForPhase } from "../../../../../packages/shared/ui-lib/storyboard/auto-tiers";
+import { isCheckoutContention, tierStepForPhase } from "../../../../../packages/shared/ui-lib/storyboard/auto-tiers";
 import { StoryboardError } from "./errors";
 import { columnForPhase, stepForPhase } from "../../../../../packages/shared/ui-lib/storyboard/auto-phase";
 import { AUTO_PHASE_LABEL } from "../../../../../packages/shared/ui-lib/storyboard/orchestration";
@@ -72,6 +72,7 @@ export interface AutoDeps {
   findTask: (taskId: string, taskDate: string) => Promise<Task | null>;
   noteView: (task: Task, taskDate: string) => { view: TaskNoteView | null; markdown: string | null; notePath: string };
   runStatus: (taskId: string, runId: string) => TaskAgentRunStatus | undefined;
+  runError?: (runId: string) => string | undefined;
   /** The task's agent runs, so a run the user started or resumed outside auto mode (Paseo, a follow-up) can be adopted. */
   taskRuns?: (taskId: string) => Array<{ runId: string; role?: string; status: TaskAgentRunStatus; startedAt: string }>;
   /** Where a finished run did its work (its worktree, or the checkout). */
@@ -113,6 +114,14 @@ function isAdvancing(record: OrchestrationRecord | null): record is Orchestratio
 
 function currentRun(auto: AutoState): AutoRun | undefined {
   return auto.runs.filter((run) => run.feedbackKey === auto.feedbackKey && run.phase === auto.phase && run.round === auto.round && run.attempt === auto.attempt).at(-1);
+}
+
+export function retryTierAttempt(auto: AutoState, runError?: (runId: string) => string | undefined): number {
+  const waiting = auto.waiting;
+  const lastRun = currentRun(auto);
+  const checkoutContention = (waiting?.kind === "failure" || waiting?.kind === "queued")
+    && (isCheckoutContention(waiting.reason) || (lastRun ? isCheckoutContention(runError?.(lastRun.runId)) : false));
+  return (auto.tierAttempt ?? auto.attempt) + (checkoutContention ? 0 : 1);
 }
 
 /** What tells this run from the same step's earlier ones in Paseo's list: its retry or fix round. */
@@ -170,6 +179,8 @@ function wait(record: OrchestrationRecord & { auto: AutoState }, waiting: Omit<A
 }
 
 function enter(record: OrchestrationRecord & { auto: AutoState }, phase: AutoPhase, patch: Partial<AutoState> = {}, madeModelDecision?: boolean): void {
+  if (phase !== record.auto.phase || (patch.round !== undefined && patch.round !== record.auto.round) || patch.attempt === 0) delete record.auto.tierAttempt;
+  else if (record.auto.tierAttempt !== undefined && patch.attempt !== undefined && patch.tierAttempt === undefined) record.auto.tierAttempt += Math.max(0, patch.attempt - record.auto.attempt);
   Object.assign(record.auto, patch);
   record.auto.phase = phase;
   delete record.auto.waiting;
@@ -772,6 +783,8 @@ async function stepOnce(record: OrchestrationRecord & { auto: AutoState }, deps:
       next: auto.phase,
     });
   }
+  const runError = deps.runError?.(run.runId);
+  if (isCheckoutContention(runError)) return stop(ctx, samePhase(auto), { kind: "failure", reason: runError! });
   return stop(ctx, samePhase(auto), {
     kind: "failure",
     reason: status === "paused" ? `The ${AUTO_PHASE_LABEL[auto.phase]} run paused. Open it, or Retry to start it again on a higher tier.` : `The ${AUTO_PHASE_LABEL[auto.phase]} run ${status}. Retry to run it again on a higher tier.`,
@@ -808,7 +821,7 @@ export interface RetryOutcome {
  * carry on. A record started before auto mode existed is upgraded here, so it
  * only advances when the user asks it to.
  */
-export async function retryAuto(taskId: string, idempotencyKey: string, origin: string, notesDir: string, planRunDone: (record: OrchestrationRecord) => boolean, guidance?: string): Promise<RetryOutcome> {
+export async function retryAuto(taskId: string, idempotencyKey: string, origin: string, notesDir: string, planRunDone: (record: OrchestrationRecord) => boolean, guidance?: string, runError?: (runId: string) => string | undefined): Promise<RetryOutcome> {
   let changed = false;
   let refusal: string | null = null;
   const result = await mutateOrchestration(taskId, idempotencyKey, (current) => {
@@ -841,9 +854,10 @@ export async function retryAuto(taskId: string, idempotencyKey: string, origin: 
         break;
       case "failure":
       case "queued": {
+        const tierAttempt = retryTierAttempt(auto, runError);
         const review = auto.phase === "verify" && auto.verify?.reviewDone
           ? { reviewRunId: auto.verify.reviewRunId, reviewDone: true } : {};
-        enter(record, auto.phase, { attempt: auto.attempt + 1, ...(auto.phase === "verify" ? { verify: review } : {}) });
+        enter(record, auto.phase, { attempt: auto.attempt + 1, tierAttempt, ...(auto.phase === "verify" ? { verify: review } : {}) });
         break;
       }
       default:

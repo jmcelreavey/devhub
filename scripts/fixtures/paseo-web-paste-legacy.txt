@@ -1,8 +1,6 @@
-/**
- * Shape-checked adapter for Paseo's web-only paste effect. The upstream
- * attachment conversion and draft store remain responsible for persisted images.
- */
-export function installPasteGuard(input, latest, collect, convert) {
+// Paste effect and submit control from @getpaseo/server 0.13.0.
+// Source: https://registry.npmjs.org/@getpaseo/server/-/server-0.13.0.tgz
+/* devhub-paste-v1:start */function installPasteGuard(input, latest, collect, convert) {
   if (!input) return;
   const root = input.closest('[data-testid="message-input-root"]') || input.parentElement;
   let pending = 0, disposed = false, notice, dismissTimer;
@@ -106,59 +104,5 @@ export function installPasteGuard(input, latest, collect, convert) {
     root?.removeEventListener("click", block, true);
     if (!pending) notice?.remove();
   };
-}
-
-const MARKER = "/* devhub-paste-v1:start */";
-const END = "/* devhub-paste-v1:end */";
-const count = (source, text) => source.split(text).length - 1;
-
-// Match the whole known effect, allowing module and prop aliases to change between builds.
-// A changed implementation must be reviewed; the daemon's release number is irrelevant.
-function pasteEffect(bundle) {
-  const pattern = /function (\w+)\(e\)\{const t=\(0,(\w+)\.c\)\(8\),\{textarea:(\w+),isConnected:(\w+),disabled:(\w+),isDictating:(\w+),isRealtimeVoiceForCurrentAgent:(\w+),onAddImages:(\w+)\}=e;[\s\S]{0,1500}?\(0,(\w+)\.useEffect\)\(f,h\)\}/g;
-  const compatible = [];
-  for (const match of bundle.matchAll(pattern)) {
-    const [source, hook, compiler, input, connected, disabled, dictating, voice, add, react] = match;
-    const platform = source.match(/if\(!([\w]+)\.isWeb\|\|!/)?.[1];
-    const attachments = source.match(/\(0,(\w+)\.collectImageFilesFromClipboardData\)/)?.[1];
-    const report = source.match(/\.catch\((\w+)\)\)/)?.[1];
-    if (!platform || !attachments || !report) continue;
-    const expected = `function ${hook}(e){const t=(0,${compiler}.c)(8),{textarea:${input},isConnected:${connected},disabled:${disabled},isDictating:${dictating},isRealtimeVoiceForCurrentAgent:${voice},onAddImages:${add}}=e;let f,h;t[0]!==${disabled}||t[1]!==${connected}||t[2]!==${dictating}||t[3]!==${voice}||t[4]!==${add}||t[5]!==${input}?(f=()=>{if(!${platform}.isWeb||!${add})return;if(!${input})return;let e=!1;const t=t=>{if(!${connected}||${disabled}||${dictating}||${voice})return;const n=(0,${attachments}.collectImageFilesFromClipboardData)(t.clipboardData);0!==n.length&&(t.preventDefault(),(0,${attachments}.filesToImageAttachments)(n).then(t=>{e||0===t.length||${add}(t)}).catch(${report}))};return ${input}.addEventListener("paste",t),()=>{e=!0,${input}.removeEventListener?.("paste",t)}},h=[${disabled},${input},${connected},${dictating},${voice},${add}],t[0]=${disabled},t[1]=${connected},t[2]=${dictating},t[3]=${voice},t[4]=${add},t[5]=${input},t[6]=f,t[7]=h):(f=t[6],h=t[7]),(0,${react}.useEffect)(f,h)}`;
-    if (source === expected) compatible.push({ source, hook, react, platform, attachments });
-  }
-  return compatible.length === 1 ? compatible[0] : null;
-}
-
-function submitControl(bundle) {
-  const pattern = /\{shouldShow:(\w+),canPressLoadingButton:(\w+),onSubmitLoadingPress:(\w+),onDefaultSendAction:(\w+),isSendButtonDisabled:u,submitAccessibilityLabel:b,sendButtonCombinedStyle:p,isSubmitLoading:f,submitIcon:h,submitLabel:y,submitButtonTestID:(\w+),buttonIconSize:\w+,sendKeys:x,sendTooltipLabel:C\}=e;if\(!\1\)return null;const I=\2\?\3:\4;/g;
-  const matches = [...bundle.matchAll(pattern)];
-  if (matches.length !== 1) return null;
-  const [, , stop, , , testId] = matches[0];
-  const original = `onPress:I,disabled:u,accessibilityLabel:b,accessibilityRole:"button",testID:${testId},style:p,children:R`;
-  const marked = original.replace("testID:" + testId, `testID:${testId}??(${stop}?undefined:"devhub-message-submit")`);
-  if (count(bundle, original) + count(bundle, marked) !== 1) return null;
-  return { original, marked };
-}
-
-export function withPasteGuard(bundle) {
-  const control = submitControl(bundle);
-  if (!control) return null;
-  const start = bundle.indexOf(MARKER), end = bundle.indexOf(END);
-  const marked = start !== -1 || end !== -1;
-  let effect;
-  if (marked) {
-    if (count(bundle, MARKER) !== 1 || count(bundle, END) !== 1 || end <= start) return null;
-    const source = bundle.slice(start + MARKER.length, end);
-    const hook = source.match(/function (\w+)\(e\)\{const latest=\(0,(\w+)\.useRef\)\(e\);latest.current=e;\(0,\2\.useEffect\)\(\(\)=>(([\w]+)\.isWeb)\?installPasteGuard\(e.textarea,latest,(\w+)\.collectImageFilesFromClipboardData,\5\.filesToImageAttachments\):undefined,\[e.textarea\]\);\}$/);
-    if (!source.startsWith("function installPasteGuard(") || !hook) return null;
-    effect = { hook: hook[1], react: hook[2], platform: hook[4], attachments: hook[5] };
-  } else {
-    effect = pasteEffect(bundle);
-    if (!effect || count(bundle, control.marked)) return null;
-  }
-  const { hook, react, platform, attachments } = effect;
-  const replacement = MARKER + installPasteGuard.toString() + `function ${hook}(e){const latest=(0,${react}.useRef)(e);latest.current=e;(0,${react}.useEffect)(()=>${platform}.isWeb?installPasteGuard(e.textarea,latest,${attachments}.collectImageFilesFromClipboardData,${attachments}.filesToImageAttachments):undefined,[e.textarea]);}` + END;
-  const patched = marked ? bundle.slice(0, start) + replacement + bundle.slice(end + END.length) :
-    bundle.replace(effect.source, () => replacement);
-  return patched.replace(control.original, control.marked);
-}
+}function ce(e){const latest=(0,b.useRef)(e);latest.current=e;(0,b.useEffect)(()=>P.isWeb?installPasteGuard(e.textarea,latest,T.collectImageFilesFromClipboardData,T.filesToImageAttachments):undefined,[e.textarea]);}/* devhub-paste-v1:end */
+function fe(e){const t=(0,n.c)(18),{shouldShow:o,canPressLoadingButton:s,onSubmitLoadingPress:c,onDefaultSendAction:l,isSendButtonDisabled:u,submitAccessibilityLabel:b,sendButtonCombinedStyle:p,isSubmitLoading:f,submitIcon:h,submitLabel:y,submitButtonTestID:S,buttonIconSize:v,sendKeys:x,sendTooltipLabel:C}=e;if(!o)return null;const I=s?c:l;let R,A,D,T;return t[0]!==v||t[1]!==f||t[2]!==h||t[3]!==y?(R=(0,G.jsx)(se,{isSubmitLoading:f,submitIcon:h,submitLabel:y,buttonIconSize:v}),t[0]=v,t[1]=f,t[2]=h,t[3]=y,t[4]=R):R=t[4],t[5]!==u||t[6]!==p||t[7]!==b||t[8]!==S||t[9]!==I||t[10]!==R?(A=(0,G.jsx)(w.TooltipTrigger,{onPress:I,disabled:u,accessibilityLabel:b,accessibilityRole:"button",testID:S??(s?undefined:"devhub-message-submit"),style:p,children:R}),t[5]=u,t[6]=p,t[7]=b,t[8]=S,t[9]=I,t[10]=R,t[11]=A):A=t[11],t[12]!==x||t[13]!==C?(D=(0,G.jsx)(w.TooltipContent,{side:"top",align:"center",offset:8,children:(0,G.jsx)(oe,{label:C,sendKeys:x})}),t[12]=x,t[13]=C,t[14]=D):D=t[14],t[15]!==A||t[16]!==D?(T=(0,G.jsxs)(w.Tooltip,{delayDuration:0,enabledOnDesktop:!0,enabledOnMobile:!1,children:[A,D]}),t[15]=A,t[16]=D,t[17]=T):T=t[17],T}

@@ -6,10 +6,13 @@ import path from "node:path";
 import { isUtf8 } from "node:buffer";
 import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
+import { createInterface } from "node:readline";
 import { isPersonalSourcePath, stageResources } from "./stage-resources.mjs";
 import { buildEnvFile, repoRoot, resolveWorkspacePaths, serverDir as stagedServerDir, servicesDir as stagedServicesDir, resourcesDir as stagedResourcesDir } from "./staging-paths.mjs";
 import { signBundle, verifyBundle } from "./codesign-bundle.mjs";
 import { isEntry } from "./is-entry.mjs";
+import { acquireDashboardBuildLock } from "./dashboard-build-lock.mjs";
+import { refreshPayloadSource, reusePayload } from "./stage-dashboard.mjs";
 
 const { cleanBuildEnv } = await import(pathToFileURL(buildEnvFile).href);
 const fail = (msg) => { process.stderr.write(`[rebuild-installed-server] ${msg}\n`); process.exitCode = 1; };
@@ -114,7 +117,48 @@ function copyDependencies(source, checkout) {
   }
 }
 
-export async function stageCoreDashboard({ sourceRoot = repoRoot, toolsRoot = sourceRoot, env = process.env, temporaryRoot = os.tmpdir(), stage, stageRes, includeResources = false } = {}) {
+export async function stageCoreDashboard(options = {}) {
+  const source = options.sourceRoot ?? repoRoot;
+  const release = acquireDashboardBuildLock(source);
+  let retained = false;
+  const retain = (result) => {
+    retained = true;
+    return { ...result, dispose() { try { result.dispose(); } finally { release(); } } };
+  };
+  const cache = path.join(source, ".devhub/dashboard-cache");
+  const canReuse = !options.stage && fs.realpathSync(source) === fs.realpathSync(repoRoot);
+  try {
+    if (canReuse) {
+      for (const candidate of [cache, path.dirname(stagedServerDir)]) {
+        if (!await reusePayload(candidate)) continue;
+        const temporary = fs.mkdtempSync(path.join(options.temporaryRoot ?? os.tmpdir(), "devhub-cached-rebuild-"));
+        try {
+          for (const name of ["server", "services"]) fs.cpSync(path.join(candidate, name), path.join(temporary, name), { recursive: true, mode: fs.constants.COPYFILE_FICLONE });
+          await refreshPayloadSource(temporary);
+          if (options.includeResources) {
+            stageResources();
+            fs.cpSync(stagedResourcesDir, path.join(temporary, "resources"), { recursive: true, mode: fs.constants.COPYFILE_FICLONE });
+          }
+          log("unchanged dashboard reused; skipped dependency snapshot and compilation");
+          return retain({ stagedServer: path.join(temporary, "server"), stagedServices: path.join(temporary, "services"), stagedResources: path.join(temporary, "resources"), dispose: () => fs.rmSync(temporary, { recursive: true, force: true }) });
+        } catch (error) { fs.rmSync(temporary, { recursive: true, force: true }); throw error; }
+      }
+    }
+    const result = await stageIsolatedCoreDashboard({ ...options, cacheRoot: fs.existsSync(path.join(cache, "server/provenance.json")) ? cache : path.dirname(stagedServerDir) });
+    if (canReuse) {
+      const next = fs.mkdtempSync(`${cache}-`);
+      try {
+        for (const [name, from] of [["server", result.stagedServer], ["services", result.stagedServices]]) fs.cpSync(from, path.join(next, name), { recursive: true, mode: fs.constants.COPYFILE_FICLONE });
+        fs.rmSync(cache, { recursive: true, force: true });
+        fs.renameSync(next, cache);
+      } catch (error) { result.dispose(); throw error; }
+      finally { fs.rmSync(next, { recursive: true, force: true }); }
+    }
+    return retain(result);
+  } finally { if (!retained) release(); }
+}
+
+async function stageIsolatedCoreDashboard({ sourceRoot = repoRoot, toolsRoot = sourceRoot, env = process.env, temporaryRoot = os.tmpdir(), stage, stageRes, includeResources = false, cacheRoot, signal } = {}) {
   const execExternal = execTool(toolsRoot);
   // Resolve symlinks (macOS $TMPDIR is /var -> /private/var): child scripts gate their
   // entry point on import.meta.url, which Node reports as the real path.
@@ -122,9 +166,11 @@ export async function stageCoreDashboard({ sourceRoot = repoRoot, toolsRoot = so
   const checkout = path.join(temporary, "checkout"), hooks = path.join(temporary, "hooks"), home = path.join(temporary, "home");
   fs.mkdirSync(hooks); fs.mkdirSync(home);
   const buildEnv = { ...isolatedBuildEnv(env, hooks), npm_config_cache: env.npm_config_cache || env.NPM_CONFIG_CACHE || path.join(env.HOME || os.homedir(), ".npm"), HOME: home, USERPROFILE: home, XDG_CONFIG_HOME: path.join(home, ".config"), XDG_DATA_HOME: path.join(home, ".local/share"), XDG_STATE_HOME: path.join(home, ".local/state"), XDG_CACHE_HOME: path.join(home, ".cache"), APPDATA: path.join(home, "AppData/Roaming"), LOCALAPPDATA: path.join(home, "AppData/Local"), DEVHUB_SCHEDULER: "0", DEVHUB_MCP_HTTP: "0" };
-  const git = (args, options = {}) => execExternal("git", args, { cwd: sourceRoot, env: buildEnv, timeoutMs: 120_000, ...options });
+  const git = (args, options = {}) => execExternal("git", args, { cwd: sourceRoot, env: buildEnv, timeoutMs: 120_000, signal, ...options });
   try {
     const head = (await git(["rev-parse", "HEAD"])).stdout.trim();
+    const unmerged = await git(["ls-files", "--unmerged", "-z"], { binary: true });
+    if (unmerged.stdoutBuffer?.length) throw new Error("Resolve Git conflicts before rebuilding. The installed app was not changed.");
     const skipped = await git(["ls-files", "-t", "-z"], { binary: true });
     if (!isUtf8(skipped.stdoutBuffer)) throw new Error("Cannot inspect checkout paths as UTF-8");
     const unsafe = skipped.stdoutBuffer.toString("utf8").split("\0").filter((entry) => /^S (?:apps\/(?:ui|core)|packages|shared)\//.test(entry));
@@ -135,16 +181,27 @@ export async function stageCoreDashboard({ sourceRoot = repoRoot, toolsRoot = so
     await git(["read-tree", "--empty"], { cwd: checkout });
     if (index.stdoutBuffer?.length) await git(["update-index", "-z", "--index-info"], { cwd: checkout, input: index.stdoutBuffer });
     const files = await git(["ls-files", "--cached", "-z"], { binary: true });
-    if (!isUtf8(files.stdoutBuffer)) throw new Error("Cannot copy checkout paths as UTF-8");
-    snapshotSource(sourceRoot, checkout, files.stdoutBuffer.toString("utf8").split("\0"));
+    const untracked = await git(["ls-files", "--others", "--exclude-standard", "-z", "--", "package.json", "package-lock.json", "tsconfig.json", "apps/ui", "apps/core", "packages", "scripts", "apps/desktop/scripts", "apps/desktop/sidecar"], { binary: true });
+    if (!isUtf8(files.stdoutBuffer) || !isUtf8(untracked.stdoutBuffer)) throw new Error("Cannot copy checkout paths as UTF-8");
+    const snapshotStarted = performance.now();
+    log("snapshotting source and dependencies");
+    snapshotSource(sourceRoot, checkout, [...files.stdoutBuffer.toString("utf8").split("\0"), ...untracked.stdoutBuffer.toString("utf8").split("\0")]);
+    await git(["add", "-A", "--", "."], { cwd: checkout });
+    const tree = (await git(["write-tree"], { cwd: checkout })).stdout.trim();
+    const commit = (await git(["-c", "user.name=DevHub local build", "-c", "user.email=local-build@devhub.invalid", "commit-tree", tree, "-p", head, "-m", "Local rebuild snapshot"], { cwd: checkout })).stdout.trim();
+    await git(["update-ref", "HEAD", commit], { cwd: checkout });
     copyDependencies(sourceRoot, checkout);
+    log(`snapshot ready (${((performance.now() - snapshotStarted) / 1000).toFixed(1)}s)`);
     const desktop = resolveWorkspacePaths(checkout).desktopDir;
     if (stage) await stage({ checkout, env: buildEnv });
     // The isolated env drops NODE_OPTIONS; Vite exceeds Node's default 2 GiB heap.
-    else await execExternal(process.execPath, ["--max-old-space-size=4096", path.join(desktop, "scripts/stage-dashboard.mjs")], { cwd: checkout, env: buildEnv, timeoutMs: 30 * 60_000, onStdout: (chunk) => process.stdout.write(chunk) });
+    else {
+      await execExternal(process.execPath, ["--max-old-space-size=4096", path.join(desktop, "scripts/stage-dashboard.mjs"), ...(cacheRoot ? ["--cache-root", cacheRoot] : [])], { cwd: checkout, env: buildEnv, timeoutMs: 30 * 60_000, signal, onStdout: (chunk) => process.stdout.write(chunk) });
+      await refreshPayloadSource(path.join(desktop, "staging"), head);
+    }
     if (includeResources) {
       if (stageRes) await stageRes({ checkout, env: buildEnv });
-      else await execExternal(process.execPath, [path.join(desktop, "scripts/stage-resources.mjs")], { cwd: checkout, env: buildEnv, timeoutMs: 120_000, onStdout: (chunk) => process.stdout.write(chunk) });
+      else await execExternal(process.execPath, [path.join(desktop, "scripts/stage-resources.mjs")], { cwd: checkout, env: buildEnv, timeoutMs: 120_000, signal, onStdout: (chunk) => process.stdout.write(chunk) });
     }
     return { stagedServer: path.join(desktop, "staging/server"), stagedServices: path.join(desktop, "staging/services"), stagedResources: path.join(desktop, "staging/resources"), dispose: () => fs.rmSync(temporary, { recursive: true, force: true }) };
   } catch (error) { fs.rmSync(temporary, { recursive: true, force: true }); throw error; }
@@ -254,6 +311,8 @@ export async function rebuildInstalledServer({
   stage,
   prepare = stageCoreDashboard,
   stageRes = stageResources,
+  beforeInstall,
+  signal,
 } = {}) {
   if (!serverTarget) {
     throw new Error(
@@ -286,7 +345,7 @@ export async function rebuildInstalledServer({
       await stage({ build: true });
       if (includeResources) await stageRes();
     } else {
-      isolated = await prepare({ includeResources });
+      isolated = await prepare({ includeResources, signal });
       stagedServer = isolated.stagedServer;
       stagedServices = isolated.stagedServices;
       if (includeResources) stagedResources = isolated.stagedResources;
@@ -306,6 +365,8 @@ export async function rebuildInstalledServer({
       throw new Error(`stage-resources produced no MANIFEST.json at ${stagedResources || "the staging directory"}`);
     }
 
+    signal?.throwIfAborted();
+    await beforeInstall?.();
     log(`replacing ${serverTarget}`);
     log(`replacing ${resolvedServices}`);
     const replacements = [
@@ -363,8 +424,32 @@ function resealBundle(serverTarget) {
   }
 }
 
+async function waitForInstall() {
+  const input = createInterface({ input: process.stdin });
+  try {
+    await new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => reject(new Error("The desktop shell did not confirm installation; the running payload was left untouched.")), 120_000);
+      const finish = (error) => {
+        clearTimeout(timeout);
+        if (error) reject(error);
+        else resolve();
+      };
+      input.once("line", (line) => finish(line === "install" ? undefined : new Error("Invalid desktop install confirmation")));
+      input.once("close", () => finish(new Error("Desktop shell disconnected before installation")));
+      process.stdout.write('{"devhubRebuild":"ready"}\n');
+    });
+  } finally { input.close(); }
+}
+
 if (isEntry(import.meta.url)) {
-  rebuildInstalledServer().catch((err) => {
-    fail(err instanceof Error ? err.message : String(err));
-  });
+  // execExternal owns separate process groups. Forward cancellation so quitting
+  // the shell cannot leave a Vite build consuming resources in the background.
+  const controller = new AbortController();
+  const cancel = () => controller.abort();
+  process.once("SIGTERM", cancel);
+  process.once("SIGINT", cancel);
+  try {
+    await rebuildInstalledServer({ signal: controller.signal, beforeInstall: process.argv.includes("--wait-for-install") ? waitForInstall : undefined });
+  } catch (err) { fail(err instanceof Error ? err.message : String(err)); }
+  finally { process.removeListener("SIGTERM", cancel); process.removeListener("SIGINT", cancel); }
 }

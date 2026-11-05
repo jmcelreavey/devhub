@@ -1,15 +1,17 @@
+import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { z } from "zod";
 import { execExternal } from "../exec-external";
+import { UsageLoadError } from "./load-error";
 import type { ProviderUsage } from "./types";
 
-// cursor.com's dashboard accepts the desktop app's own access token as its
-// session cookie (`<userId>::<jwt>`), so there is no browser cookie jar to
-// decrypt. These endpoints are what cursor.com/dashboard calls; undocumented.
-const CURSOR_ORIGIN = "https://cursor.com";
+// Cursor encrypts its desktop tokens before writing them to SQLite. The
+// decrypted token authenticates its IDE dashboard RPCs, which are undocumented.
+const CURSOR_SAFE_STORAGE_PREFIX = "cursor-safe-storage:v1:";
+const CURSOR_RPC_ORIGIN = "https://api2.cursor.sh/aiserver.v1.DashboardService";
 
 export async function stateDbPath(): Promise<string | null> {
   const home = os.homedir();
@@ -29,8 +31,6 @@ export async function stateDbPath(): Promise<string | null> {
     : path.join(process.env.XDG_CONFIG_HOME || path.join(home, ".config"), "Cursor", "User", "globalStorage", "state.vscdb");
 }
 
-const claimsSchema = z.object({ sub: z.string().min(1), exp: z.number().optional() });
-
 const periodUsageSchema = z.object({
   billingCycleEnd: z.string().optional(),
   planUsage: z.object({
@@ -40,7 +40,48 @@ const periodUsageSchema = z.object({
   }),
 });
 
-const planInfoSchema = z.object({ planInfo: z.object({ planName: z.string() }).optional() });
+const planInfoSchema = z.object({ planInfo: z.object({ planName: z.string() }).optional(), isMerged: z.boolean().optional() });
+
+const weeklyUsageSchema = z.object({
+  isUnified: z.boolean().optional(),
+  usagePercent: z.number().finite().nonnegative(),
+  nextResetTimestampUtc: z.string().optional(),
+  hasNonZeroIncludedLimit: z.boolean().optional(),
+  cursorPlanName: z.string().optional(),
+});
+
+export function decryptCursorSafeStorage(stored: string, password: string): string {
+  if (!stored.startsWith(CURSOR_SAFE_STORAGE_PREFIX)) throw new UsageLoadError("Invalid Cursor token storage", "Cursor's encrypted sign-in has an unexpected format.");
+  const encrypted = Buffer.from(stored.slice(CURSOR_SAFE_STORAGE_PREFIX.length), "base64");
+  if (encrypted.subarray(0, 3).toString() !== "v10" || encrypted.length <= 3 || (encrypted.length - 3) % 16 !== 0) {
+    throw new UsageLoadError("Invalid Cursor token storage", "Cursor's encrypted sign-in has an unexpected format.");
+  }
+  const key = crypto.pbkdf2Sync(password, "saltysalt", 1003, 16, "sha1");
+  try {
+    const decipher = crypto.createDecipheriv("aes-128-cbc", key, Buffer.alloc(16, 0x20));
+    return Buffer.concat([decipher.update(encrypted.subarray(3)), decipher.final()]).toString("utf8");
+  } catch {
+    throw new UsageLoadError("Could not decrypt Cursor token", "macOS Keychain could not unlock Cursor's sign-in.");
+  } finally {
+    key.fill(0);
+  }
+}
+
+async function decodeStoredToken(stored: string): Promise<string> {
+  if (stored.startsWith("cursor-safe-storage:") && !stored.startsWith(CURSOR_SAFE_STORAGE_PREFIX)) {
+    throw new UsageLoadError("Unsupported Cursor token storage", "Cursor changed its encrypted sign-in format.");
+  }
+  if (!stored.startsWith(CURSOR_SAFE_STORAGE_PREFIX)) return stored;
+  if (process.platform !== "darwin") throw new UsageLoadError("Unsupported Cursor token storage", "Cursor's encrypted sign-in is not supported on this operating system yet.");
+  let password: string;
+  try {
+    password = (await execExternal("security", ["find-generic-password", "-s", "Cursor Safe Storage", "-w"], { timeoutMs: 15_000, label: "usage:cursor-keychain" })).stdout.trim();
+  } catch {
+    throw new UsageLoadError("Could not unlock Cursor token", "Allow macOS Keychain access to Cursor Safe Storage, then retry.");
+  }
+  if (!password) throw new UsageLoadError("Could not unlock Cursor token", "Cursor Safe Storage is empty in macOS Keychain.");
+  return decryptCursorSafeStorage(stored, password);
+}
 
 async function readAccessToken(): Promise<string | null> {
   const db = await stateDbPath();
@@ -50,24 +91,26 @@ async function readAccessToken(): Promise<string | null> {
   const query = "select value from ItemTable where key = 'cursorAuth/accessToken'";
   const run = (target: string) => execExternal("sqlite3", ["-readonly", target, query], { timeoutMs: 10_000, label: "usage:cursor-token" });
   try {
-    return (await run(db)).stdout.trim() || null;
+    const stored = (await run(db)).stdout.trim();
+    return stored ? decodeStoredToken(stored) : null;
   } catch {
     // A WAL-mode database with no -wal/-shm files (Cursor closed) can't be opened
     // read-only: SQLite wants to create them. With Cursor closed there is no WAL
     // to miss, so an immutable open reads the main file safely.
     const uri = `${pathToFileURL(db).href}?immutable=1`;
-    return (await run(uri)).stdout.trim() || null;
+    const stored = (await run(uri)).stdout.trim();
+    return stored ? decodeStoredToken(stored) : null;
   }
 }
 
-async function cursorPost(endpoint: string, cookie: string): Promise<unknown> {
-  const response = await fetch(`${CURSOR_ORIGIN}/api/dashboard/${endpoint}`, {
+async function cursorRpc(endpoint: string, token: string): Promise<unknown> {
+  const response = await fetch(`${CURSOR_RPC_ORIGIN}/${endpoint}`, {
     method: "POST",
-    headers: { Cookie: cookie, Origin: CURSOR_ORIGIN, "Content-Type": "application/json" },
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", "Connect-Protocol-Version": "1", "x-cursor-client-type": "ide" },
     body: "{}",
     signal: AbortSignal.timeout(15_000),
   });
-  if (!response.ok) throw new Error(`Cursor ${endpoint} failed (HTTP ${response.status}).`);
+  if (!response.ok) throw new UsageLoadError(`Cursor ${endpoint} failed (HTTP ${response.status}).`, response.status === 401 ? "Cursor rejected its saved sign-in. Open Cursor to refresh it, then retry." : `Cursor's usage service returned HTTP ${response.status}.`);
   return response.json();
 }
 
@@ -78,26 +121,39 @@ export async function loadCursorUsage(): Promise<ProviderUsage> {
     ? "Sign in to the Windows Cursor desktop app to see plan usage. The WSL agent CLI has a separate sign-in: `agent login`. If the Windows profile is unavailable from WSL, check usage at cursor.com/dashboard."
     : "Sign in to the Cursor desktop app to see plan usage. The agent CLI has a separate sign-in: `agent login`." };
 
-  let claims: z.infer<typeof claimsSchema>;
-  try {
-    claims = claimsSchema.parse(JSON.parse(Buffer.from(token.split(".")[1] ?? "", "base64url").toString("utf8")));
-  } catch {
-    return { ...base, status: "error", summary: "Couldn't read Cursor's sign-in", message: "Cursor's stored sign-in is in an unexpected format.", reason: "The token in Cursor's local state is not in the format DevHub expects. Signing in to the Cursor app again rewrites it." };
+  const [weeklyResult, planResult] = await Promise.allSettled([
+    cursorRpc("GetSandUsageStatus", token),
+    cursorRpc("GetPlanInfo", token),
+  ]);
+  const weekly = weeklyResult.status === "fulfilled" ? weeklyUsageSchema.safeParse(weeklyResult.value) : null;
+  const parsedPlan = planResult.status === "fulfilled" ? planInfoSchema.safeParse(planResult.value) : null;
+  const plan = parsedPlan?.success ? parsedPlan.data : null;
+  if (weekly?.success && weekly.data.isUnified) {
+    const { usagePercent, nextResetTimestampUtc, cursorPlanName, hasNonZeroIncludedLimit } = weekly.data;
+    if (hasNonZeroIncludedLimit === false) return { ...base, plan: cursorPlanName, status: "unavailable", summary: "No included weekly usage is available for this Cursor account.", retryable: false };
+    const resetTime = nextResetTimestampUtc ? Date.parse(nextResetTimestampUtc) : NaN;
+    return {
+      ...base,
+      plan: cursorPlanName ?? plan?.planInfo?.planName,
+      status: "ok",
+      meters: [{ label: "Weekly included usage", percent: usagePercent, resetsAt: Number.isFinite(resetTime) ? new Date(resetTime).toISOString() : undefined }],
+    };
   }
-  if (claims.exp && claims.exp * 1000 < Date.now()) return { ...base, status: "unavailable", summary: "Cursor's sign-in has expired", message: `Cursor's sign-in has expired. Open the ${process.env.WSL_DISTRO_NAME ? "Windows " : ""}Cursor desktop app to sign in again, then retry.` };
-
-  // `sub` looks like "google-oauth2|user_01…"; the cookie wants the user id part.
-  const userId = claims.sub.split("|").pop();
-  const cookie = `WorkosCursorSessionToken=${userId}%3A%3A${token}`;
-  const [periodRaw, planRaw] = await Promise.all([cursorPost("get-current-period-usage", cookie), cursorPost("get-plan-info", cookie)]);
+  if (plan?.isMerged) {
+    if (weeklyResult.status === "rejected") throw weeklyResult.reason;
+    throw new UsageLoadError("Could not read Cursor's weekly usage", "Cursor returned an unexpected weekly usage response for this X Subscription.");
+  }
+  if (planResult.status === "rejected") throw planResult.reason;
+  if (parsedPlan?.success === false) throw new UsageLoadError("Could not read Cursor's plan", "Cursor returned an unexpected plan response.");
+  const periodRaw = await cursorRpc("GetCurrentPeriodUsage", token);
   const period = periodUsageSchema.parse(periodRaw);
-  const plan = planInfoSchema.parse(planRaw).planInfo?.planName;
-  const resetsAt = period.billingCycleEnd ? new Date(Number(period.billingCycleEnd)).toISOString() : undefined;
+  const resetTime = period.billingCycleEnd ? Number(period.billingCycleEnd) : NaN;
+  const resetsAt = Number.isFinite(resetTime) ? new Date(resetTime).toISOString() : undefined;
   const { planUsage } = period;
 
   return {
     ...base,
-    plan,
+    plan: plan?.planInfo?.planName,
     status: "ok",
     meters: [
       { label: "Included usage", percent: planUsage.totalPercentUsed, resetsAt },

@@ -15,7 +15,7 @@ The Datadog integration gives quick access to alert-related views, on-call statu
 ## What It Enables
 
 - Datadog navigation item (`/datadog`).
-- Notifications and a global alert bar, shown only while Datadog confirms you are on call.
+- Top-bar bell notifications, shown only while Datadog confirms you are on call.
 - Deep links to useful monitor and event views.
 - On-call roster matching via the Datadog On-Call API.
 - Recent alert events for on-call and team Slack channels.

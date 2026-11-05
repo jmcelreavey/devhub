@@ -34,6 +34,7 @@ const AutoStateSchema = z.object({
   round: z.number().int().min(0).max(20),
   maxRounds: z.number().int().min(0).max(20),
   attempt: z.number().int().min(0).max(50),
+  tierAttempt: z.number().int().min(0).max(50).optional(),
   origin: text(300),
   runs: z.array(z.object({
     feedbackKey: text(80).optional(),

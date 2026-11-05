@@ -29,7 +29,7 @@ function OverlayGroup({ group }: { group: TaskProfileOverview["overlay"][number]
     <section aria-label={`Tasks from ${group.profileId}`}>
       <button
         type="button"
-        className="flex items-center gap-1 text-xs font-medium pt-2 w-full cursor-pointer"
+        className="row-select flex items-center gap-1 text-xs font-medium py-2 w-full cursor-pointer"
         style={{ color: "var(--text-subtle)", borderTop: "1px solid var(--border-muted)" }}
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}

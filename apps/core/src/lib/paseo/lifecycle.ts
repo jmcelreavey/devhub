@@ -10,8 +10,6 @@ import type { PaseoAgent } from "@getpaseo/client";
 import type { FetchAgentTimelinePayload } from "@getpaseo/client/internal/daemon-client";
 import { paseoUrl, withPaseo, type PaseoSession } from "./client";
 import { AUTOCONFIRM_PROVIDERS } from "./launch";
-import { releaseIdlePaseoRuntimesIfDue } from "./idle-runtimes";
-import { sweepPaseoWorkspacesIfDue } from "./workspaces";
 
 type TimelineEntry = FetchAgentTimelinePayload["entries"][number];
 
@@ -171,7 +169,7 @@ export async function reconcilePaseoRun(input: AgentRun): Promise<AgentRun> {
         }
         return updateAgentRunStatus(latest, { ...patch, connectivity: "connected" }, { skipIfUnchanged: true });
       });
-      return archiveFinishedPaseoReview(updated);
+      return updated;
     } catch (error) {
       noteCapacityProbe(run.spec.id);
       const latest = readAgentRun(run.spec.id) ?? run;
@@ -179,31 +177,6 @@ export async function reconcilePaseoRun(input: AgentRun): Promise<AgentRun> {
       return updateAgentRunStatus(latest, { connectivity: "reconnecting", error: error instanceof Error ? error.message : "Paseo is unavailable." }, { skipIfUnchanged: true });
     }
   });
-}
-
-/**
- * Finished review chats leave Paseo's sidebar so it stays about live work. Failures
- * are retried on the next reconcile tick; a missing agent counts as archived.
- */
-export async function archiveFinishedPaseoReview(run: AgentRun): Promise<AgentRun> {
-  const action = run.spec.activity?.action;
-  if (run.spec.runtime !== "paseo" || (action !== "review" && action !== "pr-review")) return run;
-  if (isActiveAgentRunState(run.status.state) || run.status.sidebarArchivedAt || !run.status.conversationId) return run;
-  const agentId = run.status.conversationId;
-  try {
-    if (run.status.connectionId !== paseoUrl()) return run;
-    const archived = await withPaseo(async ({ daemon }) => {
-      const fetched = await daemon.fetchAgent(agentId);
-      if (!fetched || fetched.agent.archivedAt) return true;
-      if (fetched.agent.status === "running" || fetched.agent.status === "initializing" || fetched.agent.pendingPermissions.length) return false;
-      if (!run.status.messageId || !ownsLatestTurn(run, await turnEntries(daemon, agentId, run.status.messageId))) return false;
-      await daemon.archiveAgent(agentId);
-      return true;
-    });
-    return archived ? updateAgentRunStatus(run, { sidebarArchivedAt: Date.now() }) : run;
-  } catch {
-    return run;
-  }
 }
 
 /**
@@ -310,7 +283,7 @@ export async function cancelManagedRun(run: AgentRun) {
 let timer: ReturnType<typeof setInterval> | undefined;
 let polling = false;
 
-/** Follows active runs to a result and retries review archiving and task unpinning; one tick at a time. */
+/** Follows active runs to a result and retries task unpinning; one tick at a time. */
 export function startAgentReconciliation(): void {
   if (timer) return;
   const tick = async () => {
@@ -322,15 +295,12 @@ export function startAgentReconciliation(): void {
       let tasks: TaskIndex | undefined;
       for (const run of runs) {
         if (run.spec.runtime !== "paseo" && run.spec.runtime !== "aionui") continue;
-        const current = isActiveAgentRunState(run.status.state) ? await reconcileManagedRun(run) : await archiveFinishedPaseoReview(run);
+        const current = isActiveAgentRunState(run.status.state) ? await reconcileManagedRun(run) : run;
         if (current.status.pinnedWorkspaceId && !current.status.workspaceUnpinnedAt) {
           tasks ??= loadTaskIndex();
           await releaseTaskWorkspacePin(current, runs, tasks);
         }
       }
-      await sweepPaseoWorkspacesIfDue();
-      // Idle chats keep a provider process and its MCP servers alive until archived.
-      await releaseIdlePaseoRuntimesIfDue();
     } finally { polling = false; }
   };
   const fire = () => { void tick().catch((error: unknown) => console.error("[agents] reconciliation failed", error)); };

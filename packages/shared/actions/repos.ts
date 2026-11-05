@@ -14,6 +14,7 @@ export interface ReposListItem {
 export interface ReposListResult {
   repos: ReposListItem[];
   scanDirDisplay?: string;
+  protectedRepoName?: string;
 }
 
 export interface ReposListContext {
@@ -173,7 +174,7 @@ export const repoApps = defineAction<typeof repoAppsInput, { read: () => Promise
   handler: (_input, context) => context.read(),
 });
 
-export const repoGithubListInput = z.object({ query: z.string().optional() });
+export const repoGithubListInput = z.object({ query: z.string().max(256).optional() });
 export const repoGithubList = defineAction<typeof repoGithubListInput, { list: (query?: string) => Promise<RepoGitResponse> }, RepoGitResponse>({
   input: repoGithubListInput,
   http: { method: "GET", path: "/api/repos/github" },
@@ -1184,6 +1185,14 @@ export const repoGitBranchPr = defineAction<typeof repoGitCiInput, RepoGitCiCont
   http: { method: "GET", path: "/api/repos/[name]/git/branch-pr" },
   mcp: { reason: "The repos_git_ci tool already includes the current branch's PR checks." },
   handler: readRepoGitCi,
+});
+
+export const coreGitOverviewInput = z.object({ refresh: z.boolean().optional() }).meta({ additionalProperties: false });
+export const coreGitOverview = defineAction<typeof coreGitOverviewInput, { read: (input: z.output<typeof coreGitOverviewInput>) => Promise<RepoGitResponse> }, RepoGitResponse>({
+  input: coreGitOverviewInput,
+  http: { method: "GET", path: "/api/git/overview" },
+  mcp: { reason: "The Git hub rail is a cross-repo dashboard view; MCP exposes repository state through the repos tools." },
+  handler: (input, context) => context.read(input),
 });
 
 export const coreGitConflictsInput = z.object({}).meta({ additionalProperties: false });

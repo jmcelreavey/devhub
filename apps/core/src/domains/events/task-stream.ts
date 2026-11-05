@@ -1,4 +1,4 @@
-import { existsSync, statSync, watch, type FSWatcher } from "node:fs";
+import { existsSync, readdirSync, statSync, watch, type FSWatcher } from "node:fs";
 import path from "node:path";
 import { subscribeCoreEvents, type CoreEventDomain } from "./core-events.ts";
 
@@ -117,18 +117,70 @@ export function taskEventStream(roots: EventRoot[], signal: AbortSignal): Readab
             const reconnectChanged = () => !root.files && root.validate ? !root.validate() : !root.files || [...fileVersions].some(([filename, previous]) => version(filename) !== previous);
             // Watchers can name a containing directory rather than the changed
             // file, especially during atomic replacements. Treat both as dirty.
-            const watcher = watch(target, { recursive: root.recursive ?? !root.files }, (_eventType, filename) => {
-              if (filename && root.ignore?.(filename.toString())) return;
+            const onEvent = (relative: string | null) => {
+              if (relative && root.ignore?.(relative)) return;
               if (filesChanged()) return finish();
-              if (root.files && filename && !root.files.includes(filename.toString())) return;
+              if (root.files && relative && !root.files.includes(relative)) return;
               if (root.reconnect) {
                 if (reconnectChanged()) finish();
                 return;
               }
               invalidate(root.domain);
-            });
-            watcher.on("error", root.optional ? (error) => degrade(root.domain, error) : finish);
-            watchers.push(watcher);
+            };
+            const register = (watcher: FSWatcher) => {
+              watcher.on("error", root.optional ? (error) => degrade(root.domain, error) : finish);
+              watchers.push(watcher);
+            };
+            // Native recursive watch registers a descriptor for every descendant
+            // before the ignore callback runs, so a repo's node_modules costs six
+            // figures of watches and exhausts fs.inotify.max_user_watches for the
+            // whole machine. Walk the tree instead and skip ignored subtrees.
+            if ((root.recursive ?? !root.files) && root.ignore && process.platform === "linux") {
+              const watched = new Map<string, FSWatcher>();
+              const watchTree = (dir: string, relativeDir: string) => {
+                if (watched.has(dir)) return;
+                let watcher: FSWatcher;
+                try {
+                  watcher = watch(dir, { recursive: false }, (eventType, filename) => {
+                    const name = filename ? filename.toString() : null;
+                    const relative = name && relativeDir ? path.join(relativeDir, name) : name;
+                    if (name && eventType === "rename") {
+                      const child = path.join(dir, name);
+                      try {
+                        if (statSync(child).isDirectory() && !(relative && root.ignore?.(relative))) watchTree(child, relative ?? name);
+                      } catch {
+                        const stale = watched.get(child);
+                        if (stale) {
+                          stale.close();
+                          watched.delete(child);
+                        }
+                      }
+                    }
+                    onEvent(relative);
+                  });
+                } catch (error) {
+                  if (!root.optional) throw error;
+                  degrade(root.domain, error);
+                  return;
+                }
+                register(watcher);
+                watched.set(dir, watcher);
+                const entries = (() => {
+                  try { return readdirSync(dir, { withFileTypes: true }); } catch { return []; }
+                })();
+                for (const entry of entries) {
+                  if (!entry.isDirectory()) continue;
+                  const childRelative = relativeDir ? path.join(relativeDir, entry.name) : entry.name;
+                  if (root.ignore?.(childRelative)) continue;
+                  watchTree(path.join(dir, entry.name), childRelative);
+                }
+              };
+              watchTree(target, "");
+            } else {
+              register(watch(target, { recursive: root.recursive ?? !root.files }, (_eventType, filename) => {
+                onEvent(filename ? filename.toString() : null);
+              }));
+            }
             for (const [filename, originalFile] of fileIdentities) {
               if (!originalFile) continue;
               const fileWatcher = watch(path.join(target, filename), () => {

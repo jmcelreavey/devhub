@@ -5,7 +5,8 @@ import { execGh } from "../gh-exec";
 import { emitCoreEvent } from "../../domains/events/core-events";
 import type { PrFeedbackSnapshot } from "../../../../../packages/shared/github/pr-types";
 import { getRepoRoot } from "../notes/dir";
-import { getGithubFullNameForLocalRepo, listRepos } from "../repos/index";
+import { getGithubFullNameForLocalRepo } from "../repos/index";
+import { localGithubRepos } from "../conventions/local-repos";
 import { dedupeBy } from "../dedupe";
 import { parseRepoFullNameFromApiUrl } from "../../../../../packages/shared/ui-lib/github/repo-url";
 import { pMap } from "../p-limit";
@@ -96,11 +97,7 @@ export async function listGithubScanRepoFullNames(): Promise<string[]> {
   const rootFn = getGithubFullNameForLocalRepo(getRepoRoot());
   if (rootFn) names.add(rootFn);
   try {
-    const locals = await listRepos();
-    for (const r of locals) {
-      const fn = getGithubFullNameForLocalRepo(r.path);
-      if (fn) names.add(fn);
-    }
+    for (const repo of localGithubRepos()) names.add(repo.fullName);
   } catch {
     // ignore — still use devhub remote if present
   }

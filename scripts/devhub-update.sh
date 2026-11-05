@@ -117,12 +117,23 @@ fi
 log "Incoming core commits ($COUNT) ${SINCE}..${UPSTREAM_REF}:"
 git log --oneline "${SINCE}..${UPSTREAM_REF}" | sed 's/^/  /'
 
-PATCH="$(git diff "${SINCE}..${UPSTREAM_REF}" -- . "${EXCLUDES[@]}")"
+# Upstream deletes files this mirror already removed (the retired Next dashboard,
+# a skill that moved to a plugin). Those deletions have no local preimage, so
+# `git apply` aborts the whole pull. Skip them — the intent is already satisfied.
+ALREADY_GONE=()
+while IFS=$'\t' read -r status path; do
+  [[ -n "$path" && "$status" != "A" ]] || continue
+  git cat-file -e "HEAD:$path" 2>/dev/null || ALREADY_GONE+=(":(exclude,literal)$path")
+done < <(git diff --no-renames --name-status "${SINCE}..${UPSTREAM_REF}" -- . "${EXCLUDES[@]}")
+if (( ${#ALREADY_GONE[@]} )); then
+  log "Skipping ${#ALREADY_GONE[@]} upstream path(s) this mirror already removed."
+fi
+PATCH="$(git diff --binary "${SINCE}..${UPSTREAM_REF}" -- . "${EXCLUDES[@]}" "${ALREADY_GONE[@]}")"
 # Portable array read — macOS ships bash 3.2, which has no `mapfile`.
 PATCH_FILES=()
 while IFS= read -r line; do
   [[ -n "$line" ]] && PATCH_FILES+=("$line")
-done < <(git diff --name-only "${SINCE}..${UPSTREAM_REF}" -- . "${EXCLUDES[@]}")
+done < <(git diff --name-only "${SINCE}..${UPSTREAM_REF}" -- . "${EXCLUDES[@]}" "${ALREADY_GONE[@]}")
 if [[ -z "$PATCH" ]]; then
   log "No file changes after exclusions; marking synced."
   git_write update-ref "$SYNC_REF" "$UPSTREAM_SHA"

@@ -4,7 +4,7 @@ import type { Notification, NotificationsFeed, Severity } from "../../../../../p
 import { homeWorkSummary } from "../../../../../packages/shared/ui-lib/storyboard/home-summary";
 import { parseRepoFullNameFromPrUrl, parseRepoFullNameFromRemote } from "../../../../../packages/shared/ui-lib/github/repo-url";
 import { isTaskOpen } from "../../../../../packages/shared/tasks/types";
-import { fetchMyGithubPrs, readGithubPrsListCache } from "../../lib/github/prs";
+import { loadGithubPrsList } from "../../lib/github/prs-list";
 import { listOwnedRepos } from "../../lib/ownership/owned-repos";
 import { readProfileAgentAttention } from "../../lib/agent-runs/store";
 import { taskStorage } from "../storage/tasks";
@@ -19,8 +19,8 @@ import { handleRuntimeAlias } from "../../lib/plugins/runtime-aliases";
 import { readDatadogSetupStatus } from "../../lib/setup/datadog-setup-status";
 import { getGithubLogin } from "../../lib/standup/github-merged";
 import { execGh } from "../../lib/gh-exec";
-import { ttlCacheByKey } from "../../lib/ttl-cache";
-import { applyNotificationState, filterOwnedNotifications, readNeedsYouOwnedReposOnly } from "./state";
+import { ttlCacheByKey, ttlCached, type TtlPromiseEntry } from "../../lib/ttl-cache";
+import { applyNotificationState, filterOwnedNotifications, filterBySourcePrefs, readNeedsYouOwnedReposOnly, readNotificationSourcePrefs } from "./state";
 
 const version = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 const notification = (item: Omit<Notification, "read" | "dismissed">): Notification => ({ ...item, read: false, dismissed: false });
@@ -43,21 +43,28 @@ export function pluginNotifications(groups: ReturnType<typeof servicePluginNeeds
   });
 }
 
-export async function readNotificationSources(profile: string, request: Request): Promise<Pick<NotificationsFeed, "items" | "sources">> {
+type NotificationSources = Pick<NotificationsFeed, "items" | "sources">;
+const sourceCache = new Map<string, TtlPromiseEntry<NotificationSources>>();
+
+export function readNotificationSources(profile: string, request: Request): Promise<NotificationSources> {
+  return ttlCached(sourceCache, `${profile}:${new URL(request.url).origin}`, 30_000, () => loadNotificationSources(profile, request));
+}
+
+async function loadNotificationSources(profile: string, request: Request): Promise<NotificationSources> {
   const sources: NotificationsFeed["sources"] = { github: "ok", ci: "ok", agent: "ok", datadog: "off", plugin: "ok", "plugin-trust": "ok" };
   const collect = async (names: (keyof typeof sources)[], work: () => Promise<Notification[]>): Promise<Notification[]> => {
     try { return await work(); } catch { for (const name of names) sources[name] = "degraded"; return []; }
   };
   const groups = await Promise.all([
     collect(["github", "ci"], async () => {
-      const cached = readGithubPrsListCache();
-      const prs = cached ?? await fetchMyGithubPrs();
-      if (cached?.stale || prs.authored.some(pr => pr.checks === undefined)) sources.github = sources.ci = "degraded";
+      const prs = await loadGithubPrsList();
+      if (!prs.configured) { sources.github = sources.ci = "off"; return []; }
+      if (prs.stale || prs.detailsState === "partial" || prs.authored.some(pr => pr.checks === undefined)) sources.github = sources.ci = "degraded";
       return homeWorkSummary([], [], prs.reviews, Date.now(), prs.authored, listOwnedRepos().map(repo => repo.fullName), prs.feedbackPrs, true)["needs-you"].flatMap(work => {
         if (work.kind !== "pr") return [];
         const { pr, presentation } = work;
         const failing = prs.authored.some(mine => mine.url === pr.url) && pr.checks === "failing";
-        return [notification({ id: `${failing ? "ci" : "pr"}:${pr.url.toLowerCase()}`, version: version([presentation.status, pr.updatedAt, pr.headSha, pr.checks, pr.reviewDecision]), source: failing ? "ci" : "github", severity: failing ? "urgent" : "action", title: pr.title, reason: presentation.status, repo: /^[\w.-]+\/[\w.-]+$/.test(pr.repo) ? pr.repo : parseRepoFullNameFromPrUrl(pr.url), link: pr.url, createdAt: pr.updatedAt ?? pr.createdAt ?? "1970-01-01T00:00:00.000Z" })];
+        return [notification({ id: `${failing ? "ci" : "pr"}:${pr.url.toLowerCase()}`, version: version([presentation.status, pr.updatedAt, pr.headSha, pr.checks, pr.reviewDecision]), source: failing ? "ci" : "github", severity: failing ? "urgent" : "action", title: pr.title, reason: presentation.status, author: pr.author, repo: /^[\w.-]+\/[\w.-]+$/.test(pr.repo) ? pr.repo : parseRepoFullNameFromPrUrl(pr.url), link: pr.url, createdAt: pr.updatedAt ?? pr.createdAt ?? "1970-01-01T00:00:00.000Z" })];
       });
     }),
     collect(["agent"], async () => {
@@ -106,13 +113,15 @@ export async function readNotificationSources(profile: string, request: Request)
 }
 
 export async function readNotifications(profile: string, request: Request): Promise<NotificationsFeed> {
-  const feed = await readNotificationSources(profile, request);
+  const cached = await readNotificationSources(profile, request);
+  const feed = { ...cached, sources: { ...cached.sources } };
   const ownedReposOnly = readNeedsYouOwnedReposOnly();
   let owners: string[] | null = null;
   if (ownedReposOnly) {
     try { const login = await getGithubLogin(); owners = login ? await ownersFor(login) : null; }
     catch { feed.sources.github = "degraded"; }
   }
-  const items = applyNotificationState(filterOwnedNotifications(feed.items, owners), profile);
-  return { ...feed, items, ownedReposOnly, unread: items.filter(item => !item.read && !item.dismissed).length, urgent: items.filter(item => item.severity === "urgent" && !item.dismissed).length };
+  const sourcePrefs = readNotificationSourcePrefs();
+  const items = applyNotificationState(filterBySourcePrefs(filterOwnedNotifications(feed.items, owners), sourcePrefs), profile);
+  return { ...feed, items, ownedReposOnly, sourcePrefs, unread: items.filter(item => !item.read && !item.dismissed).length, urgent: items.filter(item => item.severity === "urgent" && !item.dismissed).length };
 }

@@ -2,11 +2,13 @@
  * Tracks auto agent-review starts so the poller / endpoint does not re-enqueue
  * the same PR after the first successful start — including after later pushes.
  *
- * Shape mirrors skipped-prs.json (notes/.config/). Does not auto-post GitHub
- * review comments — only records that DevHub started an agent review job.
+ * Runtime state, deliberately outside the synced notes tree: the poller
+ * rewrites it on every start, and keeping it under notes/.config turned each
+ * write into a content-sync commit. Does not auto-post GitHub review comments —
+ * only records that DevHub started an agent review job.
  */
 import path from "node:path";
-import { getNotesDir } from "../notes/dir";
+import { checkoutStateDir, profileStateDir } from "../../../../../packages/shared/storage/profile-state";
 import { writeAtomic, safeReadJSON, withMutex } from "../atomic-write";
 
 export interface AutoPrReviewRecord {
@@ -64,7 +66,7 @@ interface AutoPrReviewFile {
 const EMPTY: AutoPrReviewFile = { version: 1, reviews: {} };
 
 function filePath(): string {
-  return path.join(getNotesDir(), ".config", "auto-pr-reviews.json");
+  return path.join(checkoutStateDir() ?? profileStateDir(), "auto-pr-reviews.json");
 }
 
 function readAll(): Record<string, AutoPrReviewRecord> {

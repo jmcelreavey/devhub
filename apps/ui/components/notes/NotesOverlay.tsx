@@ -3,7 +3,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { BlockNoteEditor } from "@/components/BlockNoteEditor";
 import {
-  X,
   CalendarDays,
   ExternalLink,
   FileText,
@@ -18,13 +17,16 @@ import { useToast } from "@/lib/hooks/use-toast";
 import { isDiagramStoragePath } from "../../../../packages/shared/ui-lib/diagrams/utils";
 import { isMobileViewport } from "@/lib/hooks/use-is-mobile";
 import { notesApiPathFromSlug, notesPageHref } from "@/lib/notes/path";
-import { SidePanel } from "@/components/shell/SidePanel";
+import { SidePanel, SidePanelControls } from "@/components/shell/SidePanel";
+import { useConfirm } from "@/components/shell/ConfirmDialog";
 import { CopyLocationButton } from "@/components/ui/CopyLocationButton";
 import { FileTree } from "@/components/FileTree";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { HoverTip } from "@/components/ui/HoverTip";
 import type { DevHubPartialBlock } from "@/lib/blocknote/schema";
 import { VaultEditorPage } from "@/components/vault/VaultEditorPage";
+import { SkeletonRows } from "@/components/ui/SkeletonRows";
+import { repairNoteBlocks } from "../../../../packages/shared/ui-lib/notes/repair-blocks";
 
 interface SearchResult {
   path: string;
@@ -48,6 +50,7 @@ interface NoteOverlayProps {
 }
 
 export function NotesOverlay({ open, onClose, todayNoteRequest = 0, notePathRequest = null }: NoteOverlayProps) {
+  const confirm = useConfirm();
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
   const [activeNote, setActiveNote] = useState<{
@@ -60,14 +63,31 @@ export function NotesOverlay({ open, onClose, todayNoteRequest = 0, notePathRequ
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const saveQueueRef = useRef<Promise<void>>(Promise.resolve());
   const noteVersionsRef = useRef(new Map<string, number | null>());
+  const draftsRef = useRef(new Map<string, DevHubPartialBlock[]>());
+  const latestSave = useRef(0);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [fileTreeKey, setFileTreeKey] = useState(0);
   const router = useRouter();
   const toast = useToast();
   const [newNoteModalOpen, setNewNoteModalOpen] = useState(false);
+  const [loadingNote, setLoadingNote] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const openRequest = useRef(0);
+
+  useEffect(() => {
+    const warnUnsaved = (event: BeforeUnloadEvent) => {
+      if (!draftsRef.current.size) return;
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warnUnsaved);
+    return () => window.removeEventListener("beforeunload", warnUnsaved);
+  }, []);
 
   useEffect(() => {
     if (!open) {
+      openRequest.current += 1;
+      setLoadingNote(false);
       setQuery("");
       setResults([]);
       setActiveNote(null);
@@ -131,7 +151,7 @@ export function NotesOverlay({ open, onClose, todayNoteRequest = 0, notePathRequ
   }, [query]);
 
   const openNote = useCallback(
-    (notePath: string, allowMissing = false) => {
+    async (notePath: string, allowMissing = false) => {
       const cleanPath = notePath.replace(/\.json$/, "");
       // Phones use the full-page editor; the notes layout files panel handles browsing.
       if (isMobileViewport()) {
@@ -139,7 +159,20 @@ export function NotesOverlay({ open, onClose, todayNoteRequest = 0, notePathRequ
         router.push(notesPageHref(cleanPath));
         return;
       }
-      fetch(`/api/notes/${notesApiPathFromSlug(cleanPath)}`)
+      const request = ++openRequest.current;
+      setLoadingNote(true);
+      // Reopening must observe the last accepted save, not a revision from halfway through the queue.
+      await saveQueueRef.current;
+      if (request !== openRequest.current) return;
+      const draft = draftsRef.current.get(cleanPath);
+      if (draft) {
+        setEmbeddedPath(null);
+        setActiveNote({ path: cleanPath, blocks: draft });
+        setSaveStatus("error");
+        setLoadingNote(false);
+        return;
+      }
+      void fetch(`/api/notes/${notesApiPathFromSlug(cleanPath)}`)
         .then((r) => {
           // Daily notes aren't written until you type, so a 404 means "blank page", not an error.
           if (r.status === 404 && allowMissing) return { content: EMPTY_NOTE_BLOCKS };
@@ -147,17 +180,19 @@ export function NotesOverlay({ open, onClose, todayNoteRequest = 0, notePathRequ
           return r.json();
         })
         .then((data: { content: DevHubPartialBlock[]; modified?: number }) => {
+          if (request !== openRequest.current) return;
           noteVersionsRef.current.set(
             cleanPath,
             typeof data.modified === "number" ? data.modified : null,
           );
           setEmbeddedPath(null);
-          setActiveNote({ path: cleanPath, blocks: data.content });
+          setActiveNote({ path: cleanPath, blocks: repairNoteBlocks(data.content) as DevHubPartialBlock[] });
+          setSaveStatus("idle");
         })
         .catch((e) => {
           console.error("open note:", e);
           toast.error("Couldn't open note.");
-        });
+        }).finally(() => { if (request === openRequest.current) setLoadingNote(false); });
     },
     [toast, onClose, router],
   );
@@ -172,6 +207,8 @@ export function NotesOverlay({ open, onClose, todayNoteRequest = 0, notePathRequ
 
   useEffect(() => {
     if (!notePathRequest) return;
+    openRequest.current += 1;
+    setLoadingNote(false);
     const cleanPath = notePathRequest.path.replace(/\.json$/, "");
     if (isMobileViewport()) {
       onClose();
@@ -188,6 +225,10 @@ export function NotesOverlay({ open, onClose, todayNoteRequest = 0, notePathRequ
     (blocks: DevHubPartialBlock[]) => {
       if (!activeNote) return;
       const notePath = activeNote.path;
+      const content = structuredClone(blocks);
+      const sequence = ++latestSave.current;
+      draftsRef.current.set(notePath, content);
+      setSaveStatus("saving");
       const save = saveQueueRef.current.then(async () => {
         const hasVersion = noteVersionsRef.current.has(notePath);
         const expectedModified = noteVersionsRef.current.get(notePath);
@@ -195,7 +236,7 @@ export function NotesOverlay({ open, onClose, todayNoteRequest = 0, notePathRequ
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            content: blocks,
+            content,
             ...(hasVersion ? { expectedModified } : {}),
           }),
         });
@@ -204,12 +245,15 @@ export function NotesOverlay({ open, onClose, todayNoteRequest = 0, notePathRequ
         if (typeof saved.modified === "number") {
           noteVersionsRef.current.set(notePath, saved.modified);
         }
+        if (draftsRef.current.get(notePath) === content) draftsRef.current.delete(notePath);
+        if (sequence === latestSave.current) setSaveStatus("saved");
       });
       saveQueueRef.current = save.catch(() => undefined);
       void save.catch((e) => {
+        if (sequence === latestSave.current) setSaveStatus("error");
         console.error("save note:", e);
         toast.error(e instanceof Error && e.message.includes("changed elsewhere")
-          ? "This note changed elsewhere. Reopen it before saving."
+          ? "This note changed elsewhere. Your unsaved changes are kept here."
           : "Couldn't save note.");
       });
     },
@@ -217,12 +261,22 @@ export function NotesOverlay({ open, onClose, todayNoteRequest = 0, notePathRequ
   );
 
   const shownPath = embeddedPath ?? activeNote?.path ?? null;
-  const openFullPage = useCallback(() => {
+  const reloadSavedNote = async () => {
+    if (!activeNote || !await confirm({ title: "Reload saved note?", message: "This discards your unsaved changes and loads the version on disk.", confirmLabel: "Reload", variant: "danger" })) return;
+    draftsRef.current.delete(activeNote.path);
+    await openNote(activeNote.path);
+  };
+  const openFullPage = useCallback(async () => {
     if (shownPath) {
+      await saveQueueRef.current;
+      if (draftsRef.current.has(shownPath)) {
+        toast.error("Save failed. Your changes are kept here; retry before opening the full page.");
+        return;
+      }
       onClose();
-      router.push(embeddedPath ? notesPageHref(shownPath) : `/notes/${shownPath}`);
+      router.push(notesPageHref(shownPath));
     }
-  }, [shownPath, embeddedPath, onClose, router]);
+  }, [shownPath, onClose, router, toast]);
 
   return (
     <SidePanel
@@ -233,6 +287,7 @@ export function NotesOverlay({ open, onClose, todayNoteRequest = 0, notePathRequ
       ariaLabel={shownPath ? "Note editor" : "Notes search"}
     >
       <div
+        data-panel-drag-handle
         className="flex items-center gap-2 px-4 py-3 border-b shrink-0"
         style={{ borderColor: "var(--border)" }}
       >
@@ -254,7 +309,7 @@ export function NotesOverlay({ open, onClose, todayNoteRequest = 0, notePathRequ
             <button
               type="button"
               onClick={() => setNewNoteModalOpen(true)}
-              className="shrink-0 rounded p-0.5 hover:bg-[var(--bg-elevated)]"
+              className="hub-icon-btn"
               title="New note"
               aria-label="New note"
             >
@@ -263,28 +318,19 @@ export function NotesOverlay({ open, onClose, todayNoteRequest = 0, notePathRequ
                 aria-hidden
               />
             </button>
-            <CopyLocationButton path={shownPath} size={14} />
             <button
               type="button"
               onClick={openFullPage}
               title="Open in full page"
               aria-label="Open in full page"
+              className="hub-icon-btn"
             >
               <ExternalLink
                 size={14} className="text-text-muted"
                 aria-hidden
               />
             </button>
-            <button
-              type="button"
-              onClick={onClose}
-              aria-label="Close notes panel"
-            >
-              <X
-                size={16} className="text-text-muted"
-                aria-hidden
-              />
-            </button>
+            <CopyLocationButton path={shownPath} size={14} />
           </>
         ) : (
           <>
@@ -328,33 +374,26 @@ export function NotesOverlay({ open, onClose, todayNoteRequest = 0, notePathRequ
                 aria-hidden
               />
             </button>
-            <button
-              type="button"
-              onClick={onClose}
-              aria-label="Close notes panel"
-            >
-              <X
-                size={16} className="text-text-muted"
-                aria-hidden
-              />
-            </button>
           </>
         )}
+        <SidePanelControls closeLabel="Close notes panel" />
       </div>
 
-      <div className="flex-1 overflow-y-auto overscroll-contain">
-        {embeddedPath ? (
+      {activeNote && <p className={`shrink-0 px-4 py-1 text-xs ${saveStatus === "error" ? "text-danger" : "text-text-subtle"}`} role="status">{saveStatus === "saving" ? "Saving…" : saveStatus === "saved" ? "Saved" : saveStatus === "error" ? "Couldn't save. Your changes are kept here." : "Changes save automatically"}{saveStatus === "error" && <><button className="ml-2 underline" onClick={() => { const draft = draftsRef.current.get(activeNote.path); if (draft) handleSave(draft); }}>Retry</button><button className="ml-2 underline" onClick={() => void reloadSavedNote()}>Reload saved note</button></>}</p>}
+      <div className="notes-panel-body flex-1 min-h-0 overflow-y-auto overscroll-contain">
+        {loadingNote ? <div className="p-4"><SkeletonRows count={5} /></div> : embeddedPath ? (
           <div className="p-2" data-testid="notes-panel-embedded">
             <VaultEditorPage key={`${embeddedPath}:${notePathRequest?.id ?? 0}`} vault="notes" path={embeddedPath.split("/")} embedded />
           </div>
         ) : activeNote ? (
-          <div className="p-2">
+          <div className="notes-panel-editor p-2">
             <BlockNoteEditor
               key={activeNote.path}
               initialContent={activeNote.blocks}
               onChange={handleSave}
               vaultId="notes"
               contentSlug={activeNote.path}
+              className="note-editor min-h-full"
             />
           </div>
         ) : query.trim() ? (

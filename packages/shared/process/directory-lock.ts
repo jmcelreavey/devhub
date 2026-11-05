@@ -10,10 +10,25 @@ function ownerAlive(pid: number): boolean {
   }
 }
 
+/**
+ * An owner is stale when its process is gone — or when the lease is older than
+ * any legitimate git operation could run. The age check is the safety net for
+ * a request that died mid-operation: the pid is this server, so liveness alone
+ * would keep the lock forever.
+ */
+const OWNER_MAX_AGE_MS = 15 * 60_000;
+
 function isStale(file: string): boolean {
   try {
     const parsed = JSON.parse(fs.readFileSync(file, "utf8")) as { pid?: unknown };
-    return typeof parsed.pid === "number" && Number.isInteger(parsed.pid) && parsed.pid > 0 && !ownerAlive(parsed.pid);
+    const pid = typeof parsed.pid === "number" && Number.isInteger(parsed.pid) && parsed.pid > 0 ? parsed.pid : null;
+    if (pid === null) return false;
+    if (!ownerAlive(pid)) return true;
+    try {
+      return Date.now() - fs.statSync(file).mtimeMs > OWNER_MAX_AGE_MS;
+    } catch {
+      return false;
+    }
   } catch {
     return false;
   }

@@ -11,24 +11,29 @@ import { pathToFileURL } from "node:url";
 import { dashboardDir, desktopDir, repoRoot, stagingDir } from "./staging-paths.mjs";
 import { NATIVE_BINARY_PATTERN, foreignBinaryReason } from "./native-binaries.mjs";
 import { isEntry } from "./is-entry.mjs";
+import { acquireDashboardBuildLock } from "./dashboard-build-lock.mjs";
 
 const require = createRequire(import.meta.url);
 const log = (message) => process.stdout.write(`[stage-dashboard] ${message}\n`);
 const slash = (value) => value.split(path.sep).join("/");
 const sha256 = (file) => crypto.createHash("sha256").update(fs.readFileSync(file)).digest("hex");
 const inside = (root, file) => { const rel = path.relative(root, file); return rel === "" || (!rel.startsWith(`..${path.sep}`) && rel !== ".." && !path.isAbsolute(rel)); };
+const isHostMetadata = (name) => name === ".DS_Store" || name.startsWith("._") || name === "Thumbs.db" || name === "desktop.ini";
 
-async function git(args) {
+function loadExecExternal() {
   const previous = process.env.TSX_TSCONFIG_PATH;
   process.env.TSX_TSCONFIG_PATH = path.join(dashboardDir, "tsconfig.json");
-  let execExternal;
   try {
     const requireDashboard = createRequire(path.join(dashboardDir, "package.json"));
-    execExternal = requireDashboard("tsx/cjs/api").require(path.join(repoRoot, "apps/core/src/lib/exec-external.ts"), path.join(dashboardDir, "package.json")).execExternal;
+    return requireDashboard("tsx/cjs/api").require(path.join(repoRoot, "apps/core/src/lib/exec-external.ts"), path.join(dashboardDir, "package.json")).execExternal;
   } finally {
     if (previous === undefined) delete process.env.TSX_TSCONFIG_PATH;
     else process.env.TSX_TSCONFIG_PATH = previous;
   }
+}
+
+async function git(args) {
+  const execExternal = loadExecExternal();
   const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_")));
   Object.assign(env, { GIT_CONFIG_GLOBAL: os.devNull, GIT_CONFIG_NOSYSTEM: "1", GIT_OPTIONAL_LOCKS: "0", GIT_TERMINAL_PROMPT: "0" });
   const result = await execExternal("git", args, { cwd: repoRoot, env, binary: true, timeoutMs: 120000, maxBuffer: 32 * 1024 * 1024 });
@@ -55,8 +60,7 @@ async function trackedInputs() {
 
 // npm's lockfile integrity identifies the original archive, not the extracted
 // files. Compare every consumed package file to that archive before trusting it.
-export function archiveFiles(integrity, cacheRoot) {
-  let archive;
+function cachedArchive(integrity, cacheRoot) {
   for (const token of integrity.split(/\s+/)) {
     const match = /^(sha512|sha384|sha256|sha1)-([A-Za-z0-9+/]+={0,2})(?:\?.*)?$/.exec(token);
     if (!match) continue;
@@ -64,12 +68,39 @@ export function archiveFiles(integrity, cacheRoot) {
     const hex = digest.toString("hex");
     const file = path.join(cacheRoot, "_cacache", "content-v2", match[1], hex.slice(0, 2), hex.slice(2, 4), hex.slice(4));
     if (!fs.existsSync(file)) continue;
-    const bytes = fs.readFileSync(file);
-    if (!crypto.createHash(match[1]).update(bytes).digest().equals(digest)) throw new Error(`Corrupt npm cache archive: ${file}`);
-    archive = zlib.gunzipSync(bytes, { maxOutputLength: 512 * 1024 * 1024 });
-    break;
+    return { file, algorithm: match[1], digest };
   }
-  if (!archive) throw new Error("Package archive is missing from the npm cache; provenance cannot be verified");
+  return null;
+}
+
+export function missingArchiveUrls(lock, cacheRoot, installationRoot = repoRoot) {
+  const urls = new Set();
+  for (const [name, locked] of Object.entries(lock.packages)) {
+    if (!locked.integrity || !locked.resolved || !name.includes("node_modules/")) continue;
+    const manifest = path.resolve(installationRoot, name, "package.json");
+    if (!inside(installationRoot, manifest) || !fs.existsSync(manifest)) continue;
+    if (!cachedArchive(locked.integrity, cacheRoot)) urls.add(locked.resolved);
+  }
+  return [...urls];
+}
+
+async function hydratePackageArchives(lock, cacheRoot) {
+  const missing = missingArchiveUrls(lock, cacheRoot);
+  if (!missing.length) return;
+  log(`restoring ${missing.length} missing npm archives`);
+  const execExternal = loadExecExternal();
+  for (let offset = 0; offset < missing.length; offset += 150) {
+    await execExternal("npm", ["cache", "add", ...missing.slice(offset, offset + 150), "--cache", cacheRoot, "--ignore-scripts", "--loglevel=error"], { cwd: repoRoot, timeoutMs: 300_000, maxBuffer: 1024 * 1024 });
+  }
+  if (missingArchiveUrls(lock, cacheRoot).length) throw new Error("npm did not restore every missing package archive");
+}
+
+export function archiveFiles(integrity, cacheRoot) {
+  const cached = cachedArchive(integrity, cacheRoot);
+  if (!cached) throw new Error("Package archive is missing from the npm cache; provenance cannot be verified");
+  const bytes = fs.readFileSync(cached.file);
+  if (!crypto.createHash(cached.algorithm).update(bytes).digest().equals(cached.digest)) throw new Error(`Corrupt npm cache archive: ${cached.file}`);
+  const archive = zlib.gunzipSync(bytes, { maxOutputLength: 512 * 1024 * 1024 });
   const files = new Map();
   let offset = 0, paxPath, longPath;
   const text = (bytes) => bytes.toString("utf8").replace(/\0.*$/s, "");
@@ -122,6 +153,7 @@ async function sourceAuditor() {
   const lockPath = path.join(repoRoot, "package-lock.json");
   const lock = JSON.parse(fs.readFileSync(lockPath, "utf8"));
   if (!lock.packages || typeof lock.packages !== "object") throw new Error("Workspace lockfile has no package provenance");
+  await hydratePackageArchives(lock, cacheRoot);
   return {
     check(file) {
       const absolute = path.resolve(file);
@@ -129,6 +161,9 @@ async function sourceAuditor() {
       const resolved = fs.realpathSync(absolute);
       if (!inside(repoRoot, resolved)) throw new Error(`Build input outside checkout: ${absolute}`);
       const relative = slash(path.relative(repoRoot, resolved));
+      // The final verification creates a fresh auditor; repeated graph visits
+      // within this pass don't need to reopen and hash the same package files.
+      if (inputs.has(relative)) return;
       if (/(?:^|\/)plugin-brand-logo\.[^/]+$/.test(relative)) throw new Error(`Plugin branding copy is a build input: ${relative}`);
       const parts = relative.split("/");
       if (parts.includes("node_modules")) {
@@ -231,7 +266,7 @@ function auditBuildTools(names, audit) {
     function scan(directory) {
       for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
         if (directory === source && entry.name === "node_modules") continue;
-        if (/^(?:\.env(?:\.|$)|credentials?\.json$|id_rsa|.*\.(?:pem|key)$)/i.test(entry.name)) continue;
+        if (isHostMetadata(entry.name) || /^(?:\.env(?:\.|$)|credentials?\.json$|id_rsa|.*\.(?:pem|key)$)/i.test(entry.name)) continue;
         const file = path.join(directory, entry.name);
         if (entry.isSymbolicLink()) throw new Error(`Symlink in build dependency: ${file}`);
         if (entry.isDirectory()) scan(file);
@@ -278,7 +313,7 @@ function stageDependencies(names, dest, audit) {
     seen.set(target, real);
     const manifest = JSON.parse(fs.readFileSync(path.join(real, "package.json"), "utf8"));
     fs.mkdirSync(path.dirname(target), { recursive: true });
-    fs.cpSync(real, target, { recursive: true, dereference: false, filter: (src) => src !== path.join(real, "node_modules") && !/^(?:\.env(?:\.|$)|credentials?\.json$|id_rsa|.*\.(?:pem|key)$)/i.test(path.basename(src)) });
+    fs.cpSync(real, target, { recursive: true, dereference: false, mode: fs.constants.COPYFILE_FICLONE, filter: (src) => src !== path.join(real, "node_modules") && !isHostMetadata(path.basename(src)) && !/^(?:\.env(?:\.|$)|credentials?\.json$|id_rsa|.*\.(?:pem|key)$)/i.test(path.basename(src)) });
     for (const file of walkFiles(target)) {
       audit.check(path.join(real, path.relative(target, file)));
       if (NATIVE_BINARY_PATTERN.test(path.basename(file))) {
@@ -314,7 +349,7 @@ function stageNodePty(servicesDir, audit, { platform = os.platform(), arch = os.
   for (const entry of ["package.json", "lib", "typings", "LICENSE"]) {
     const from = path.join(src, entry);
     if (fs.existsSync(from)) {
-      fs.cpSync(from, path.join(dest, entry), { recursive: true, dereference: false });
+      fs.cpSync(from, path.join(dest, entry), { recursive: true, dereference: false, filter: (file) => !isHostMetadata(path.basename(file)) });
     }
   }
 
@@ -333,7 +368,7 @@ function stageNodePty(servicesDir, audit, { platform = os.platform(), arch = os.
     );
   }
   const to = path.join(dest, "prebuilds", prebuiltDir);
-  fs.cpSync(from, to, { recursive: true, dereference: false });
+  fs.cpSync(from, to, { recursive: true, dereference: false, filter: (file) => !isHostMetadata(path.basename(file)) });
 
   const natives = fs.readdirSync(to).filter((f) => f.endsWith(".node"));
   if (natives.length === 0) {
@@ -462,23 +497,87 @@ function replaceStaged(root) {
   }
 }
 
-export function stageDashboard(options) {
-  return buildPayload(options);
+export async function reusePayload(root) {
+  if (!fs.existsSync(path.join(root, "server/provenance.json"))) return false;
+  const started = performance.now();
+  try {
+    await verifyStagedPayload(root);
+  } catch (error) {
+    log(`cached payload needs rebuilding: ${error.message}`);
+    return false;
+  }
+  log(`reusing verified payload (${((performance.now() - started) / 1000).toFixed(1)}s)`);
+  return true;
 }
 
-async function buildPayload({ build = true } = {}) {
+function reuseUi(root, destination, audit) {
+  const file = path.join(root, "server/provenance.json");
+  if (!fs.existsSync(file)) return false;
+  try {
+    const previous = JSON.parse(fs.readFileSync(file, "utf8"));
+    if (previous.format !== 1 || !previous.uiInputs || Array.isArray(previous.uiInputs)) return false;
+    // Include the complete UI tree: new Tailwind sources invalidate the cache
+    // even when they weren't part of Vite's previous import graph.
+    if (Object.entries(audit.list()).some(([name, digest]) => previous.uiInputs[name] !== digest)) return false;
+    for (const [name, digest] of Object.entries(previous.uiInputs)) {
+      if (typeof digest !== "string" || !inside(repoRoot, path.resolve(repoRoot, name))) return false;
+      audit.check(path.resolve(repoRoot, name));
+      if (sha256(path.join(repoRoot, name)) !== digest) return false;
+    }
+    const source = path.join(root, "server/ui/dist");
+    const outputs = Object.fromEntries(Object.entries(outputManifest(source)).map(([name, digest]) => [`server/ui/dist/${name}`, digest]));
+    const expected = Object.fromEntries(Object.entries(previous.outputs).filter(([name]) => name.startsWith("server/ui/dist/")));
+    if (!Object.hasOwn(outputs, "server/ui/dist/index.html") || JSON.stringify(Object.entries(outputs).sort()) !== JSON.stringify(Object.entries(expected).sort())) return false;
+    assertNoCopies(source);
+    fs.cpSync(source, destination, { recursive: true, mode: fs.constants.COPYFILE_FICLONE });
+    log("reusing verified UI; only server and services need rebuilding");
+    return true;
+  } catch (error) {
+    log(`UI cache needs rebuilding: ${error.message}`);
+    return false;
+  }
+}
+
+export async function refreshPayloadSource(root, sourceCommit) {
+  const server = path.join(root, "server");
+  const manifestFile = path.join(server, "provenance.json");
+  const manifest = JSON.parse(fs.readFileSync(manifestFile, "utf8"));
+  await writeSourceMarker(server, sourceCommit);
+  manifest.outputs["server/bundle-source.json"] = sha256(path.join(server, "bundle-source.json"));
+  fs.writeFileSync(manifestFile, `${JSON.stringify(manifest, null, 2)}\n`);
+}
+
+async function writeSourceMarker(server, sourceCommit) {
+  const commit = sourceCommit ?? (await git(["rev-parse", "HEAD"])).trim();
+  const marker = { commit, builtAt: new Date().toISOString(), release: process.env.GITHUB_ACTIONS === "true" };
+  if (/^[0-9a-f]{7,40}$/i.test(process.env.DEVHUB_SOURCE_COMMIT ?? "")) marker.sourceCommit = process.env.DEVHUB_SOURCE_COMMIT;
+  fs.writeFileSync(path.join(server, "bundle-source.json"), `${JSON.stringify(marker, null, 2)}\n`);
+}
+
+export async function stageDashboard(options) {
+  const release = acquireDashboardBuildLock();
+  try { return await buildPayload(options); }
+  finally { release(); }
+}
+
+async function buildPayload({ build = true, force = false, cacheRoot = stagingDir } = {}) {
   if (!build) { await verifyStagedPayload(stagingDir); log("verified existing core/Vite payload"); return; }
+  if (!force && await reusePayload(stagingDir)) { await refreshPayloadSource(stagingDir); return; }
+  const started = performance.now();
+  log("checking build inputs");
   const audit = await sourceAuditor();
   audit.check(path.join(repoRoot, "package-lock.json"));
-  for (const file of ["apps/ui/vite.config.ts", "apps/ui/postcss.config.mjs", "apps/ui/tsconfig.json", "apps/ui/index.html", "apps/ui/package.json", "apps/core/package.json", "package.json", "apps/desktop/scripts/stage-dashboard.mjs", "apps/desktop/sidecar/supervisor.mjs", "apps/desktop/sidecar/managed-tools.mjs", "apps/desktop/sidecar/cleanup-orphans.mjs"]) audit.check(path.join(repoRoot, file));
+  for (const file of ["apps/ui/vite.config.ts", "apps/ui/postcss.config.mjs", "apps/ui/tsconfig.json", "apps/ui/index.html", "apps/ui/package.json", "apps/core/package.json", "package.json", "apps/desktop/scripts/stage-dashboard.mjs", "apps/desktop/scripts/dashboard-build-lock.mjs", "packages/shared/process/directory-lock.ts", "apps/desktop/sidecar/supervisor.mjs", "apps/desktop/sidecar/managed-tools.mjs", "apps/desktop/sidecar/cleanup-orphans.mjs"]) audit.check(path.join(repoRoot, file));
   auditUi(audit);
   auditBuildTools(["vite", "@vitejs/plugin-react", "@tailwindcss/postcss", "esbuild", "tsx"], audit);
+  log(`inputs checked (${((performance.now() - started) / 1000).toFixed(1)}s); building UI`);
   fs.mkdirSync(stagingDir, { recursive: true });
   const temp = fs.mkdtempSync(path.join(stagingDir, ".core-build-"));
   let retain = false;
   try {
     const server = path.join(temp, "server"), services = path.join(temp, "services");
     fs.mkdirSync(server, { recursive: true });
+    if (force || !reuseUi(cacheRoot, path.join(server, "ui/dist"), audit)) {
     const vite = await import(pathToFileURL(path.join(path.dirname(require.resolve("vite/package.json", { paths: [dashboardDir] })), "dist/node/index.js")).href);
     const previousEnv = { ...process.env };
     const previousCwd = process.cwd();
@@ -487,11 +586,15 @@ async function buildPayload({ build = true } = {}) {
     process.env.HOME = temp;
     process.env.USERPROFILE = temp;
     try {
-      await vite.build({ root: dashboardDir, envDir: temp, build: { outDir: path.join(server, "ui/dist"), emptyOutDir: true }, plugins: [{
+      const uiStarted = performance.now();
+      await vite.build({ root: dashboardDir, envDir: temp, logLevel: "warn", build: { outDir: path.join(server, "ui/dist"), emptyOutDir: true, reportCompressedSize: false }, plugins: [{
         name: "devhub-build-provenance",
         generateBundle() { for (const id of this.getModuleIds()) { const file = id.split("?")[0]; if (!file.startsWith("\0") && path.isAbsolute(file)) audit.check(file); } },
       }] });
+      log(`UI built (${((performance.now() - uiStarted) / 1000).toFixed(1)}s)`);
     } finally { process.chdir(previousCwd); for (const key of Object.keys(process.env)) if (!(key in previousEnv)) delete process.env[key]; Object.assign(process.env, previousEnv); }
+    }
+    const uiInputs = audit.list();
     if (!walkFiles(path.join(server, "ui", "dist")).some((file) => file.endsWith(".wasm"))) throw new Error("Vite did not emit the terminal WASM asset");
     esbuild = require(require.resolve("esbuild", { paths: [dashboardDir] }));
     // pull-core resolves tsx dynamically when a user links a checkout.
@@ -521,26 +624,26 @@ async function buildPayload({ build = true } = {}) {
     // Capture service build graphs too; node-pty is staged separately next to the terminal.
     const serviceOptions = { ...buildOptions, plugins: [...buildOptions.plugins, { name: "capture-service-inputs", setup(build) { build.onEnd((result) => { if (result.metafile) inspect(result, serviceExternals); }); } }] };
     await stageServices(services, serviceOptions, audit);
+    log("staging runtime dependencies");
     stageDependencies(externals, server, audit);
     serviceExternals.delete("node-pty");
     // Bundled ws probes these optional native addons in try/catch and falls back to JS.
     serviceExternals.delete("bufferutil");
     serviceExternals.delete("utf-8-validate");
     stageDependencies(serviceExternals, services, audit);
-    const commit = (await git(["rev-parse", "HEAD"])).trim();
-    const marker = { commit, builtAt: new Date().toISOString(), release: process.env.GITHUB_ACTIONS === "true" };
-    if (/^[0-9a-f]{7,40}$/i.test(process.env.DEVHUB_SOURCE_COMMIT ?? "")) marker.sourceCommit = process.env.DEVHUB_SOURCE_COMMIT;
-    fs.writeFileSync(path.join(server, "bundle-source.json"), `${JSON.stringify(marker, null, 2)}\n`);
+    await writeSourceMarker(server);
     const outputs = {};
     for (const name of ["server", "services"]) for (const [file, digest] of Object.entries(outputManifest(path.join(temp, name), name === "server"))) outputs[`${name}/${file}`] = digest;
-    fs.writeFileSync(path.join(server, "provenance.json"), `${JSON.stringify({ format: 1, inputs: audit.list(), outputs }, null, 2)}\n`);
+    fs.writeFileSync(path.join(server, "provenance.json"), `${JSON.stringify({ format: 1, inputs: audit.list(), uiInputs, outputs }, null, 2)}\n`);
+    log("verifying payload");
     await verifyStagedPayload(temp);
     try { replaceStaged(temp); }
     catch (error) { retain = true; throw new Error(`Staging replacement failed; recovery files retained at ${temp}`, { cause: error }); }
-    log("staged core server, Vite assets and services");
+    log(`staged core server, Vite assets and services (${((performance.now() - started) / 1000).toFixed(1)}s total)`);
   } finally { if (!retain) fs.rmSync(temp, { recursive: true, force: true }); }
 }
 
 if (isEntry(import.meta.url)) {
-  stageDashboard({ build: !process.argv.includes("--no-build") }).catch((error) => { process.stderr.write(`[stage-dashboard] ${error.message}\n`); process.exitCode = 1; });
+  const cacheIndex = process.argv.indexOf("--cache-root");
+  stageDashboard({ build: !process.argv.includes("--no-build"), force: process.argv.includes("--force"), cacheRoot: cacheIndex === -1 ? stagingDir : process.argv[cacheIndex + 1] }).catch((error) => { process.stderr.write(`[stage-dashboard] ${error.message}\n`); process.exitCode = 1; });
 }

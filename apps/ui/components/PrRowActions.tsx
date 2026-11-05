@@ -2,6 +2,7 @@
 
 import type { ContextMenuGroup,ContextMenuItem } from "@/components/shell/ContextMenu";
 import { launchAgentJob } from "@/lib/agent/job";
+import { chatAboutPr } from "@/lib/agent/chat-about";
 import { vaultNoteApi, vaultNoteHref } from "@/lib/create-vault-note";
 import { openInBrowser } from "@/lib/desktop/bridge";
 import type { GithubPrRow,GithubPrsApiPayload } from "@shared/github/pr-types";
@@ -62,7 +63,7 @@ function copyUrlItems(
 
 function groupPrActions(items: ContextMenuItem[]): ContextMenuGroup[] {
   const sections = [
-    { id: "review", label: "Review", ids: ["daily-rep-first", "agent-review", "investigate-pipeline"] },
+    { id: "review", label: "Review", ids: ["daily-rep-first", "agent-review", "chat-pr", "investigate-pipeline"] },
     { id: "open", label: "Open", ids: ["github", "cursor", "note"] },
     { id: "share", label: "Copy and share", ids: ["copy-approved", "copy-reviewed", "copy-pr-url", "copy-jira-url", "slack-request"] },
     { id: "visibility", label: "Visibility", ids: ["skip-pr"] },
@@ -143,6 +144,14 @@ export function buildPrRowMenuGroups({
       notifyPrReviewNoteWatch(row);
 
     },
+  };
+  const chatPr = {
+    id: "chat-pr",
+    label: "Chat about PR…",
+    description: "Ask questions; nothing changes unless you say",
+    ...(disableAgentActions ? { disabled: true, disabledReason: "Unavailable on Today until task migration is profile-safe." } : {}),
+    icon: <MessageSquare size={12} />,
+    onSelect: () => chatAboutPr(row),
   };
   const repFirst = {
     id: "daily-rep-first",
@@ -231,6 +240,7 @@ export function buildPrRowMenuGroups({
         ...copyUrlItems(row, toast),
         openCursor,
         agentReview,
+        chatPr,
         investigatePipeline,
         {
           id: "slack-request",
@@ -249,6 +259,8 @@ export function buildPrRowMenuGroups({
     return withTagsGroup(
       groupPrActions([
         repLocked ? repFirst : agentReview,
+        // The daily rep is AI-free, so chat waits for it like the agent review.
+        ...(repLocked ? [] : [chatPr]),
         investigatePipeline,
         openCursor,
         openGithub,
@@ -275,6 +287,7 @@ export function buildPrRowMenuGroups({
         icon: <MessageSquare size={12} />,
         onSelect: () => void copyTextAndToast(buildSlackMessage(row, "reviewed"), "Slack message", toast),
       },
+      chatPr,
       openCursor,
       openGithub,
       ...copyUrlItems(row, toast),

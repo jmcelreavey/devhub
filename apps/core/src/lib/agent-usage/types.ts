@@ -1,4 +1,4 @@
-export type UsageProviderId = "claude" | "codex" | "cursor" | "copilot" | "openrouter" | "zai";
+export type UsageProviderId = "claude" | "codex" | "opencode-go" | "cursor" | "copilot" | "openrouter" | "vercel" | "experiential" | "zai";
 
 export interface UsageMeter {
   label: string;
@@ -16,6 +16,12 @@ export interface UsageSpend {
   source: "billed" | "estimate";
 }
 
+export interface UsageBalance {
+  label: string;
+  amount: number;
+  currency: string;
+}
+
 export interface ProviderUsage {
   id: UsageProviderId;
   name: string;
@@ -29,6 +35,9 @@ export interface ProviderUsage {
   message?: string;
   /** A short cause for a failure (sign-in rejected, network, changed API), shown behind Details. */
   reason?: string;
+  /** Hide Retry when the provider has no usable usage API for this sign-in. */
+  retryable?: boolean;
   meters: UsageMeter[];
+  balance?: UsageBalance;
   spend: UsageSpend[];
 }

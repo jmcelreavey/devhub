@@ -32,7 +32,7 @@ export function MobileNav() {
   const pluginItems = pluginNav.items;
   const pathname = usePathname();
   const search = useSearchParams();
-  const { counts, unseen, calendarRemaining, notificationsUnread } = useNavBadges();
+  const { counts, unseen, calendarRemaining, gitAttention } = useNavBadges();
 
   useEffect(() => {
     if (!open) return;
@@ -146,7 +146,7 @@ export function MobileNav() {
                         item={item}
                         onClick={() => setOpen(false)}
                         active={item.href === activeHref}
-                        count={countForItem(item.icon, counts, { calendarRemaining, notificationsUnread })}
+                        count={countForItem(item.icon, counts, { calendarRemaining, gitAttention })}
                         unseen={unseenForItem(item.icon, unseen)}
                       />
                     ))}

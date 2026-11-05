@@ -176,13 +176,16 @@ shipping somebody's notes in a public installer. It also writes
 **`stage-dashboard.mjs`** builds the core HTTP server and Vite UI once, then
 stages their runtime dependencies, the terminal server, the matching `node-pty`
 prebuild and the terminal WASM. The server serves `server/ui/dist` directly.
-The build does not materialise plugin sources. Checkout inputs must be committed and
-match the Git index; unknown files and skip-worktree inputs stop staging. Installed packages must match the workspace
+The build does not materialise plugin sources. Release staging requires checkout inputs
+to be committed and match the Git index; unknown files and skip-worktree inputs stop staging. Installed packages must match the workspace
 lockfile's version and cached archive integrity, and each used file must match the
 archive. The generated provenance records input and output digests, and
 `--no-build` verifies them before reuse.
 
-The installed rebuild uses an isolated core snapshot and rejects older Next
+The installed rebuild snapshots tracked and non-ignored untracked build inputs, including
+working-tree edits, into a temporary isolated checkout. It records that snapshot without
+changing the source repository's index or history, and keeps the same dependency and
+payload provenance checks. It rejects older Next
 releases instead of changing them in place. WSL payloads are versioned and
 previous releases remain available for rollback. User data stays outside the
 payload. The installed rebuild logs the retained server, services and resource

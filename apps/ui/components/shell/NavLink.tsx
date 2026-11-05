@@ -3,6 +3,7 @@
 import { HoverTip } from "@/components/ui/HoverTip";
 import type { NavItem } from "../../../../packages/shared/ui-lib/navigation/nav";
 import {
+  GitBranch,
 Activity,
 BarChart3,
 BookOpen,
@@ -55,6 +56,7 @@ const ICONS: Record<string, LucideIcon> = {
   agents: Bot,
   skills: Zap,
   repos: FolderGit2,
+  git: GitBranch,
   database: Database,
   own: ShieldCheck,
   radar: Radar,

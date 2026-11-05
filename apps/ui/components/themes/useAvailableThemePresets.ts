@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useSyncExternalStore } from "react";
-import { getAvailableThemePresets, getThemeNow, THEME_CALENDAR_EVENT, THEME_PRESETS } from "@/lib/themes/presets";
+import { getThemePresets, getThemeNow, THEME_CALENDAR_EVENT, THEME_PRESETS } from "@/lib/themes/presets";
 import { getRuntimeThemes, getManagedThemePlugins, RUNTIME_THEMES_EVENT } from "@/lib/plugins/runtime-theme-client";
 
 function subscribe(onChange: () => void): () => void {
@@ -17,7 +17,7 @@ function calendarDay(): string {
 export function useAvailableThemePresets() {
   const day = useSyncExternalStore(subscribe, calendarDay, () => "");
   return useMemo(() => {
-    if (!day) return getAvailableThemePresets(undefined, THEME_PRESETS);
-    return getAvailableThemePresets(getThemeNow());
+    // Seasonal scheduling controls automatic selection, not the manual picker.
+    return day ? getThemePresets() : THEME_PRESETS;
   }, [day]);
 }

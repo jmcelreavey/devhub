@@ -50,6 +50,10 @@ interface LocalRepoCardProps {
   isDesktop: boolean;
   opening: string | null;
   removing: string | null;
+  selecting: boolean;
+  selected: boolean;
+  selectionDisabled: boolean;
+  onSelect: (name: string) => void;
   onLearn: (repo: RepoInfo) => void;
   onDxAudit: (repo: RepoInfo) => void;
   onUpstart: (repo: RepoInfo, debug?: boolean, context?: string) => void;
@@ -235,6 +239,10 @@ export function LocalRepoCard({
   isDesktop,
   opening,
   removing,
+  selecting,
+  selected,
+  selectionDisabled,
+  onSelect,
   onLearn,
   onDxAudit,
   onUpstart,
@@ -412,9 +420,14 @@ export function LocalRepoCard({
       className="card group repo-card"
       data-repo={repo.name}
       data-has-work={openTasks.length > 0 || undefined}
-      style={{ padding: 0, overflow: "visible", cursor: "pointer" }}
-      {...rowBind}
+      style={{ padding: 0, overflow: "visible", cursor: selecting && selectionDisabled ? "default" : "pointer", borderColor: selected ? "var(--accent)" : undefined }}
+      {...(selecting ? {} : rowBind)}
       onClick={(e) => {
+        if (selecting) {
+          if ((e.target as HTMLElement).closest("a, button, input, textarea")) return;
+          if (!selectionDisabled && removing === null) onSelect(repo.name);
+          return;
+        }
         rowBind.onClick?.(e);
         if (e.defaultPrevented) return;
         if ((e.target as HTMLElement).closest("a, button, input, textarea, [role='menu'], [role='menuitem']")) return;
@@ -425,6 +438,20 @@ export function LocalRepoCard({
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <div className="flex items-center gap-2 font-semibold text-sm break-words leading-snug text-text">
+              {selecting ? (
+                <>
+                  <input
+                    type="checkbox"
+                    aria-label={`Select ${repo.name}`}
+                    checked={selected}
+                    disabled={selectionDisabled || removing !== null}
+                    onChange={() => onSelect(repo.name)}
+                    style={{ accentColor: "var(--accent)" }}
+                  />
+                  <span className="truncate" title={repo.path}>{repo.name}</span>
+                  {selectionDisabled ? <span className="badge badge-muted shrink-0">Current DevHub</span> : null}
+                </>
+              ) : (
               <Link
                 href={`/repos/${encodeURIComponent(repo.name)}`}
                 className="hover:text-accent truncate"
@@ -440,6 +467,7 @@ export function LocalRepoCard({
               >
                 {repo.name}
               </Link>
+              )}
               {owned ? (
                 <span className="badge badge-muted" style={{ fontSize: 10 }}>
                   owned
@@ -459,8 +487,8 @@ export function LocalRepoCard({
             {(repo.branch || repo.worktreeOf || (repo.worktreeCount ?? 0) > 0) && (
               <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-2">
                 {repo.branch && <MetaChip icon={<GitBranch size={11} />} label={repo.branch} />}
-                {(repo.worktreeCount ?? 0) > 0 && <Link className="text-xs text-text-muted hover:text-accent" href={`/repos/${encodeURIComponent(repo.name)}/git?tab=worktrees`}>{repo.worktreeCount} worktrees{repo.staleWorktreeCount ? ` · ${repo.staleWorktreeCount} stale` : ""}</Link>}
-                {repo.branch && githubUrl ? (
+                {!selecting && (repo.worktreeCount ?? 0) > 0 && <Link className="text-xs text-text-muted hover:text-accent" href={`/repos/${encodeURIComponent(repo.name)}/git?tab=worktrees`}>{repo.worktreeCount} worktrees{repo.staleWorktreeCount ? ` · ${repo.staleWorktreeCount} stale` : ""}</Link>}
+                {!selecting && repo.branch && githubUrl ? (
                   <RepoOpenPrLink repoName={repo.name} branch={repo.branch} />
                 ) : null}
                 {repo.worktreeOf ? (
@@ -478,7 +506,7 @@ export function LocalRepoCard({
             action (it opens the hub); upstart is one hover away, and stays in
             the menu and on the hub (⌘⏎).
           */}
-          <div className="flex shrink-0 items-center gap-0.5">
+          {!selecting && <div className="flex shrink-0 items-center gap-0.5">
             <HoverTip
               label={
                 repo.hasUpstart
@@ -499,10 +527,10 @@ export function LocalRepoCard({
               label={`Actions for ${repo.name}`}
               onOpen={(x, y) => menu.openAtPoint(x, y, repo)}
             />
-          </div>
+          </div>}
         </div>
 
-        <div className="mt-1.5">
+        {!selecting ? <div className="mt-1.5">
           <RepoGitWorkspace
             repoName={repo.name}
             repoPath={repo.path}
@@ -510,7 +538,13 @@ export function LocalRepoCard({
             unpushedCount={repo.unpushedCount ?? 0}
             onMutate={onRefreshLocal}
           />
-        </div>
+        </div> : (
+          <div className="mt-1.5 text-xs text-text-muted">
+            {repo.dirtyCount > 0 ? `${repo.dirtyCount} changed` : "No reported changes"}
+            {(repo.unpushedCount ?? 0) > 0 ? ` · ${repo.unpushedCount} unpushed` : ""}
+            {(repo.worktreeCount ?? 0) > 0 ? ` · ${repo.worktreeCount} linked worktrees` : ""}
+          </div>
+        )}
 
         {/*
           Health line. Only renders when something is actually wrong — a badge

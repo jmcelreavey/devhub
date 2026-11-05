@@ -32,6 +32,7 @@ export default {
       "../../apps/core/src/lib/git/*.test.ts",
       "../../apps/core/src/lib/content/sync-paths.test.ts",
       "../../apps/core/src/lib/{process-lock,process-env,exec-external,exec-registry,gh-exec,port-probe,reveal-path}.test.ts",
+      "../../apps/core/src/lib/agent-usage/{cursor,experiential,opencode-go,openrouter}.test.ts",
       "../../apps/core/src/lib/{agent/cli-env,setup/input-path,launch/desktop,editor/cursor-open}.test.ts",
       "../../apps/core/src/lib/desktop/*.test.ts",
       "../../apps/core/src/scripts/{checkout-dev-defaults,op-secrets}.test.ts",

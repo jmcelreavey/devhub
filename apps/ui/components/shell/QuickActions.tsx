@@ -1,6 +1,7 @@
 "use client";
 
-import Link, { usePathname, useSearchParams } from "@/lib/navigation";
+import { usePathname, useSearchParams } from "@/lib/navigation";
+import { useEffect, useState } from "react";
 import { Bot } from "lucide-react";
 import { NotesBrowseButton } from "@/components/notes/NotesBrowseButton";
 import { TasksBrowseButton } from "@/components/tasks/TasksBrowseButton";
@@ -20,6 +21,12 @@ import { useLive } from "@/lib/hooks/use-fetch";
 export function QuickActions() {
   const pathname = usePathname();
   const params = useSearchParams();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  useEffect(() => {
+    const change = (event: Event) => setSidebarOpen((event as CustomEvent<boolean>).detail);
+    window.addEventListener("devhub:agents-sidebar", change);
+    return () => window.removeEventListener("devhub:agents-sidebar", change);
+  }, []);
   const { data: connection, error } = useLive<{ connected: boolean; error?: string }>(
     "/api/agent/connection",
     {
@@ -42,9 +49,9 @@ export function QuickActions() {
       <TerminalDockButton />
       <HoverTip label={label} pos="bottom-end">
         {available ? (
-          <Link href="/agents" className="hub-icon-btn" data-active={active || undefined} aria-current={active ? "page" : undefined} aria-label={label}>
+          <button type="button" className="hub-icon-btn" data-active={active || sidebarOpen || undefined} aria-expanded={sidebarOpen} aria-label={label} onClick={() => window.dispatchEvent(new Event("devhub:agents-toggle"))}>
             <Bot size={14} aria-hidden />
-          </Link>
+          </button>
         ) : (
           <button type="button" className="hub-icon-btn opacity-50" data-active={active || undefined} aria-label={label} aria-disabled="true">
             <Bot size={14} aria-hidden />

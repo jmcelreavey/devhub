@@ -7,6 +7,9 @@
  * /opt/local/bin     — MacPorts
  * ~/.local/bin       — Linux user installs (pip --user, cargo, etc.)
  * ~/Library/Python   — macOS pip --user console scripts
+ * ~/.npm-global/bin  — DevHub's documented global prefix (Safe-Chain's aikido-npm
+ *                       lives here on VMs; the desktop shell uses the same dir)
+ * ~/.volta/bin       — Volta-managed Node CLIs
  */
 import path from "node:path";
 
@@ -21,6 +24,8 @@ export function extraPathSegments(home?: string, executablePath = process.execPa
           path.join(home, ".opencode", "bin"),
           path.join(home, ".npm", "bin"),
           path.join(home, ".local", "bin"),
+          path.join(home, ".npm-global", "bin"),
+          path.join(home, ".volta", "bin"),
           ...["3.9", "3.10", "3.11", "3.12", "3.13"].map((version) =>
             path.join(home, "Library", "Python", version, "bin"),
           ),

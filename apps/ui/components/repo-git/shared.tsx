@@ -102,6 +102,8 @@ export interface GitPanelHandlers {
   onMutate: () => void;
   onConflict: (c: StashConflictPayload) => Promise<void>;
   onHookFailure: (f: GitHookFailurePayload) => void;
+  /** 409 index_lock from the API; omit to fall back to a toast. */
+  onIndexLock?: (message: string) => void;
 }
 
 /* ─── API helpers ─── */
@@ -204,34 +206,49 @@ export type GitActionFailure =
   | { kind: "conflict"; conflict: StashConflictPayload }
   | { kind: "checkout-conflict"; conflict: CheckoutConflictPayload; message: string }
   | { kind: "hook"; hook: GitHookFailurePayload }
+  | { kind: "index-lock"; message: string }
   | { kind: "error"; message: string; status: number };
 
 export type GitActionResult<T> = { ok: true; json: T } | ({ ok: false } & GitActionFailure);
+
+/** Human-readable message for every failure shape (never throw a raw `kind`). */
+export function gitFailureMessage(failure: GitActionFailure): string {
+  switch (failure.kind) {
+    case "error":
+      return failure.message;
+    case "index-lock":
+      return failure.message;
+    case "checkout-conflict":
+      return failure.message;
+    case "conflict":
+      return failure.conflict.error;
+    case "hook":
+      return failure.hook.summary ?? "Git hook failed.";
+  }
+}
 
 /**
  * POST a git mutation and classify the three failure shapes the API can
  * return — stash conflicts (409), hook failures (422), and plain errors —
  * so panels don't each re-implement the parse chain.
  */
-export async function postGitAction<T = Record<string, unknown>>(
-  url: string,
-  body: Record<string, unknown>,
-  opts?: { signal?: AbortSignal },
-): Promise<GitActionResult<T>> {
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-    signal: opts?.signal,
-  });
-  if (res.ok) {
-    const json = (await res.json().catch(() => ({}))) as T;
-    return { ok: true, json };
-  }
-  const text = await res.text().catch(() => "");
-  if (res.status === 409) {
+/** Classify a buffered response body into the shared failure shapes. */
+function classifyGitResponse<T>(status: number, text: string): GitActionResult<T> {
+  if (status === 409) {
     const conflict = parseStashConflict(text);
     if (conflict) return { ok: false, kind: "conflict", conflict };
+    try {
+      const payload = JSON.parse(text) as { code?: unknown; error?: unknown };
+      if (payload?.code === "index_lock") {
+        return {
+          ok: false,
+          kind: "index-lock",
+          message: typeof payload.error === "string" ? payload.error : "Git index is locked.",
+        };
+      }
+    } catch {
+      // not JSON — fall through to the generic classifier
+    }
     const checkoutConflict = parseCheckoutConflict(text);
     if (checkoutConflict) {
       return {
@@ -244,7 +261,105 @@ export async function postGitAction<T = Record<string, unknown>>(
   }
   const hook = parseHookFailurePayload(text);
   if (hook) return { ok: false, kind: "hook", hook };
-  return { ok: false, kind: "error", message: errorMessageFromBody(text, res.status), status: res.status };
+  return { ok: false, kind: "error", message: errorMessageFromBody(text, status), status };
+}
+
+interface NdjsonDoneFrame {
+  http: number;
+  body: unknown;
+}
+
+/** Read an NDJSON response: progress frames out via onProgress, done frame returned. */
+async function readNdjsonStream(
+  body: ReadableStream<Uint8Array>,
+  onProgress?: (line: string, elapsedMs: number) => void,
+): Promise<NdjsonDoneFrame | null> {
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let doneFrame: NdjsonDoneFrame | null = null;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    let index: number;
+    while ((index = buffer.indexOf("\n")) >= 0) {
+      const raw = buffer.slice(0, index);
+      buffer = buffer.slice(index + 1);
+      const trimmed = raw.trim();
+      if (!trimmed) continue;
+      try {
+        const frame = JSON.parse(trimmed) as {
+          type?: string;
+          line?: unknown;
+          elapsedMs?: unknown;
+          http?: unknown;
+          body?: unknown;
+        };
+        if (frame.type === "progress" && typeof frame.line === "string") {
+          onProgress?.(frame.line, typeof frame.elapsedMs === "number" ? frame.elapsedMs : 0);
+        } else if (frame.type === "done") {
+          doneFrame = { http: typeof frame.http === "number" ? frame.http : 200, body: frame.body };
+        }
+      } catch {
+        // Partial or malformed line — keep going; the done frame is what matters.
+      }
+    }
+  }
+  return doneFrame;
+}
+
+/**
+ * POST a git mutation and classify the failure shapes the API returns — stash
+ * conflicts (409), hook failures (422), plain errors — so panels don't each
+ * re-implement the parse chain. Pass `stream: true` to receive NDJSON progress
+ * frames for actions that support them (push, pull, fetch…); without it the
+ * server buffers the whole response exactly as before.
+ */
+export async function postGitAction<T = Record<string, unknown>>(
+  url: string,
+  body: Record<string, unknown>,
+  opts?: {
+    signal?: AbortSignal;
+    stream?: boolean;
+    onProgress?: (line: string, elapsedMs: number) => void;
+  },
+): Promise<GitActionResult<T>> {
+  const stream = opts?.stream === true;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(stream ? { Accept: "application/x-ndjson" } : {}),
+    },
+    body: JSON.stringify(body),
+    signal: opts?.signal,
+  });
+  const contentType = res.headers.get("content-type") ?? "";
+  if (stream && contentType.includes("application/x-ndjson") && res.body) {
+    const done = await readNdjsonStream(res.body, opts?.onProgress);
+    if (!done) {
+      return {
+        ok: false,
+        kind: "error",
+        message: "The server closed the progress stream before the operation finished.",
+        status: 0,
+      };
+    }
+    if (done.http < 400) {
+      return { ok: true, json: (done.body ?? {}) as T };
+    }
+    return classifyGitResponse<T>(
+      done.http,
+      typeof done.body === "string" ? done.body : JSON.stringify(done.body ?? {}),
+    );
+  }
+  if (res.ok) {
+    const json = (await res.json().catch(() => ({}))) as T;
+    return { ok: true, json };
+  }
+  const text = await res.text().catch(() => "");
+  return classifyGitResponse<T>(res.status, text);
 }
 
 /* ─── Local preferences ─── */

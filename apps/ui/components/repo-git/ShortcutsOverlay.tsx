@@ -23,6 +23,7 @@ const SHORTCUTS: { group: string; items: Shortcut[] }[] = [
       { keys: ["Esc"], what: "Close the top-most dialog" },
       { keys: ["←", "→"], what: "Previous / next tab (while a tab is focused)" },
       { keys: ["Home", "End"], what: "First / last tab" },
+      { keys: ["⌘", "1-8"], what: "Jump straight to a tab" },
     ],
   },
   {

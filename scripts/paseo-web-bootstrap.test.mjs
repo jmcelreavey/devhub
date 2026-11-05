@@ -1,36 +1,47 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import vm from "node:vm";
-import { withDevHubBootstrap, installDevHubBootstrap, restoreDevHubPasteGuard } from "./paseo-web-bootstrap.mjs";
+import { withDevHubBootstrap, installDevHubBootstrap } from "./paseo-web-bootstrap.mjs";
+import { markComposerSubmitControl } from "./paseo-web-keyboard.mjs";
+import { protectImageEncoding } from "./paseo-web-image-send.mjs";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { gzipSync, gunzipSync, brotliCompressSync, brotliDecompressSync } from "node:zlib";
 
-for (const version of ["0.12.0", "0.13.0"]) {
-  test("installs and restores " + version + " assets without a version manifest", () => {
+for (const legacy of [false, true]) {
+  test(legacy ? "restores legacy paste overrides, including precompressed assets" : "preserves upstream paste and protects image encoding", () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "devhub-paste-bootstrap-"));
     try {
       const web = path.join(root, "node_modules/@getpaseo/server/dist/server/web-ui");
       const bundle = path.join(web, "_expo/static/js/web/index-test.js");
       fs.mkdirSync(path.dirname(bundle), { recursive: true });
-      const original = fs.readFileSync(new URL("./fixtures/paseo-web-paste-" + version + ".txt", import.meta.url), "utf8");
-      fs.writeFileSync(bundle, original);
-      fs.writeFileSync(bundle + ".gz", gzipSync(original));
-      fs.writeFileSync(bundle + ".br", brotliCompressSync(original));
-      for (const extension of [".gz", ".br"]) fs.utimesSync(bundle + extension, 1, 1);
+      const encoder = fs.readFileSync(new URL("./fixtures/paseo-web-image-send-0.13.2.txt", import.meta.url), "utf8");
+      const original = fs.readFileSync(new URL("./fixtures/paseo-web-paste-0.13.0.txt", import.meta.url), "utf8") + encoder;
+      const installed = legacy ? fs.readFileSync(new URL("./fixtures/paseo-web-paste-legacy.txt", import.meta.url), "utf8") + encoder : original;
+      fs.writeFileSync(bundle, installed);
+      fs.writeFileSync(bundle + ".gz", gzipSync(installed));
+      fs.writeFileSync(bundle + ".br", brotliCompressSync(installed));
+      if (legacy) fs.writeFileSync(bundle + ".devhub-original", original);
       fs.writeFileSync(path.join(web, "index.html"), '<script src="/_expo/static/js/web/index-test.js" defer></script>');
       installDevHubBootstrap(root);
-      const patched = fs.readFileSync(bundle, "utf8");
-      assert.match(patched, /devhub-message-submit/);
-      assert.equal(gunzipSync(fs.readFileSync(bundle + ".gz")).toString(), patched);
-      assert.equal(brotliDecompressSync(fs.readFileSync(bundle + ".br")).toString(), patched);
+      const expected = protectImageEncoding(markComposerSubmitControl(original));
+      assert.ok(expected);
+      assert.notEqual(expected, original, "compact keyboard still identifies Send/Queue");
+      assert.equal(fs.readFileSync(bundle, "utf8"), expected);
+      assert.equal(gunzipSync(fs.readFileSync(bundle + ".gz")).toString(), expected);
+      assert.equal(brotliDecompressSync(fs.readFileSync(bundle + ".br")).toString(), expected);
+      assert.doesNotMatch(expected, /installPasteGuard|devhub-paste-v1/);
+      const html = fs.readFileSync(path.join(web, "index.html"), "utf8");
+      assert.match(html, /index-test\.js\?devhub=upstream-/);
       installDevHubBootstrap(root);
-      assert.equal(fs.readFileSync(bundle, "utf8"), patched);
-      restoreDevHubPasteGuard(root);
-      assert.equal(fs.readFileSync(bundle, "utf8"), original);
-      assert.equal(gunzipSync(fs.readFileSync(bundle + ".gz")).toString(), original);
-      assert.equal(brotliDecompressSync(fs.readFileSync(bundle + ".br")).toString(), original);
+      assert.equal(fs.readFileSync(bundle, "utf8"), expected);
+      assert.equal(fs.readFileSync(path.join(web, "index.html"), "utf8"), html);
+      if (legacy) {
+        fs.writeFileSync(bundle, installed + "\n// an unrelated change");
+        assert.throws(() => installDevHubBootstrap(root), /changed after/);
+        assert.equal(fs.readFileSync(bundle, "utf8"), installed + "\n// an unrelated change");
+      }
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }
@@ -178,4 +189,10 @@ test("embedded Paseo hands external links to DevHub only on desktop", () => {
   onClick({ ...click("https://example.com/x"), defaultPrevented: true });
   assert.equal(prevented, 1);
   assert.equal(opens().length, 2);
+
+  onClick(click("http://localhost:6767/notes/plans/example?view=full#next"));
+  assert.equal(prevented, 2);
+  assert.deepEqual(opens().at(-1), ["http://localhost:1337/notes/plans/example?view=full#next", "http://localhost:1337"]);
+  window.open("/notes/daily/example", "_blank");
+  assert.deepEqual(opens().at(-1), ["http://localhost:1337/notes/daily/example", "http://localhost:1337"]);
 });

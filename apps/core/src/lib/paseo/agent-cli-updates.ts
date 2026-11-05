@@ -1,10 +1,14 @@
 import fs from "node:fs";
+import path from "node:path";
 import { resolveBinary } from "../agent-runs/providers";
+import { getResourceRoot } from "../desktop/runtime-paths";
 import { execExternal } from "../exec-external";
 import { augmentedPathEnv } from "../../local/process-env";
 import { appendSchedulerLog } from "../../domains/scheduler/log";
 import { readCliUpdateState, changeCliUpdateState, recordCliUpdateHistory } from "./cli-update-state";
 import { acquireCliUpdateLock, cliLockStatus } from "./cli-update-lock";
+import { checkPaseoUpdate, hasActivePaseoWork, type PaseoUpdate } from "./update";
+import { npmCliCandidates } from "../desktop/build-env.mjs";
 import type { CliUpdateStatus } from "./cli-update-types";
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -24,11 +28,12 @@ function installedTarget(bin: string): string {
 /** Update only the installation Paseo actually uses; never create a second CLI on PATH. */
 export function agentUpdateCommands(): UpdateCommand[] {
   const commands: UpdateCommand[] = [];
+  const pushNpm = (command: UpdateCommand | null) => { if (command) commands.push(command); };
   const claude = resolveBinary(["claude"]);
   if (claude) {
     const target = installedTarget(claude);
     if (target.includes("/.local/share/claude/versions/")) commands.push({ label: "Claude", bin: claude, args: ["update"] });
-    else if (target.includes("/node_modules/@anthropic-ai/claude-code/")) commands.push({ label: "Claude", bin: "aikido-npm", args: ["install", "-g", "@anthropic-ai/claude-code"] });
+    else if (target.includes("/node_modules/@anthropic-ai/claude-code/")) pushNpm(npmInstallCommand("Claude", "@anthropic-ai/claude-code"));
   }
   const cursor = resolveBinary(["cursor-agent"]);
   if (cursor && installedTarget(cursor).includes("/.local/share/cursor-agent/versions/")) {
@@ -38,17 +43,54 @@ export function agentUpdateCommands(): UpdateCommand[] {
   if (opencode) {
     const target = installedTarget(opencode);
     if (target.includes("/.opencode/bin/")) commands.push({ label: "OpenCode", bin: opencode, args: ["upgrade"] });
-    else if (target.includes("/node_modules/opencode-ai/")) commands.push({ label: "OpenCode", bin: "aikido-npm", args: ["install", "-g", "opencode-ai"] });
+    else if (target.includes("/node_modules/opencode-ai/")) pushNpm(npmInstallCommand("OpenCode", "opencode-ai"));
   }
   const copilot = resolveBinary(["copilot"]);
   if (copilot && installedTarget(copilot).includes("/node_modules/@github/copilot/")) {
-    commands.push({ label: "Copilot", bin: "aikido-npm", args: ["install", "-g", "@github/copilot"] });
+    pushNpm(npmInstallCommand("Copilot", "@github/copilot"));
+  }
+  const gemini = resolveBinary(["gemini"]);
+  if (gemini && installedTarget(gemini).includes("/node_modules/@google/gemini-cli/")) {
+    pushNpm(npmInstallCommand("Gemini", "@google/gemini-cli"));
   }
   const codex = resolveBinary(["codex"]);
-  if (codex && installedTarget(codex).includes("/node_modules/@openai/codex/")) {
-    commands.push({ label: "Codex", bin: "aikido-npm", args: ["install", "-g", "@openai/codex"] });
+  if (codex) {
+    const command = codexUpdateCommand(codex);
+    if (command) commands.push(command);
   }
   return commands;
+}
+
+/**
+ * Global npm installs run as plain `node npm-cli.js` beside the running Node —
+ * never by the `npm` name, which Safe-Chain shims. Updates must not be
+ * scannable, blockable, or breakable by the wrapper. Null when this toolchain
+ * ships no npm, in which case the CLI is left out rather than guessed at.
+ */
+export function npmInstallCommand(label: string, pkg: string, execPath = process.execPath, existsSync: (file: string) => boolean = fs.existsSync): UpdateCommand | null {
+  const cli = npmCliCandidates(execPath).find((candidate) => existsSync(candidate)) ?? null;
+  return cli ? { label, bin: execPath, args: [cli, "install", "-g", pkg] } : null;
+}
+
+/**
+ * Standalone Codex lives under ~/.codex and self-updates via `codex update`;
+ * the npm layout goes through the global npm install like the other npm CLIs.
+ * Unknown layouts are left alone rather than guessed at.
+ */
+export function codexUpdateCommand(codexBin: string, execPath = process.execPath, existsSync: (file: string) => boolean = fs.existsSync): UpdateCommand | null {
+  const target = installedTarget(codexBin);
+  if (target.includes("/.codex/") || target.includes("/packages/standalone/")) {
+    return { label: "Codex", bin: codexBin, args: ["update"] };
+  }
+  if (target.includes("/node_modules/@openai/codex/")) {
+    return npmInstallCommand("Codex", "@openai/codex", execPath, existsSync);
+  }
+  return null;
+}
+
+/** An eligible Paseo release worth installing, or null when there is nothing to do. */
+export function paseoAutoUpdateTarget(update: Pick<PaseoUpdate, "canUpdate" | "installable">): string | null {
+  return update.canUpdate && update.installable ? update.installable : null;
 }
 
 export function cliUpdateStatus(): CliUpdateStatus {
@@ -93,9 +135,52 @@ export async function updateAgentClis(now = Date.now()): Promise<void> {
       }
     }
     changeCliUpdateState((current) => ({ ...current, lastAttemptAt: now }));
+    await updatePaseoDaemon(env);
   } catch (error) {
     appendSchedulerLog("warn", "agent-cli-update", `Update deferred: ${error instanceof Error ? error.message : String(error)}`);
   } finally { try { unlock?.(); } finally { running = false; } }
+}
+
+/**
+ * Bring the managed Paseo daemon itself up to an eligible release, with the
+ * same guards as the manual update: master switch, 24-hour release age, and
+ * no active chats (a daemon restart mid-chat is a data-loss shaped event).
+ * Silent when there is nothing eligible — history and the scheduler log only
+ * record attempts and their outcomes.
+ */
+export async function updatePaseoDaemon(env: NodeJS.ProcessEnv): Promise<void> {
+  let update: PaseoUpdate;
+  try {
+    update = await checkPaseoUpdate();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    appendSchedulerLog("warn", "paseo-auto-update", `Update check failed: ${message}`);
+    return;
+  }
+  const target = paseoAutoUpdateTarget(update);
+  if (!target) return;
+  try {
+    if (await hasActivePaseoWork()) {
+      recordCliUpdateHistory({ agent: "Paseo", status: "deferred", message: "Active chats running; will retry on the next daily check." });
+      appendSchedulerLog("info", "paseo-auto-update", `Paseo ${target} deferred: active chats running`);
+      return;
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    appendSchedulerLog("warn", "paseo-auto-update", `Could not verify idle chats: ${message}`);
+    return;
+  }
+  try {
+    await execExternal(process.execPath, [path.join(getResourceRoot(), "scripts", "install-paseo.mjs"), "--update", target], {
+      env, timeoutMs: 10 * 60_000, maxBuffer: 2_000_000, label: "paseo:auto-update",
+    });
+    recordCliUpdateHistory({ agent: "Paseo", status: "updated", message: `Updated to ${target}.` });
+    appendSchedulerLog("info", "paseo-auto-update", `Paseo updated to ${target}`);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    recordCliUpdateHistory({ agent: "Paseo", status: "failed", message: message.slice(0, 1000) });
+    appendSchedulerLog("warn", "paseo-auto-update", `Paseo update failed: ${message}`);
+  }
 }
 
 const globalStore = globalThis as typeof globalThis & { __devhubAgentCliUpdateTimer?: ReturnType<typeof setInterval> };

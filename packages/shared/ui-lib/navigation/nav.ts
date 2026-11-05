@@ -66,9 +66,9 @@ export function groupSidebarNav(
 }
 
 export const NAV_ITEMS: NavItem[] = [
-  { href: "/notifications", label: "Notifications", icon: "bell", group: "workspace", keywords: "Today Inbox Needs you Alerts" },
   { href: "/work", label: "Work", icon: "tasks", group: "workspace", keywords: "Tasks Jira History Storyboard Review" },
   { href: "/repos", label: "Repos", icon: "repos", group: "workspace", keywords: "Changes Send to AI editor pairing" },
+  { href: "/git", label: "Git", icon: "git", group: "workspace", keywords: "Repositories branches commits staging push pull changes" },
   { href: "/notes", label: "Library", icon: "notes", group: "library", keywords: "Notes Docs Learnings Diagrams" },
   { href: "/search", label: "Search", icon: "search", group: "library" },
   { href: "/status", label: "Settings", icon: "setup", group: "system", keywords: "System" },
@@ -127,6 +127,11 @@ export const ALL_NAV_DESTINATIONS: NavItem[] = [
  * palette all name pages through this, which keeps them in step with the sidebar.
  */
 export function navDestinationFor(pathname: string, plugin: NavItem[] = []): NavItem | undefined {
+  const [path, query] = pathname.split("?");
+  if (path.startsWith("/plugins/runtime/") && !new URLSearchParams(query).has("page")) {
+    const defaultPage = plugin.find(item => item.href.split("?")[0] === path && item.sidebar !== false);
+    if (defaultPage) return defaultPage;
+  }
   return [...ALL_NAV_DESTINATIONS, ...plugin].filter((item) => matchesNavRoute(pathname, item.href)).sort(
     (a, b) => b.href.length - a.href.length,
   )[0];
@@ -237,6 +242,8 @@ export function activeNavHref(pathname: string, sidebarHrefs: string[], plugin: 
     .filter((href) => matchesNavRoute(pathname, href))
     .sort((a, b) => b.length - a.length)[0];
   if (direct) return direct;
+  const path = pathname.split("?")[0];
+  if (path.startsWith("/plugins/runtime/")) return sidebarHrefs.find(href => href.split("?")[0] === path);
   const parent = navDestinationFor(pathname, plugin)?.parent;
   if (parent && sidebarHrefs.includes(parent)) return parent;
   const family = Object.values(sectionTabs(plugin)).find((tabs) =>

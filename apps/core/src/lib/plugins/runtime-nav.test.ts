@@ -50,7 +50,7 @@ it("exposes only approved navigation and follows disable, enable and reviewed re
   expect(initial.errors).toEqual([]);
   expect(initial.items).toMatchObject([
     { href: "/plugins/runtime/sample-tools?page=%2Foverview", label: "Fixture navigation", sidebar: true, section: "library", keywords: "/fixture-nav" },
-    { href: "/plugins/runtime/sample-tools?page=%2Fdetails", label: "Details", sidebar: false },
+    { href: "/plugins/runtime/sample-tools?page=%2Fdetails", label: "Details", sidebar: false, parent: "/plugins/runtime/sample-tools?page=%2Foverview" },
   ]);
   for (const action of ["disable", "enable"] as const) {
     const operation = await startLifecycle(ctx, "sample-tools", action);

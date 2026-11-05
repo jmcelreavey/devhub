@@ -242,7 +242,7 @@ function ConfirmDialogView({
           {pending.title}
         </h2>
         {pending.message && (
-          <p style={{ margin: "8px 0 16px", color: "var(--text-muted)", fontSize: 13 }}>
+          <p style={{ margin: "8px 0 16px", color: "var(--text-muted)", fontSize: 13, whiteSpace: "pre-wrap", overflowWrap: "anywhere", maxHeight: "min(40dvh, 320px)", overflowY: "auto" }}>
             {pending.message}
           </p>
         )}

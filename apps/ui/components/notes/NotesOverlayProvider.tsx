@@ -157,6 +157,7 @@ export function NotesOverlayProvider() {
     function onCaptureOpen() {
       openCapture();
     }
+    const onAgentsToggle = () => panels.close();
 
     document.addEventListener("keydown", handleKey);
     window.addEventListener("devhub:notes-toggle", onNotesToggle);
@@ -166,6 +167,7 @@ export function NotesOverlayProvider() {
     window.addEventListener("devhub:diagrams-toggle", onDiagramsToggle);
     window.addEventListener("devhub:palette-toggle", onPaletteToggle);
     window.addEventListener("devhub:capture-open", onCaptureOpen);
+    window.addEventListener("devhub:agents-toggle", onAgentsToggle);
     return () => {
       document.removeEventListener("keydown", handleKey);
       window.removeEventListener("devhub:notes-toggle", onNotesToggle);
@@ -175,6 +177,7 @@ export function NotesOverlayProvider() {
       window.removeEventListener("devhub:diagrams-toggle", onDiagramsToggle);
       window.removeEventListener("devhub:palette-toggle", onPaletteToggle);
       window.removeEventListener("devhub:capture-open", onCaptureOpen);
+      window.removeEventListener("devhub:agents-toggle", onAgentsToggle);
     };
   }, [togglePanel, togglePalette, openCapture, panels, summon]);
 

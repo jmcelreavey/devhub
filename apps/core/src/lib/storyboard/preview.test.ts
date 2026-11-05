@@ -3,7 +3,7 @@ import http from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, expect, test } from "vitest";
-import { ensurePreview, isExpoProject, isManagedPreviewForTask, leaseManagedPreviewForTask, managedPreviewForTask, stopPreview } from "./preview";
+import { ensurePreview, isExpoProject, isManagedPreviewForTask, leaseManagedPreviewForTask, managedPreviewForTask, readPreviewConfig, stopPreview } from "./preview";
 
 const previousUpstartsDir = process.env.UPSTARTS_DIR;
 const taskId = "isolated-preview-test";
@@ -25,6 +25,67 @@ afterEach(() => {
 function configure(config: object): void {
   writeFileSync(path.join(root, "upstarts", "fixture", "preview.json"), JSON.stringify({ autoStart: true, path: "/", ...config }));
 }
+
+test.each(["vite", "next", "expo"])("creates a missing preview config for %s without running package scripts", async (framework) => {
+  const marker = path.join(root, "script-was-run");
+  writeFileSync(path.join(root, "package.json"), JSON.stringify({ dependencies: { [framework]: "1" }, scripts: { dev: `touch ${marker}` } }));
+  const file = path.join(root, "upstarts", "fixture", "preview.json");
+  expect(readPreviewConfig("fixture")).toHaveProperty("reason");
+  expect(existsSync(file)).toBe(false);
+  expect(await ensurePreview({ taskId, repoName: "owner/fixture", cwd: root })).toMatchObject({ state: "none", reason: expect.stringContaining("dependencies are missing") });
+  expect(JSON.parse(readFileSync(file, "utf8"))).toMatchObject({ autoStart: true, trustCommand: true, command: expect.stringContaining(`./node_modules/.bin/${framework} `) });
+  expect(existsSync(marker)).toBe(false);
+});
+
+test.each(["{", JSON.stringify({ scripts: { dev: "npm run something" } })])("does not guess a command for unrecognised or malformed projects", async (contents) => {
+  writeFileSync(path.join(root, "package.json"), contents);
+  expect(await ensurePreview({ taskId, repoName: "fixture", cwd: root })).toMatchObject({ state: "none", reason: expect.stringContaining("browser preview was detected") });
+  expect(existsSync(path.join(root, "upstarts", "fixture", "preview.json"))).toBe(false);
+});
+
+test("creates an Expo config but does not launch or install missing web support", async () => {
+  const bin = path.join(root, "node_modules", ".bin");
+  mkdirSync(bin, { recursive: true });
+  writeFileSync(path.join(bin, "expo"), "must not run");
+  writeFileSync(path.join(root, "package.json"), JSON.stringify({ dependencies: { expo: "1", "react-dom": "1" } }));
+  expect(await ensurePreview({ taskId, repoName: "fixture", cwd: root })).toMatchObject({ state: "none", reason: expect.stringContaining("web support needs react-native-web") });
+  expect(readPreviewConfig("fixture")).toMatchObject({ config: { autoStart: true, kind: "expo-web" } });
+  expect(managedPreviewForTask(taskId)).toBeNull();
+});
+
+test.each(["{", JSON.stringify({ autoStart: false }), JSON.stringify({ autoStart: true, command: "echo {port}", trustCommand: false })])("never replaces an existing preview configuration", async (contents) => {
+  writeFileSync(path.join(root, "package.json"), JSON.stringify({ dependencies: { vite: "1" } }));
+  const file = path.join(root, "upstarts", "fixture", "preview.json");
+  writeFileSync(file, contents);
+  expect(await ensurePreview({ taskId, repoName: "fixture", cwd: root })).toHaveProperty("state", "none");
+  expect(readFileSync(file, "utf8")).toBe(contents);
+});
+
+test.skipIf(process.platform === "win32")("does not generate preview configs through a symlink outside upstarts", async () => {
+  writeFileSync(path.join(root, "package.json"), JSON.stringify({ dependencies: { vite: "1" } }));
+  symlinkSync(root, path.join(root, "upstarts", "linked"));
+  expect(await ensurePreview({ taskId, repoName: "linked", cwd: root })).toMatchObject({ state: "none", reason: expect.stringContaining("inside upstarts") });
+  expect(existsSync(path.join(root, "preview.json"))).toBe(false);
+});
+
+test.skipIf(process.platform === "win32")("generates and starts an owned preview automatically", async () => {
+  const bin = path.join(root, "node_modules", ".bin");
+  mkdirSync(bin, { recursive: true });
+  writeFileSync(path.join(root, "package.json"), JSON.stringify({ devDependencies: { vite: "1" } }));
+  const vite = path.join(bin, "vite");
+  writeFileSync(vite, "#!/usr/bin/env node\nconst args = process.argv.slice(2); require('node:http').createServer((_req, res) => res.end('Automatic preview')).listen(Number(args[args.indexOf('--port') + 1]), '127.0.0.1');\n");
+  chmodSync(vite, 0o755);
+  let preview = await ensurePreview({ taskId, repoName: "fixture", cwd: root });
+  const deadline = Date.now() + 20_000;
+  while (preview.state === "starting" && Date.now() < deadline) {
+    await new Promise(resolve => setTimeout(resolve, 100));
+    preview = await ensurePreview({ taskId, repoName: "fixture", cwd: root });
+  }
+  expect(preview.state).toBe("started");
+  if (!preview.url) throw new Error(preview.reason);
+  expect(await (await fetch(preview.url)).text()).toBe("Automatic preview");
+  expect(isManagedPreviewForTask(taskId, preview.url)).toBe(true);
+}, 30_000);
 
 test("detects Expo from dependencies or app.json without accepting malformed files", () => {
   expect(isExpoProject(root)).toBe(false);

@@ -67,7 +67,7 @@ Every October, DevHub switches itself to **Hollow (Halloween) 🎃**, an optiona
 
 ### Notifications
 
-Home opens Work. Notifications collects PR reviews, agent runs needing input and plugin updates, with an unread bell badge. Failing CI, on-call alerts and plugin trust issues also appear in a global alert bar. Read, dismiss or restore items, and filter to repos you own.
+Home opens Work. The top-bar bell collects PR reviews, failing CI, agent runs needing input, on-call alerts and plugin updates, with an unread count badge (red for urgent). Open its popover to review, dismiss or restore items; per-source switches decide what reaches you at all, and **Only PRs I own** filters the rest.
 
 ### Tasks
 
@@ -115,7 +115,7 @@ In the desktop app, **Sync skills** needs a linked DevHub checkout. Until you li
 
 The shared catalogue also includes Matt Pocock adaptations for debugging, design interviews, code reviews and architecture. [Skills](docs/guides/skills.md#matt-pocock-adaptations) explains which ones and how they sync.
 
-There's more: Repos with a git client, Databases (SQLite, Postgres and MongoDB), full-text Search and resize handles on floating panels. The [feature tour](docs/guides/feature-tour.md) covers all of it.
+There's more: Repos with a git client (and a cross-repo Git hub), Databases (SQLite, Postgres and MongoDB), full-text Search and resize handles on floating panels. The [feature tour](docs/guides/feature-tour.md) covers all of it.
 
 ## Plugins
 

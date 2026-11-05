@@ -40,6 +40,8 @@ export interface ExecExternalOptions {
   binary?: boolean;
   /** Observe bounded stdout while retaining the final result. */
   onStdout?: (chunk: Buffer) => void;
+  /** Observe bounded stderr while retaining the final result. */
+  onStderr?: (chunk: Buffer) => void;
   /** Kills the child when aborted. Rejects with an error {@link isExecAbort} recognises. */
   signal?: AbortSignal;
   /** Owned service with its own health UI; remains timed and cancellable. */
@@ -105,6 +107,7 @@ async function execute(file: string, args: readonly string[], opts: ExecExternal
       input: opts.input,
       binary: opts.binary,
       onStdout: opts.onStdout,
+      onStderr: opts.onStderr,
       signal: opts.signal,
       managedService: opts.managedService,
     };

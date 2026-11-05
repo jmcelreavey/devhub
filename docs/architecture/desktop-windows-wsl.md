@@ -330,7 +330,7 @@ stays in the server log.
   unsupported (`//wsl.localhost/…` and `//wsl$/…` are translated like their
   backslash forms).
 - The Notifications "Only repos I own" choice is saved in
-  `~/.config/devhub/ui-prefs.json` (`PUT /api/notifications`), per Linux user, so
+  `~/.config/devhub/ui-prefs.json` (`PUT /api/notifications`), per Linux user, along with the `notificationSources` toggles, so
   a `devhub.service` and a checkout dev server under the same user share it.
 - Release builds hide the stale-bundle checkout notice. That notice is separate
   from Rebuild from Checkout, which a linked source checkout can still run.

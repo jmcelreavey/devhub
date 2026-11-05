@@ -8,6 +8,7 @@ import type { GitHookFailurePayload } from "@shared/git/hook-failure";
 import { peekUndo,popUndo,type UndoEntry } from "@/lib/git/undo-stack";
 import { useStoredChoice,useStoredState } from "@/lib/hooks/use-stored-state";
 import { useToast } from "@/lib/hooks/use-toast";
+import { subscribeToTaskEvents } from "@/lib/events/task-subscription";
 import { useIsMobile } from "@/lib/hooks/use-is-mobile";
 import {
 agentGitSyncConflictPrompt,
@@ -41,6 +42,7 @@ import { BranchesPanel } from "./BranchesPanel";
 import { ChangesPanel } from "./ChangesPanel";
 import { ConflictsPanel } from "./ConflictsPanel";
 import { GitHookFailureDialog } from "./GitHookFailureDialog";
+import { GitIndexLockDialog } from "./GitIndexLockDialog";
 import { GitRail } from "./GitRail";
 import { HistoryPanel } from "./HistoryPanel";
 import { ReflogPanel } from "./ReflogPanel";
@@ -49,6 +51,7 @@ import { StashPanel } from "./StashPanel";
 import { WorktreesPanel } from "./WorktreesPanel";
 import {
 fetchGitJson,
+gitFailureMessage,
 postGitAction,
 readFullscreenPref,
 repoApi,
@@ -176,8 +179,14 @@ export function RepoGitWorkspace({
     tags: string[];
   } | null>(null);
   const [hookFailure, setHookFailure] = useState<GitHookFailurePayload | null>(null);
+  const [indexLock, setIndexLock] = useState<string | null>(null);
   /** Workspace-level push so tab switches never cancel a long pre-push hook. */
   const [pushing, setPushing] = useState(false);
+  /** Live network-op progress: last git line and elapsed seconds, so a long op never looks dead. */
+  const [pushLine, setPushLine] = useState<string | null>(null);
+  const [pushElapsed, setPushElapsed] = useState(0);
+  const [pulling, setPulling] = useState(false);
+  const netBusy = pushing || pulling;
   /** Latest undoable action (recorded by the panels), shown as a header chip. */
   const [undoEntry, setUndoEntry] = useState<UndoEntry | null>(null);
   const [undoing, setUndoing] = useState(false);
@@ -295,6 +304,23 @@ export function RepoGitWorkspace({
    * offline remote never delays the summary; failures stay silent because an
    * unreachable remote is normal, not an error worth a toast.
    */
+  const [fetchStale, setFetchStale] = useState(false);
+  const runFetch = useCallback(async () => {
+    try {
+      const result = await postGitAction(
+        repoApi(repoName, "/branches"),
+        { action: "fetch" },
+        { signal: AbortSignal.timeout(90_000), stream: true },
+      );
+      // An offline remote is normal, but the arrows are lying while it lasts —
+      // say so instead of showing a quiet zero.
+      setFetchStale(!result.ok);
+      if (result.ok) void refreshSummary();
+    } catch {
+      setFetchStale(true);
+    }
+  }, [repoName, refreshSummary]);
+
   const fetchOnOpenRef = useRef<string | null>(null);
   useEffect(() => {
     // Closing clears the once-per-open guard so reopening fetches again.
@@ -305,24 +331,10 @@ export function RepoGitWorkspace({
     if (pushing) return;
     if (fetchOnOpenRef.current === repoName) return;
     fetchOnOpenRef.current = repoName;
-    let cancelled = false;
-    void (async () => {
-      try {
-        const result = await postGitAction(
-          repoApi(repoName, "/branches"),
-          { action: "fetch" },
-          { signal: AbortSignal.timeout(90_000) },
-        );
-        if (!cancelled && result.ok) void refreshSummary();
-      } catch {
-        // Offline / timeout — the staleness label covers it.
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [open, pushing, repoName, refreshSummary]);
+    void runFetch();
+  }, [open, pushing, repoName, runFetch]);
 
+  const behindCount = summary?.behind ?? 0;
   const displayDirty = liveVisibleDirty ?? dirtyCount;
   const hasDirty = displayDirty > 0;
   const hasUnpushed = unpushedCount > 0;
@@ -340,6 +352,28 @@ export function RepoGitWorkspace({
     setUndoEntry(peekUndo(repoName));
     setMutationToken((n) => n + 1);
   }, [onMutate, refreshSummary, repoName]);
+
+  // A fetch/push/checkout from a terminal (or another tab) surfaces here too:
+  // the events stream says "this repo's git changed", so reload summary + graph.
+  useEffect(() => {
+    if (!open) return;
+    let timer: number | undefined;
+    return subscribeToTaskEvents({
+      domains: ["git"],
+      repo: repoName,
+      cache: {},
+      key: `repo-git:${repoName}`,
+      connection: () => {},
+      refresh: () => {
+        if (timer) return;
+        timer = window.setTimeout(() => {
+          timer = undefined;
+          void refreshSummary();
+          setMutationToken((n) => n + 1);
+        }, 400);
+      },
+    });
+  }, [open, repoName, refreshSummary]);
   /**
    * History is the heavy tab (log, lanes, avatars, scroll position, selection).
    * Once visited it stays mounted and is hidden rather than torn down, so
@@ -379,7 +413,7 @@ export function RepoGitWorkspace({
               commit: entry.headBefore,
             });
       if (!result.ok) {
-        throw new Error(result.kind === "error" ? result.message : result.kind);
+        throw new Error(gitFailureMessage(result));
       }
       popUndo(repoName);
       setUndoEntry(peekUndo(repoName));
@@ -420,12 +454,81 @@ export function RepoGitWorkspace({
     setOpen(true);
   }, [setOpen]);
 
+  const showIndexLock = useCallback((message: string) => {
+    setIndexLock(message);
+    setOpen(true);
+  }, [setOpen]);
+
+  const offerAiConflict = useCallback(async (conflict: StashConflictPayload) => {
+    const syncingMain = conflict.action === "sync-main" || conflict.action === "merge-branch";
+    const ok = await confirm({
+      title:
+        conflict.action === "merge-branch"
+          ? `Merging ${conflict.syncTarget ?? "branch"} left conflicts`
+          : conflict.branch
+            ? `Switched to ${conflict.branch}, stash conflicts`
+            : "Stash left conflicts",
+      message: [
+        conflict.error,
+        "",
+        conflict.conflictFiles.length
+          ? `Conflicts: ${conflict.conflictFiles.slice(0, 5).join(", ")}${conflict.conflictFiles.length > 5 ? "…" : ""}`
+          : "Check git status for conflicted paths.",
+        "",
+        "Open the Conflicts tab to edit in-app, or hand off to your agent CLI.",
+      ].join("\n"),
+      confirmLabel: "Resolve with AI",
+      cancelLabel: "Open Conflicts tab",
+    });
+    setTab("conflicts");
+    setOpen(true);
+    if (!ok) return;
+    if (syncingMain) {
+      const opts = {
+        repoName,
+        branch: conflict.branch,
+        conflictFiles: conflict.conflictFiles,
+        syncTarget: conflict.syncTarget ?? "origin/main",
+        stashed: conflict.stashed,
+      };
+      await launchAgentJob({
+        title: `resolve conflicts · ${repoName}`,
+        kind: "agent",
+        cwd: repoPath,
+        repoName,
+        promptText: agentGitSyncConflictPrompt(opts),
+        mode: "interactive",
+        forceTerminal: true,
+        alreadyConfirmed: true,
+      });
+    } else {
+      const opts = {
+        repoName,
+        branch: conflict.branch,
+        conflictFiles: conflict.conflictFiles,
+      };
+      await launchAgentJob({
+        title: `resolve conflicts · ${repoName}`,
+        kind: "agent",
+        cwd: repoPath,
+        repoName,
+        promptText: agentStashConflictPrompt(opts),
+        mode: "interactive",
+        forceTerminal: true,
+        alreadyConfirmed: true,
+      });
+    }
+    toast.info("Resolving conflicts in the terminal.");
+  }, [confirm, repoName, repoPath, setOpen, setTab, toast]);
+
   const pushRepo = useCallback(async () => {
     if (pushing) {
       toast.info("Push already in progress…");
       return;
     }
     setPushing(true);
+    setPushLine(null);
+    setPushElapsed(0);
     // Slightly above server GIT_NETWORK_TIMEOUT_MS so the API can return a 504 first.
     const timeoutMs = 310_000;
     try {
@@ -437,14 +540,28 @@ export function RepoGitWorkspace({
       }>(
         repoApi(repoName, "/branches"),
         { action: "push" },
-        { signal: AbortSignal.timeout(timeoutMs) },
+        {
+          signal: AbortSignal.timeout(timeoutMs),
+          stream: true,
+          onProgress: (line) => setPushLine(line),
+        },
       );
       if (!result.ok) {
         if (result.kind === "hook") {
           showHookFailure(result.hook);
           return;
         }
-        throw new Error(result.kind === "error" ? result.message : result.conflict.error);
+        if (result.kind === "index-lock") {
+          showIndexLock(result.message);
+          return;
+        }
+        throw new Error(
+          result.kind === "error"
+            ? result.message
+            : result.kind === "conflict"
+              ? result.conflict.error
+              : result.message,
+        );
       }
       toast.success(
         result.json.alreadyUpToDate
@@ -466,25 +583,74 @@ export function RepoGitWorkspace({
       );
     } finally {
       setPushing(false);
+      setPushLine(null);
+      setPushElapsed(0);
     }
-  }, [pushing, repoName, showHookFailure, toast, onMutate]);
+  }, [pushing, repoName, showHookFailure, showIndexLock, toast, onMutate]);
 
-  // "?" opens the cheatsheet — but only when the user isn't typing, otherwise
-  // it would swallow question marks in the commit message and search boxes.
+  const pullRepo = useCallback(async () => {
+    if (netBusy) {
+      toast.info(pushing ? "Push is still running…" : "Pull already in progress…");
+      return;
+    }
+    setPulling(true);
+    setPushLine(null);
+    setPushElapsed(0);
+    try {
+      const result = await postGitAction<{ alreadyUpToDate?: boolean; message?: string }>(
+        repoApi(repoName, "/branches"),
+        { action: "pull" },
+        {
+          signal: AbortSignal.timeout(130_000),
+          stream: true,
+          onProgress: (line) => setPushLine(line),
+        },
+      );
+      if (!result.ok) {
+        if (result.kind === "hook") {
+          showHookFailure(result.hook);
+          return;
+        }
+        if (result.kind === "index-lock") {
+          showIndexLock(result.message);
+          return;
+        }
+        if (result.kind === "conflict") {
+          await offerAiConflict(result.conflict);
+          return;
+        }
+        throw new Error(gitFailureMessage(result));
+      }
+      toast.success(result.json.alreadyUpToDate ? "Already up to date." : "Pulled");
+      handleMutate();
+    } catch (err) {
+      const aborted =
+        err instanceof DOMException && (err.name === "AbortError" || err.name === "TimeoutError");
+      toast.error(
+        aborted
+          ? "Pull timed out — check network, auth, or a stuck hook."
+          : err instanceof Error
+            ? err.message
+            : "Pull failed",
+      );
+    } finally {
+      setPulling(false);
+      setPushLine(null);
+      setPushElapsed(0);
+    }
+  }, [netBusy, pushing, repoName, showHookFailure, showIndexLock, offerAiConflict, toast, handleMutate]);
+
+  // Tick while a network op is in flight so the label counts up no matter how quiet git is.
   useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "?" || e.metaKey || e.ctrlKey || e.altKey) return;
-      const el = e.target as HTMLElement | null;
-      if (el?.isContentEditable) return;
-      const tag = el?.tagName;
-      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
-      e.preventDefault();
-      setShortcutsOpen(true);
-    };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [open]);
+    if (!netBusy) return;
+    const started = Date.now();
+    setPushElapsed(0);
+    const timer = window.setInterval(() => {
+      setPushElapsed(Math.floor((Date.now() - started) / 1000));
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [netBusy]);
+
 
   useEffect(() => {
     if (open && !wasOpen.current) {
@@ -545,67 +711,31 @@ export function RepoGitWorkspace({
     [tab, setTab, visibleTabs],
   );
 
-  async function offerAiConflict(conflict: StashConflictPayload) {
-    const syncingMain = conflict.action === "sync-main" || conflict.action === "merge-branch";
-    const ok = await confirm({
-      title:
-        conflict.action === "merge-branch"
-          ? `Merging ${conflict.syncTarget ?? "branch"} left conflicts`
-          : conflict.branch
-            ? `Switched to ${conflict.branch}, stash conflicts`
-            : "Stash left conflicts",
-      message: [
-        conflict.error,
-        "",
-        conflict.conflictFiles.length
-          ? `Conflicts: ${conflict.conflictFiles.slice(0, 5).join(", ")}${conflict.conflictFiles.length > 5 ? "…" : ""}`
-          : "Check git status for conflicted paths.",
-        "",
-        "Open the Conflicts tab to edit in-app, or hand off to your agent CLI.",
-      ].join("\n"),
-      confirmLabel: "Resolve with AI",
-      cancelLabel: "Open Conflicts tab",
-    });
-    setTab("conflicts");
-    setOpen(true);
-    if (!ok) return;
-    if (syncingMain) {
-      const opts = {
-        repoName,
-        branch: conflict.branch,
-        conflictFiles: conflict.conflictFiles,
-        syncTarget: conflict.syncTarget ?? "origin/main",
-        stashed: conflict.stashed,
-      };
-      await launchAgentJob({
-        title: `resolve conflicts · ${repoName}`,
-        kind: "agent",
-        cwd: repoPath,
-        repoName,
-        promptText: agentGitSyncConflictPrompt(opts),
-        mode: "interactive",
-        forceTerminal: true,
-        alreadyConfirmed: true,
-      });
-    } else {
-      const opts = {
-        repoName,
-        branch: conflict.branch,
-        conflictFiles: conflict.conflictFiles,
-      };
-      await launchAgentJob({
-        title: `resolve conflicts · ${repoName}`,
-        kind: "agent",
-        cwd: repoPath,
-        repoName,
-        promptText: agentStashConflictPrompt(opts),
-        mode: "interactive",
-        forceTerminal: true,
-        alreadyConfirmed: true,
-      });
-    }
-    toast.info("Resolving conflicts in the terminal.");
-  }
+  // "?" opens the cheatsheet and modifier+digit jumps to a tab — but never
+  // while the user is typing, or they would swallow question marks and numbers
+  // in the commit message and search boxes.
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement | null;
+      if (el?.isContentEditable) return;
+      const tag = el?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      if ((e.metaKey || e.ctrlKey) && !e.altKey && /^[1-8]$/.test(e.key)) {
+        const next = visibleTabs[Number(e.key) - 1];
+        if (!next) return;
+        e.preventDefault();
+        setTab(next[0]);
+        return;
+      }
+      if (e.key !== "?" || e.metaKey || e.ctrlKey || e.altKey) return;
+      e.preventDefault();
+      setShortcutsOpen(true);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [open, visibleTabs, setTab]);
+
 
   const Title = page ? "h1" : "h2";
   const workspaceShell = (
@@ -657,16 +787,55 @@ export function RepoGitWorkspace({
                   <span className={hasDirty ? "badge badge-warning" : "badge badge-success"}>
                     {hasDirty ? `${displayDirty} changed` : "clean"}
                   </span>
-                  {(hasUnpushed || pushing) && (
-                    <div className="repo-git-header-push-group">
+                  {fetchStale ? (
+                    <button
+                      type="button"
+                      className="badge badge-warning repo-git-stale-refs"
+                      title="The last fetch failed — ahead/behind may be stale. Click to retry."
+                      onClick={() => void runFetch()}
+                    >
+                      <AlertTriangle size={10} aria-hidden /> refs may be stale
+                    </button>
+                  ) : null}
+                  <div className="repo-git-header-push-group" role="group" aria-label="Remote operations">
+                    <button
+                      type="button"
+                      className="btn btn-ghost repo-git-header-push"
+                      disabled={netBusy}
+                      onClick={() => void runFetch()}
+                      title="Fetch remote refs so ahead/behind arrows are current"
+                    >
+                      <Download size={11} aria-hidden /> Fetch
+                    </button>
+                    {(behindCount > 0 || pulling) && (
                       <button
                         type="button"
                         className="btn btn-ghost repo-git-header-push"
-                        disabled={pushing}
+                        disabled={netBusy}
+                        onClick={() => void pullRepo()}
+                        title={
+                          pulling
+                            ? `${pushLine ?? "Pull in progress"} — ${pushElapsed}s`
+                            : `Pull ${behindCount} commit${behindCount === 1 ? "" : "s"} (fast-forward, autostash)`
+                        }
+                      >
+                        {pulling ? (
+                          <RefreshCw size={11} className="animate-spin" aria-hidden />
+                        ) : (
+                          <Download size={11} aria-hidden />
+                        )}
+                        {pulling ? `Pulling… ${pushElapsed}s` : `Pull ${behindCount}`}
+                      </button>
+                    )}
+                    {(hasUnpushed || pushing) && (
+                      <button
+                        type="button"
+                        className="btn btn-ghost repo-git-header-push"
+                        disabled={netBusy}
                         onClick={() => void pushRepo()}
                         title={
                           pushing
-                            ? "Push in progress…"
+                            ? `${pushLine ?? "Push in progress"} — ${pushElapsed}s`
                             : `Push ${unpushedCount} commit${unpushedCount === 1 ? "" : "s"} not on upstream (distinct from ahead-of-main)`
                         }
                       >
@@ -675,23 +844,27 @@ export function RepoGitWorkspace({
                         ) : (
                           <Upload size={11} aria-hidden />
                         )}
-                        {pushing ? "Pushing…" : `Push ${unpushedCount}`}
+                        {pushing ? `Pushing… ${pushElapsed}s` : `Push ${unpushedCount}`}
                       </button>
-                      {!pushing ? (
-                        <button
-                          type="button"
-                          className="btn btn-ghost repo-git-header-unpushed-link"
-                          onClick={() => {
-                            setHistoryFocusUnpushed(true);
-                            setTab("history");
-                          }}
-                          title="Show unpushed commits in History"
-                        >
-                          History
-                        </button>
-                      ) : null}
-                    </div>
-                  )}
+                    )}
+                    {netBusy ? (
+                      <span className="repo-git-push-progress" aria-live="polite">
+                        {pushLine ?? "Contacting remote…"}
+                      </span>
+                    ) : hasUnpushed ? (
+                      <button
+                        type="button"
+                        className="btn btn-ghost repo-git-header-unpushed-link"
+                        onClick={() => {
+                          setHistoryFocusUnpushed(true);
+                          setTab("history");
+                        }}
+                        title="Show unpushed commits in History"
+                      >
+                        History
+                      </button>
+                    ) : null}
+                  </div>
                   <div className="repo-git-header-actions">
                     <button
                       type="button"
@@ -803,6 +976,7 @@ export function RepoGitWorkspace({
                         onMutate={handleMutate}
                         onConflict={offerAiConflict}
                         onHookFailure={showHookFailure}
+                        onIndexLock={showIndexLock}
                         onOpenTab={setTab}
                         pushing={pushing}
                         onPush={() => void pushRepo()}
@@ -853,6 +1027,7 @@ export function RepoGitWorkspace({
                       onMutate={handleMutate}
                       onConflict={offerAiConflict}
                       onHookFailure={showHookFailure}
+                      onIndexLock={showIndexLock}
                       pushing={pushing}
                       onPush={() => void pushRepo()}
                       wip={
@@ -877,6 +1052,7 @@ export function RepoGitWorkspace({
                       onMutate={handleMutate}
                       onConflict={offerAiConflict}
                       onHookFailure={showHookFailure}
+                      onIndexLock={showIndexLock}
                       onVisibleDirtyChange={setLiveVisibleDirty}
                       stacked={page && isMobile}
                       pushing={pushing}
@@ -892,6 +1068,7 @@ export function RepoGitWorkspace({
                       onMutate={handleMutate}
                       onConflict={offerAiConflict}
                       onHookFailure={showHookFailure}
+                      onIndexLock={showIndexLock}
                       pushing={pushing}
                       onPush={() => void pushRepo()}
                     />
@@ -948,7 +1125,7 @@ export function RepoGitWorkspace({
               aria-labelledby={titleId}
               onCancel={(e) => {
                 e.preventDefault();
-                if (hookFailure) return;
+                if (hookFailure || indexLock) return;
                 closeWorkspace();
               }}
               onClick={(e) => {
@@ -999,10 +1176,10 @@ export function RepoGitWorkspace({
               type="button"
               className="btn btn-ghost repo-git-header-push"
               disabled
-              title="Push in progress…"
+              title={`${pushLine ?? "Push in progress"} — ${pushElapsed}s`}
             >
               <RefreshCw size={11} className="animate-spin" aria-hidden />
-              Pushing…
+              Pushing… {pushElapsed}s
             </button>
           )}
           <button
@@ -1025,12 +1202,18 @@ export function RepoGitWorkspace({
       />
       {typeof document !== "undefined" &&
         createPortal(
-          <GitHookFailureDialog
-            failure={hookFailure}
-            repoName={repoName}
-            repoPath={repoPath}
-            onClose={() => setHookFailure(null)}
-          />,
+          <>
+            <GitHookFailureDialog
+              failure={hookFailure}
+              repoName={repoName}
+              repoPath={repoPath}
+              onClose={() => setHookFailure(null)}
+            />
+            <GitIndexLockDialog
+              message={indexLock}
+              onClose={() => setIndexLock(null)}
+            />
+          </>,
           document.body,
         )}
     </div>

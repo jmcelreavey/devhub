@@ -8,7 +8,6 @@ import { RouteLoading } from "../../components/ui/RouteLoading";
 import { SkeletonRows } from "../../components/ui/SkeletonRows";
 import { legacyTodayHref } from "../../lib/home-redirect";
 
-const NotificationsPage = lazy(() => import("../../app/notifications/client"));
 const WorkPage = lazy(() => import("../../app/work/client"));
 const AgentsPage = lazy(() => import("../../app/agents/client"));
 
@@ -30,13 +29,13 @@ function HomeRoute() {
 
 function TodayRoute() {
   const { search, hash } = useLocation();
-  return <Navigate to={legacyTodayHref(search, hash) ?? "/notifications"} replace />;
+  return <Navigate to={legacyTodayHref(search, hash) ?? "/work"} replace />;
 }
 
 export const routes: RouteObject[] = [
   { path: "/", element: <HomeRoute /> },
   { path: "/today", element: <TodayRoute /> },
-  { path: "/notifications", element: <><title>Notifications · DevHub</title><Suspense fallback={<RouteLoading />}><NotificationsPage /></Suspense></> },
+  { path: "/notifications", element: <Navigate to="/work" replace /> },
   { path: "/work", element: <Suspense fallback={<RouteLoading titleWidth={120} rows={4} rowHeight={52} />}><WorkPage /></Suspense> },
   { path: "/storyboard", element: <Suspense fallback={<RouteLoading />}><WorkPage initialTab="board" /></Suspense> },
   { path: "/agents", element: <Suspense fallback={<AgentsLoading />}><AgentsPage /></Suspense> },

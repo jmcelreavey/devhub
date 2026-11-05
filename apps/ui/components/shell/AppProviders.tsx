@@ -8,7 +8,6 @@ import { UpdateBanner } from "@/components/desktop/UpdateBanner";
 import { ReleaseNotesProvider, WhatsNewBanner } from "@/components/releases/ReleaseNotes";
 import { NotesOverlayProvider } from "@/components/notes/NotesOverlayProvider";
 import { WorkflowNotifications } from "@/components/tasks/WorkflowNotifications";
-import { AlertBar } from "@/components/shell/AlertBar";
 import { PersistentAgents } from "@/components/persistent/PersistentAgents";
 import { PersistentRepoLearnDock } from "@/components/persistent/PersistentRepoLearnDock";
 import { CollapsibleSidebar } from "@/components/shell/CollapsibleSidebar";
@@ -78,7 +77,6 @@ export function AppProviders({ children }: AppProvidersProps) {
                   <UpdateBanner />
                   <WhatsNewBanner />
                   <PackagedCheckoutBanner />
-                  <AlertBar />
 
                   <main id="main-content" tabIndex={-1} className="flex-1 overflow-y-auto relative">
                     <BootScreenProvider>

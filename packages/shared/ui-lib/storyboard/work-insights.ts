@@ -1,5 +1,6 @@
 import type { BoardCard, BoardFailure } from "./notes-board-shared.ts";
 import type { TaskWorkflow } from "../workflows/types.ts";
+import { isCheckoutContention } from "./auto-tiers.ts";
 
 export function costLabel(value?: number): string | null {
   if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) return null;
@@ -19,6 +20,7 @@ export function oneLine(text: string): string {
 export function failureSummary(error?: string, exitCode?: number | null, role = "Agent"): string {
   const detail = error?.trim();
   if (detail) {
+    if (isCheckoutContention(detail)) return `Checkout busy: ${oneLine(detail)}`;
     const reason = /ECONNREFUSED|connection refused/i.test(detail) ? "Couldn’t connect to the agent service."
       : /timed? ?out|timeout/i.test(detail) ? "The run timed out before it finished."
       : /rate.limit|429/i.test(detail) ? "The provider’s rate limit stopped the run."

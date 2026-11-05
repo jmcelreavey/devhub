@@ -12,6 +12,7 @@ import { useRef,useState } from "react";
 import { UPSTART_WORKTREE_INSTRUCTIONS } from "../../../../packages/shared/ui-lib/repos/upstart-command";
 import { workspaceOption, type WorktreeInfo } from "../../../../packages/shared/ui-lib/repos/worktree-info";
 import type { RepoInfo } from "@shared/repos/types";
+import { removeLocalRepos } from "./removeLocalRepos";
 
 /**
  * Imperative repo actions shared by the /repos list. Keeps clone/open/upstart/
@@ -27,6 +28,7 @@ export function useReposActions(opts: {
   const [removing, setRemoving] = useState<string | null>(null);
   const [upstarting, setUpstarting] = useState<string | null>(null);
   const upstartBusy = useRef(false);
+  const removingBusy = useRef(false);
   const toast = useToast();
   const prompt = usePrompt();
   const confirm = useConfirm();
@@ -284,24 +286,64 @@ export function useReposActions(opts: {
     }
   }
 
+  async function removeRepos(repos: readonly RepoInfo[]): Promise<string[]> {
+    if (removingBusy.current || repos.length === 0) return [];
+    const names = repos.map((repo) => {
+      const risks: string[] = [];
+      if (repo.dirtyCount > 0) risks.push(`${repo.dirtyCount} changed`);
+      if ((repo.unpushedCount ?? 0) > 0) risks.push(`${repo.unpushedCount} unpushed`);
+      if (repo.worktreeOf) risks.push("linked worktree");
+      if ((repo.worktreeCount ?? 0) > 0) risks.push(`${repo.worktreeCount} linked worktrees`);
+      return `- ${JSON.stringify(repo.name)}${risks.length ? ` (${risks.join(", ")})` : ""}`;
+    });
+    const ok = await confirm({
+      title: `Delete ${repos.length} local ${repos.length === 1 ? "repo" : "repos"}?`,
+      message: `This permanently deletes these folders and all their files, including local changes and unpushed work. Linked worktrees may stop working if their main checkout is deleted. Remote repositories are not affected.\n\n${names.join("\n")}`,
+      confirmLabel: "Delete local folders",
+      variant: "danger",
+    });
+    if (!ok || removingBusy.current) return [];
+    removingBusy.current = true;
+    try {
+      const result = await removeLocalRepos(repos.map((repo) => repo.name), setRemoving);
+      const refreshed = await Promise.allSettled([mutateLocal(), mutateGithub()]);
+      if (result.removed.length) {
+        toast.success(`Deleted ${result.removed.length} local ${result.removed.length === 1 ? "repo" : "repos"}.`);
+      }
+      if (result.failed.length) {
+        toast.error(`Not confirmed: ${result.failed.map(({ name, message }) => `${name}: ${message}`).join("; ")}`);
+      }
+      if (refreshed.some((entry) => entry.status === "rejected")) {
+        toast.error("Could not refresh the repo list. Refresh before trying again.");
+      }
+      return result.removed;
+    } finally {
+      removingBusy.current = false;
+      setRemoving(null);
+    }
+  }
+
   async function removeRepo(name: string) {
+    if (removingBusy.current) return;
     const ok = await confirm({
       title: `Remove local repo "${name}"?`,
-      message: "This will delete the local folder only.",
+      message: "This permanently deletes the local folder and all its files, including local changes and unpushed work. The remote repository is not affected.",
       confirmLabel: "Remove",
       variant: "danger",
     });
-    if (!ok) return;
+    if (!ok || removingBusy.current) return;
+    removingBusy.current = true;
     setRemoving(name);
     try {
-      const res = await fetch(`/api/repos/${encodeURIComponent(name)}`, { method: "DELETE" });
-      if (!res.ok) throw new Error(await res.text());
+      const result = await removeLocalRepos([name], setRemoving);
+      if (result.failed.length) throw new Error(result.failed[0].message);
       await Promise.all([mutateLocal(), mutateGithub()]);
       toast.success(`Removed ${name}`);
     } catch (e) {
       console.error("remove repo:", e);
       toast.error(`Couldn't remove ${name}.`);
     } finally {
+      removingBusy.current = false;
       setRemoving(null);
     }
   }
@@ -321,5 +363,6 @@ export function useReposActions(opts: {
     cloneFromUrl,
     initRepo,
     removeRepo,
+    removeRepos,
   };
 }

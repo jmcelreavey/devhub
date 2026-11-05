@@ -221,7 +221,7 @@ list, which is how Playwriter/`lean-ctx` looked "connected" while `execute` and
 2. Rewrites Cursor `mcp.json` key order so `playwriter`, `lean-ctx`, `agentmemory`,
    `figma` comes before `devhub`. An overflow then drops DevHub
    tail tools, not the small servers.
-3. Launches Playwriter through `apps/ui/lib/mcp/playwriter-compact.ts`, which
+3. Launches Playwriter through `apps/core/src/lib/mcp/playwriter-compact.ts`, which
    truncates `execute`'s ~53KB `prompt.md` description. The full API stays on
    Playwriter's MCP resources.
 4. Pins `LEAN_CTX_TOOL_PROFILE=standard` on Cursor/`lean-ctx` so a wrap that

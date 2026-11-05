@@ -32,6 +32,7 @@ export interface RepoInfo {
 export interface ReposApiPayload {
   repos: RepoInfo[];
   scanDirDisplay: string;
+  protectedRepoName?: string;
 }
 
 export interface GithubRepoInfo {
@@ -167,3 +168,30 @@ export interface RepoTaskPreview {
 
 /** Which local repos the /repos grid is narrowed to; null shows all of them. */
 export type LocalRepoFilter = "changed" | "unpushed" | "worktree" | null;
+
+/** One row in the Git hub's repository rail. */
+export interface RepoGitOverviewRepo {
+  name: string;
+  path: string;
+  branch: string | null;
+  upstream: string | null;
+  /** Commits ahead of upstream (unpushed). */
+  ahead: number;
+  /** Commits behind upstream (needs pull). */
+  behind: number;
+  /** Visible changed files (noise paths excluded). */
+  dirtyCount: number;
+  /** Unmerged paths left by a failed merge/rebase/cherry-pick. */
+  conflictCount: number;
+  /** HEAD reflog mtime — rough "last touched" ordering. */
+  lastActivityMs: number;
+  /** True when git status itself failed; counters are zero and must not be trusted as "clean". */
+  error?: boolean;
+}
+
+/** Cross-repo snapshot behind the Git hub rail. */
+export interface RepoGitOverviewPayload {
+  scanDir: string;
+  repos: RepoGitOverviewRepo[];
+  scannedAt: string;
+}

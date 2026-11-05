@@ -349,7 +349,7 @@ export async function loadCodexUsage(now = new Date()): Promise<ProviderUsage> {
     { label: "Today", amount: local.today.costUsd, currency: "USD", source: "estimate" },
     { label: "This month", amount: local.month.costUsd, currency: "USD", source: "estimate" },
   );
-  const unpriced = Object.entries(local.month.unpricedTokens);
+  const unpriced = Object.entries(local.month.unpricedTokens).filter(([model]) => !model.endsWith(":free"));
   if (unpriced.length) notes.push(`No price for ${unpriced.map(([model, tokens]) => `${model} (${tokens.toLocaleString()} tokens)`).join(", ")}.`);
   if (mode && mode !== "apikey") notes.push("Codex is signed in with ChatGPT, so these are API-equivalent costs, not charges.");
 

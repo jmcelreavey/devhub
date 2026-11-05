@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { defineAction } from "./define.ts";
 
-export const PASEO_CLI_LABELS = ["Claude", "Cursor", "OpenCode", "Copilot", "Codex"] as const;
+export const PASEO_CLI_LABELS = ["Claude", "Cursor", "OpenCode", "Copilot", "Codex", "Gemini"] as const;
 
 interface PaseoLocalContext {
   execute: (input: z.output<z.ZodObject>) => unknown;

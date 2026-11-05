@@ -47,7 +47,7 @@ function RecallRedirect() {
 }
 
 export const routes: RouteObject[] = [
-  { path: "/briefing", element: <Navigate to="/notifications" replace /> },
+  { path: "/briefing", element: <Navigate to="/work" replace /> },
   { path: "/calendar", element: <Page title="Calendar" loading={<CalendarLoading />}><CalendarPage /></Page>, errorElement: <PageError view={CalendarError} /> },
   { path: "/db", element: <Page title="Databases" loading={<DbLoading />}><DbPage /></Page>, errorElement: <PageError view={DbError} /> },
   { path: "/editor", element: <Page title="Editor" loading={<EditorLoading />}><EditorPage /></Page>, errorElement: <PageError view={EditorError} /> },

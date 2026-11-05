@@ -11,7 +11,7 @@ import type { TaskAgentRunStatus } from "../../../../../packages/shared/tasks/ag
 import type { Task } from "../../../../../packages/shared/tasks/types";
 import type { TaskNoteView } from "../../../../../packages/shared/task-note/sections.ts";
 import { advanceAuto, askBackAuto, newAutoState, rerunVerification, retryAuto, setUiOverride, type AutoDeps } from "./auto-mode";
-import { autoDeps, startOrchestration } from "./orchestrator";
+import { autoDeps, setOrchestrationMode, startOrchestration } from "./orchestrator";
 import { summariseOrchestration } from "../../../../../packages/shared/ui-lib/storyboard/orchestration";
 import { interruptedReceipt } from "../qa/interrupted-receipt";
 import { runDir, writeRun } from "../qa/store";
@@ -655,6 +655,56 @@ describe("auto mode", () => {
     expect(record().auto).toMatchObject({ phase: "implement", attempt: 1, recoveryGuidance: { text: "Use a longer timeout", phase: "implement", attempt: 1 } });
     expect(w.dispatched.at(-1)?.prompt).toContain("Use a longer timeout");
     expect(w.dispatched.map((item) => item.requestId)).toEqual([`storyboard-auto-${TASK_ID}-${record().auto!.cycleId}-implement-r0-a0`, `storyboard-auto-${TASK_ID}-${record().auto!.cycleId}-implement-r0-a1`]);
+  });
+
+  it("retries checkout contention without escalating the model or repeating the plan", async () => {
+    const w = world({ ui: false });
+    await seed((current) => { current.auto!.phase = "implement"; current.tiers = DEFAULT_MODEL_TIERS; });
+    const d = deps(w, { runError: () => "Paseo has active work in this checkout. Wait for it or enable an isolated worktree." });
+    await advanceAuto(TASK_ID, d, notes);
+    finishLatest(w, "failed");
+    await advanceAuto(TASK_ID, d, notes);
+    expect(record().auto?.waiting?.reason).toContain("Paseo has active work");
+    await retryAuto(TASK_ID, "retry-checkout", "http://localhost:1337", notes, () => true);
+    expect(record().auto).toMatchObject({ phase: "implement", attempt: 1, tierAttempt: 0 });
+    const tier = await autoDeps({} as Parameters<typeof autoDeps>[0], notes).pickTier({ record: record(), phase: "implement" });
+    expect(tier.tier).not.toBe("heavy");
+    await advanceAuto(TASK_ID, d, notes);
+    expect(w.dispatched.map((entry) => entry.action)).toEqual(["implement", "implement"]);
+    expect(w.dispatched[0].requestId).not.toBe(w.dispatched[1].requestId);
+  });
+
+  it("keeps the tier for an existing generic failure when its run reports checkout contention", async () => {
+    await seed((current) => {
+      current.status = "needs-you";
+      current.auto!.phase = "implement";
+      current.auto!.runs.push({ runId: "run-implement-1", phase: "implement", round: 0, attempt: 0, at: new Date().toISOString() });
+      current.auto!.waiting = { kind: "failure", reason: "The Implement run failed. Retry to run it again on a higher tier.", at: new Date().toISOString() };
+    });
+    await retryAuto(TASK_ID, "retry-legacy-contention", "http://fixture", notes, () => true, undefined, () => "Paseo has active work in this checkout.");
+    expect(record().auto).toMatchObject({ phase: "implement", attempt: 1, tierAttempt: 0 });
+  });
+
+  it.each([
+    ["Paseo has active work in this checkout.", 0],
+    ["The implementation run failed.", 1],
+  ])("counts model retries correctly when switching back to Auto: %s", async (error, expectedTierAttempt) => {
+    const state = world({ ui: false });
+    const auto = deps(state, { runError: () => error });
+    await seed((current) => {
+      current.status = "paused-manual";
+      current.auto!.phase = "implement";
+      current.auto!.runs.push({ runId: "run-implement-1", phase: "implement", round: 0, attempt: 0, at: new Date().toISOString() });
+      current.auto!.waiting = { kind: "failure", reason: "The Implement run failed.", at: new Date().toISOString() };
+    });
+    await setOrchestrationMode({ action: "mode", taskId: TASK_ID, mode: "auto", idempotencyKey: "resume-implement" }, { origin: "http://fixture" }, {
+      dispatch: auto.dispatch,
+      findTask: async () => task,
+      resolveRepos: async () => [],
+      auto,
+    }, notes);
+    expect(record().auto).toMatchObject({ phase: "implement", attempt: 1, tierAttempt: expectedTierAttempt });
+    expect(state.dispatched.at(-1)?.action).toBe("implement");
   });
 
   it.each([false, true])("keeps the initial shared plan local unless publishing is enabled (%s)", async (createPr) => {

@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import {
-  X,
   PenTool,
   RefreshCw,
   Plus,
@@ -19,7 +18,7 @@ import {
   toNotesApiPath,
 } from "../../../../packages/shared/ui-lib/diagrams/utils";
 import { flattenTreeFiles } from "@/lib/tree-utils";
-import { SidePanel } from "@/components/shell/SidePanel";
+import { SidePanel, SidePanelControls } from "@/components/shell/SidePanel";
 import { CopyLocationButton } from "@/components/ui/CopyLocationButton";
 
 interface DiagramsOverlayProps {
@@ -142,6 +141,7 @@ export function DiagramsOverlay({ open, onClose }: DiagramsOverlayProps) {
       ariaLabel="Diagrams"
     >
       <div
+        data-panel-drag-handle
         className="flex items-center gap-2 px-4 py-3 border-b shrink-0"
         style={{ borderColor: "var(--border)" }}
       >
@@ -181,13 +181,7 @@ export function DiagramsOverlay({ open, onClose }: DiagramsOverlayProps) {
         >
           <Plus size={14} className="text-text-muted" aria-hidden />
         </button>
-        <button
-          type="button"
-          onClick={handleClose}
-          aria-label="Close diagrams panel"
-        >
-          <X size={16} className="text-text-muted" aria-hidden />
-        </button>
+        <SidePanelControls closeLabel="Close diagrams panel" />
       </div>
 
       <div className="flex-1 overflow-y-auto overscroll-contain">

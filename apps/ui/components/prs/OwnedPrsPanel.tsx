@@ -12,7 +12,7 @@ export function OwnedPrsPanel({ profile, query }: { profile?: string; query: str
   const unavailable = !!error || !!data?.failedRepos.length;
   const rows = filterPrRows(data?.prs ?? [], query);
   return <section aria-label="Owned PRs">
-    <p className="mb-3 text-xs text-text-muted">Open PRs in your <Link className="underline" href="/repos?view=owned">Owned repositories</Link>{data && !unavailable ? ` · ${rows.length}${data.limited ? "+" : ""}` : " · total unavailable"}</p>
+    <p className="mb-3 text-xs text-text-muted">Open PRs in your <Link className="underline" href="/repos?view=owned">Owned repositories</Link>{data && !unavailable ? ` · ${rows.length}${data.limited ? "+" : ""}` : unavailable ? " · total unavailable" : " · Loading…"}</p>
     {unavailable ? <FetchError message="GitHub unavailable. Owned PR totals are unavailable." onRetry={() => void mutate()} /> : null}
     {!data && !error ? <SkeletonRows count={3} height={40} variant="list" /> : null}
     <div className="space-y-2">{rows.map((row) => <PrRow key={row.url} row={row} kind="reviews" density="comfortable" canSkip={false} />)}</div>

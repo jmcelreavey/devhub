@@ -3,7 +3,8 @@
 import { useSidebarCounts, type SidebarCounts } from "@/lib/hooks/use-sidebar-counts";
 import { READ_STATUS_KEYS, useIsUnseen } from "@/lib/activity/read-status";
 import { useLive } from "@/lib/hooks/use-fetch";
-import { useNotifications } from "@/lib/notifications/use-notifications";
+import { needsAttention } from "@/lib/git/overview";
+import type { RepoGitOverviewPayload } from "@shared/repos/types";
 import type { CalendarEvent } from "@shared/calendar/types";
 
 export interface NavUnseen {
@@ -16,7 +17,8 @@ export interface NavBadges {
   unseen: NavUnseen;
   /** Meetings still ahead of you today — 0 once the day is clear. */
   calendarRemaining: number;
-  notificationsUnread: number;
+  /** Local repos with uncommitted, unpushed, behind or conflicted state. */
+  gitAttention: number;
 }
 
 interface CalendarResponse {
@@ -35,11 +37,10 @@ function countRemainingMeetings(events: CalendarEvent[]): number {
  * burger nav so the two never drift apart.
  *
  * Counts appear only where action is owed (2026-06 IA): Calendar shows
- * today's remaining meetings; Notifications shows unread updates.
+ * today's remaining meetings. Notification counts live on the top-bar bell.
  */
 export function useNavBadges(): NavBadges {
   const counts = useSidebarCounts();
-  const notifications = useNotifications();
   const tickets = useIsUnseen(
     READ_STATUS_KEYS.dashboardTickets,
     counts?.signatures.tickets ?? "",
@@ -51,17 +52,20 @@ export function useNavBadges(): NavBadges {
   // Shares the SWR cache with Calendar — no extra polling cost.
   const { data: cal } = useLive<CalendarResponse>("/api/calendar", { /* Google Calendar changes independently. */ refreshInterval: 60_000 });
   const calendarRemaining = cal && !cal.error ? countRemainingMeetings(cal.events ?? []) : 0;
-  return { counts, unseen: { tickets, prs: prs && (counts?.actionablePrs ?? 0) > 0 }, calendarRemaining, notificationsUnread: notifications.data?.unread ?? 0 };
+  // Same SWR entry the Git hub page uses; the server snapshot is 10s-cached.
+  const { data: gitOverview } = useLive<RepoGitOverviewPayload>("/api/git/overview");
+  const gitAttention = gitOverview?.repos.filter(needsAttention).length ?? 0;
+  return { counts, unseen: { tickets, prs: prs && (counts?.actionablePrs ?? 0) > 0 }, calendarRemaining, gitAttention };
 }
 
 /** Queue-depth badge for a nav item (0 = no badge). */
 export function countForItem(
   icon: string,
   counts: SidebarCounts | undefined,
-  extras?: { calendarRemaining?: number; notificationsUnread?: number },
+  extras?: { calendarRemaining?: number; gitAttention?: number },
 ): number {
   if (icon === "calendar") return extras?.calendarRemaining ?? 0;
-  if (icon === "bell") return extras?.notificationsUnread ?? 0;
+  if (icon === "git") return extras?.gitAttention ?? 0;
   if (!counts) return 0;
   if (icon === "tickets") return counts.tickets;
   if (icon === "prs") return counts.actionablePrs ?? 0;

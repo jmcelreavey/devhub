@@ -32,10 +32,16 @@ export function runtimeNavigation(ctx: PluginContext): { items: PluginNavDestina
         claimed.add(page.path);
         return [page.path, item];
       }));
+      const sidebarPages = [...byPage].filter(([, item]) => item.sidebar !== false);
       items.push(...plugin.runtime.pages.map(page => ({
         label: page.label, icon: "skills", group: "infra" as const, sidebar: byPage.has(page.path),
         ...byPage.get(page.path),
         href: runtimePageHref(plugin.name, page.path),
+        parent: byPage.get(page.path)?.sidebar !== false && byPage.has(page.path) ? undefined
+          : (() => {
+            const parent = sidebarPages.find(([, item]) => item.group === byPage.get(page.path)?.group) ?? sidebarPages[0];
+            return parent ? runtimePageHref(plugin.name, parent[0]) : undefined;
+          })(),
         keywords: aliases.filter(alias => alias.target === page.path).map(alias => alias.path).join(" "),
       })));
     } catch {

@@ -3,7 +3,7 @@
 import { lazy, Suspense, useEffect, useRef, useState, type KeyboardEvent } from "react";
 import Link from "@/lib/navigation";
 import { useHistory, useSearchParams } from "@/lib/navigation";
-import { CalendarDays, Columns3, Dumbbell, History, ListTodo, Ticket } from "lucide-react";
+import { CalendarDays, Columns3, Dumbbell, GitPullRequest, History, ListTodo, Ticket } from "lucide-react";
 import { TaskList } from "@/components/tasks/TaskList";
 import { TaskDetailProvider } from "@/components/storyboard/TaskDetailProvider";
 import { PageHeader } from "@/components/shell/PageHeader";
@@ -27,6 +27,7 @@ function WorkLoading() {
 }
 
 const StoryboardBoard = lazy(() => import("@/app/storyboard/client").then((module) => ({ default: module.StoryboardBoard })));
+const WorkReviews = lazy(() => import("./WorkReviews"));
 const TicketsPage = lazy(() => import("@/components/jira/TicketsPage"));
 const TaskHistoryPage = lazy(() => import("@/components/tasks/TaskHistoryPage"));
 const WeeklyReviewPage = lazy(() => import("@/app/review/client"));
@@ -79,6 +80,7 @@ function LinkedTicketView({ ticketKey, onClear }: { ticketKey: string; onClear: 
 const WORK_TABS = [
   { id: "tasks", label: "Tasks", icon: ListTodo },
   { id: "board", label: "Board", icon: Columns3 },
+  { id: "reviews", label: "PR reviews", icon: GitPullRequest },
   { id: "jira", label: "Jira", icon: Ticket },
   { id: "history", label: "History", icon: History },
   { id: "review", label: "Weekly review", icon: CalendarDays },
@@ -92,7 +94,7 @@ export default function WorkPage({ initialTab = "tasks" }: { initialTab?: WorkTa
   const ticket = searchParams.get("ticket");
   const requestedProfile = searchParams.get("taskProfile") ?? searchParams.get("profile");
   const tab = resolveWorkTab(searchParams, initialTab);
-  const pipelineView = tab !== "review" && tab !== "rep";
+  const pipelineView = tab !== "review" && tab !== "rep" && tab !== "reviews";
   // Pills deep-link here: ?q=text, or ?tag=x for tasks tagged #x.
   const urlQuery = searchParams.get("q") ?? (searchParams.get("tag") ? `#${searchParams.get("tag")}` : "");
   const [search, setSearch] = useState({ source: urlQuery, value: urlQuery });
@@ -177,7 +179,7 @@ export default function WorkPage({ initialTab = "tasks" }: { initialTab?: WorkTa
       ))}
       <div id={`work-panel-${tab}`} role="tabpanel" aria-labelledby={`work-tab-${tab}`} tabIndex={0} className={styles.panel}>
         <Suspense fallback={<WorkLoading />}>
-        {tab === "review" ? <WeeklyReviewPage embedded /> : tab === "rep" ? <RepPage embedded /> : !profileReady ? (
+        {tab === "review" ? <WeeklyReviewPage embedded /> : tab === "rep" ? <RepPage embedded /> : tab === "reviews" ? <WorkReviews /> : !profileReady ? (
           profile.error ? <FetchError message="Couldn't confirm the active task profile." onRetry={() => void profile.mutate()} />
             : profileMismatch ? <p role="alert" className="tone-panel tone-panel--warning">This link belongs to task profile {requestedProfile}; the active profile is {activeProfile}. Switch profiles to open it.</p>
             : <WorkLoading />

@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import { Outlet, useOutletContext, useParams, type RouteObject } from "react-router-dom";
 import NotFound from "../../app/not-found";
 import { NotesAreaPage } from "../../components/notes/NotesAreaPage";
@@ -12,7 +12,7 @@ import { useLive } from "../../lib/hooks/use-fetch";
 import type { LearningEntry } from "../../../core/src/lib/learnings/types";
 import { ROOT_AREA_ID } from "../../../../packages/shared/ui-lib/notes/note-areas";
 import type { NoteIndex, NoteSummary } from "../../../core/src/lib/notes/note-index";
-import { NoteEditorRoute } from "../views/notes/NoteEditorRoute";
+const NoteEditorRoute = lazy(() => import("../views/notes/NoteEditorRoute").then(module => ({ default: module.NoteEditorRoute })));
 
 interface LibraryData {
   index: NoteIndex;
@@ -68,6 +68,6 @@ export const routes: RouteObject[] = [{
   children: [
     { index: true, element: <NotesIndex /> },
     { path: "area/:id", element: <NotesArea /> },
-    { path: "*", element: <NoteEditorRoute /> },
+    { path: "*", element: <Suspense fallback={<RouteLoading />}><NoteEditorRoute /></Suspense> },
   ],
 }];

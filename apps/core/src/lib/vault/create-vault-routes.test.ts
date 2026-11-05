@@ -54,6 +54,19 @@ afterEach(() => {
 });
 
 describe("conditional vault writes", () => {
+  it("preserves daily-note headings, nested lists, links and inline formatting across saves", async () => {
+    const blocks = [
+      { id: "title", type: "heading", props: { level: 2 }, content: [{ type: "text", text: "Daily note", styles: { bold: true } }], children: [] },
+      { id: "list", type: "bulletListItem", content: [{ type: "text", text: "Keep this", styles: { italic: true, code: true } }], children: [
+        { id: "link", type: "paragraph", content: [{ type: "link", href: "https://example.com", content: [{ type: "text", text: "Reference", styles: { underline: true } }] }], children: [] },
+      ] },
+    ];
+    setNote(["daily", "formatting"], blocks, 100);
+    const loaded = await (await call(notes, "GET", ["daily", "formatting"])).json();
+    expect((await call(notes, "PUT", ["daily", "formatting"], { content: loaded.content, expectedModified: loaded.modified })).status).toBe(200);
+    expect((await (await call(notes, "GET", ["daily", "formatting"])).json()).content).toEqual(blocks);
+  });
+
   it("requires a precondition before replacing existing content", async () => {
     setNote(["daily", "test"], stored, 100);
     expect((await call(notes, "PUT", ["daily", "test"], { content: mine })).status).toBe(428);

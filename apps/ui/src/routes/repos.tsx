@@ -13,6 +13,7 @@ import ConventionsError from "../../app/conventions/error";
 import { useSearchParams } from "../../lib/navigation";
 
 const ReposPage = lazy(() => import("../../app/repos/client"));
+const GitHubPage = lazy(() => import("../../app/git/client").then((module) => ({ default: module.GitHubPage })));
 const RepoHub = lazy(() => import("../../app/repos/[name]/client").then((module) => ({ default: module.RepoHub })));
 const RepoGitPage = lazy(() => import("../../app/repos/[name]/git/client").then((module) => ({ default: module.RepoGitPage })));
 const LearnScreen = lazy(() => import("../../app/repos/learn/[name]/client").then((module) => ({ default: module.LearnScreen })));
@@ -73,6 +74,7 @@ function OwnPage() {
 }
 
 export const routes: RouteObject[] = [
+  { path: "/git", element: <Page title="Git"><GitHubPage /></Page>, errorElement: <PageError view={ReposError} /> },
   { path: "/repos", element: <Page title="Repos"><ReposPage /></Page>, errorElement: <PageError view={ReposError} /> },
   { path: "/repos/:name", element: <RepoPage />, errorElement: <PageError view={RepoError} /> },
   { path: "/repos/:name/git", element: <RepoPage git />, errorElement: <PageError view={RepoGitError} /> },

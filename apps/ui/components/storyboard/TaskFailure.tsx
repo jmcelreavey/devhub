@@ -32,7 +32,7 @@ export function TaskFailure({ card, profile, onRefresh, requestedSection }: { re
   return <section aria-label="Failure recovery" className="flex flex-col gap-3">
     {card.failure.cleared ? <div className="flex items-center flex-wrap gap-3 text-xs text-text-muted"><span>Failure cleared · auto paused</span><button type="button" className="text-xs underline underline-offset-4" aria-label="Undo clear" disabled={pending} onClick={() => void act("restore")}>Undo</button></div> : null}
     <div className="flex flex-wrap gap-2">
-      <button type="button" className={`btn ${card.failure.cleared ? "btn-ghost" : "btn-primary"}`} disabled={pending} onClick={() => void act("retry")}>Retry</button>
+      <button type="button" className={`btn ${card.failure.cleared ? "btn-ghost" : "btn-primary"}`} disabled={pending} onClick={() => void act("retry")}>{card.auto?.waiting?.kind === "failure" ? `Retry ${card.auto.label}` : "Retry"}</button>
       <button type="button" className="btn btn-ghost" disabled={pending} aria-expanded={writing} onClick={() => setWriting(!writing)}>Resume with guidance</button>
       <button type="button" className="btn btn-ghost" aria-expanded={logs} onClick={() => setLogs(!logs)}>Open logs</button>
       {!card.failure.cleared ? <button type="button" className="btn btn-ghost" disabled={pending} title="Dismiss this failure. Keeps history, leaves auto paused, and can be undone." onClick={() => void act("clear")}>Clear failure</button> : null}

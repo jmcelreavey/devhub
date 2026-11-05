@@ -30,7 +30,7 @@ import type { Task } from "../../../../../packages/shared/tasks/types";
 import { summariseOrchestration, type OrchestrationSummary } from "../../../../../packages/shared/ui-lib/storyboard/orchestration";
 import { currentOrchestrationAuthorisation, deleteOrchestration, listOrchestrations, mutateOrchestration, newOrchestration, readOrchestration, withOrchestrationMutationLock, withOrchestrationWorkLock } from "./orchestration-store";
 import type { OrchestrateAskBackInput, OrchestrateRerunInput, OrchestrateResetInput, OrchestratePlanDecisionInput, OrchestrateAnswerRepoInput, OrchestrateModeInput, OrchestrateRetryInput, OrchestrateStartInput, OrchestrateUiInput } from "./schema";
-import { columnForPhase, safeNoteStatus, decideAutoPlan, advanceAuto, newAutoState, retryAuto, askBackAuto, rerunVerification, setUiOverride, HEAVY_JOB_LIMIT, type AutoDeps } from "./auto-mode";
+import { columnForPhase, safeNoteStatus, decideAutoPlan, advanceAuto, newAutoState, retryAuto, retryTierAttempt, askBackAuto, rerunVerification, setUiOverride, HEAVY_JOB_LIMIT, type AutoDeps } from "./auto-mode";
 import { detectUiChange, planPaths } from "./ui-detect";
 import { LARGE_DIFF, parseNumstat, pickAutoTier, type DiffStats } from "../../../../../packages/shared/ui-lib/storyboard/auto-tiers";
 import { StoryboardError } from "./errors";
@@ -580,6 +580,7 @@ async function setOrchestrationModeOnce(input: OrchestrateModeInput, context: { 
       if (current.auto.phase === "ready") { current.status = "ready-for-review"; return current; }
       if (current.auto.waiting?.kind === "plan-approval") { current.status = "needs-you"; return current; }
       current.status = "starting";
+      current.auto.tierAttempt = retryTierAttempt(current.auto, deps.auto?.runError ?? ((runId) => readAgentRun(runId)?.status.error));
       current.auto.attempt += 1;
       if (input.guidance) current.auto.recoveryGuidance = { text: input.guidance, phase: current.auto.phase, attempt: current.auto.attempt };
       if (current.auto.phase === "verify") current.auto.verify = {};
@@ -861,6 +862,7 @@ export function autoDeps(deps: OrchestratorDeps, notesDir: string): AutoDeps {
     findTask: deps.findTask,
     noteView: readNoteView,
     runStatus: (taskId, runId) => getTaskAgentRuns(taskId, notesDir).runs.find((run) => run.runId === runId)?.status,
+    runError: (runId) => readAgentRun(runId)?.status.error,
     taskRuns: (taskId) => getTaskAgentRuns(taskId, notesDir).runs.map((run) => ({ runId: run.runId, role: run.role, status: run.status, startedAt: run.startedAt })),
     runWork: (runId) => {
       const spec = readAgentRun(runId)?.spec;
@@ -886,7 +888,7 @@ export function autoDeps(deps: OrchestratorDeps, notesDir: string): AutoDeps {
     pickTier: async ({ record, phase, work }) => {
       const settings = record.tiers ?? readModelTiers(notesDir);
       const diff = work && (phase === "verify" || phase === "fix") ? await diffStats(work) : null;
-      const picked = pickAutoTier({ settings, phase, attempt: record.auto?.attempt ?? 0, round: record.auto?.round ?? 0, diff, findings: record.auto?.findings?.length });
+      const picked = pickAutoTier({ settings, phase, attempt: record.auto?.tierAttempt ?? record.auto?.attempt ?? 0, round: record.auto?.round ?? 0, diff, findings: record.auto?.findings?.length });
       // No reason means the step's saved tier: leave it to the normal per-step choice.
       return picked.reason ? picked : {};
     },
@@ -933,7 +935,7 @@ export async function retryOrchestration(
   notesDir = getNotesDir(),
 ): Promise<OrchestrationReconcileResult> {
   if (!readOrchestration(input.taskId, notesDir)) throw new StoryboardError("That task is not on auto.", 404);
-  await retryAuto(input.taskId, input.idempotencyKey, context.origin, notesDir, (record) => latestRunStatus(record, notesDir) === "done", input.guidance);
+  await retryAuto(input.taskId, input.idempotencyKey, context.origin, notesDir, (record) => latestRunStatus(record, notesDir) === "done", input.guidance, (runId) => readAgentRun(runId)?.status.error);
   return reconcileOrchestration(input.taskId, deps, notesDir);
 }
 

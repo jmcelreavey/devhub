@@ -19,7 +19,7 @@ import { resolveWorkPresentation } from "../../../../packages/shared/ui-lib/stor
 import { sectionForTaskAction, taskEvidenceHref, type TaskDetailSection } from "../../../../packages/shared/ui-lib/storyboard/task-detail";
 import { useOrchestrations } from "@/lib/storyboard/use-orchestrations";
 import { useTaskActionPending } from "@/lib/storyboard/task-action";
-import { tierStepForPhase } from "../../../../packages/shared/ui-lib/storyboard/auto-tiers";
+import { isCheckoutContention, tierStepForPhase } from "../../../../packages/shared/ui-lib/storyboard/auto-tiers";
 import { choiceForStep, describeTierChoice, TIER_LABEL } from "../../../../packages/shared/ui-lib/storyboard/model-tiers-shared";
 import type { TaskWorkflow } from "../../../../packages/shared/ui-lib/workflows/types";
 import type { TaskWorkflowResponse } from "./WorkflowEvidence";
@@ -190,7 +190,7 @@ function TaskDetailBody({ card, profileId, now, workflow: cachedWorkflow, reques
         : <div className={styles.reviewNote}><Suspense fallback={<SkeletonRows count={4} />}><VaultEditorPage vault="notes" path={reviewPath.split("/")} embedded hideTaskQuestions /></Suspense></div>) : null}
       {card.status === "ready-for-review" || action?.kind === "review" || action?.label === "Open review" ? <button type="button" className="btn btn-ghost" onClick={() => void copyTextAndToast(buildTaskReviewMessage(card), "Slack message", toast)}>Copy Slack message</button> : null}
       {saved ? <p role="status" aria-live="polite">{savedMessage}</p> : null}
-      {action?.kind === "auto-retry" ? <p>{card.auto?.waiting?.kind === "cap" ? `One more fix round for the remaining findings (${card.counts.blockerBugs} blockers).` : "Retry runs this step on a higher tier, capped at Heavy."} {lastAutoRun?.tier ? `Last run: ${lastAutoRun.tier} tier.` : ""}{retryBaseline ? ` Saved baseline: ${TIER_LABEL[retryBaseline.tier]} · ${describeTierChoice(retryBaseline)}.` : ""} The orchestrator confirms the model at dispatch; no extra cost estimate is available yet.</p> : null}
+      {action?.kind === "auto-retry" ? <p>{card.auto?.waiting?.kind === "cap" ? `One more fix round for the remaining findings (${card.counts.blockerBugs} blockers).` : isCheckoutContention(card.failure?.summary) || isCheckoutContention(card.auto?.waiting?.reason) ? "Checkout contention retries the current step on the same tier." : "Retry runs this step on a higher tier, capped at Heavy."} {lastAutoRun?.tier ? `Last run: ${lastAutoRun.tier} tier.` : ""}{retryBaseline ? ` Saved baseline: ${TIER_LABEL[retryBaseline.tier]} · ${describeTierChoice(retryBaseline)}.` : ""} The orchestrator confirms the model at dispatch; no extra cost estimate is available yet.</p> : null}
       {failure ? <p role="alert" className="tone-panel tone-panel--danger">{failure}</p> : null}
     </section>
     {workflow.error ? <FetchError bare message="Couldn't refresh workflow evidence. Last-known details may be out of date." onRetry={() => void workflow.mutate()} /> : null}

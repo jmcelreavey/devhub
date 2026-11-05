@@ -10,7 +10,6 @@ import { repoWorktreeCleanup, repoWorktreeCleanupInput, repoWorktreeCleanupList,
 import { httpAction } from "../../../../lib/actions/http";
 import { parseBody } from "../../../../lib/api-utils";
 import { resolveScannedRepo } from "../../../../lib/repos/scanned-repo";
-import { sweepPaseoWorkspacesQuietly } from "../../../../lib/paseo/workspaces";
 import { listWorktreeCleanup, removeWorktreeAt, removeWorktrees, worktreeRemovalBlocker } from "../../../../lib/repos/worktree-cleanup";
 
 async function listCleanup() {
@@ -24,7 +23,6 @@ async function listCleanup() {
 
 async function removeCleanupItems(items: RepoWorktreeCleanupItem[], dryRun?: boolean) {
   const result = await removeWorktrees(items, resolveScannedRepo, { dryRun });
-  if (!dryRun && result.removed.length) await sweepPaseoWorkspacesQuietly();
   return { status: 200, body: { ok: true, ...result } };
 }
 
@@ -77,7 +75,6 @@ async function removeSingleWorktree({ repo, path: target, force }: z.output<type
 
   const outcome = await removeWorktreeAt(repoPath, target, force);
   if (outcome.ok) {
-    await sweepPaseoWorkspacesQuietly();
     return Response.json({ ok: true });
   }
 

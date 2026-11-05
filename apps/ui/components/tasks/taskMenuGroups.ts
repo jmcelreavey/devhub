@@ -3,7 +3,7 @@ import type { ContextMenuGroup } from "@/components/shell/ContextMenu";
 // Keep caller-supplied completion, PR and Jira actions in the same sections as the shared items.
 const TASK_MENU_SECTIONS = [
   { id: "task", label: "Task", items: ["complete", "complete-merged", "reopen", "reopen-feedback", "follow-up", "reactivate", "edit", "add-note", "note", "open", "timer", "upstart"] },
-  { id: "agent", label: "Agent", items: ["plan-agent", "mark-ready", "implement-agent", "start-auto", "start-auto-without-review", "start-auto-tiers", "resume-agent", "auto-mode", "mark-draft"] },
+  { id: "agent", label: "Agent", items: ["chat-agent", "plan-agent", "mark-ready", "implement-agent", "start-auto", "start-auto-without-review", "start-auto-tiers", "resume-agent", "auto-mode", "mark-draft"] },
   { id: "recovery", label: "Recovery", items: ["failure-retry", "failure-guidance", "failure-logs", "failure-clear"] },
   { id: "review", label: "Review", items: ["workflow", "copy-plan", "storyboard", "copy-slack", "dismiss-attention"] },
   { id: "jira", label: "Jira", items: ["open-jira", "generate-jira", "jira", "update-jira-status"] },

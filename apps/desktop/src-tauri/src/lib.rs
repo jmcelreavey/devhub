@@ -28,7 +28,7 @@ use std::io::{Read, Write};
 use std::net::{TcpStream, ToSocketAddrs};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -45,6 +45,9 @@ use sidecar::{BootState, Sidecar};
 /// Set once the webview has begun receiving the dashboard, so the handoff
 /// watcher knows a slow navigation is progressing and must not be restarted.
 static DASHBOARD_LOADING: AtomicBool = AtomicBool::new(false);
+static DASHBOARD_REBUILDING: AtomicBool = AtomicBool::new(false);
+static DASHBOARD_BUILD_PID: AtomicU32 = AtomicU32::new(0);
+static DASHBOARD_BUILD_INSTALLING: AtomicBool = AtomicBool::new(false);
 
 const DEFAULT_PORT: u16 = 1337;
 const DEFAULT_TERMINAL_PORT: u16 = 1339;
@@ -393,10 +396,22 @@ async fn install_wsl(app: tauri::AppHandle) -> Result<(), String> {
 fn set_boot(app: &tauri::AppHandle, next: BootState) {
     if let Some(state) = app.try_state::<AppState>() {
         if let Ok(mut guard) = state.boot.lock() {
+            // The supervisor's own "ready" (mapped to handoff) can arrive after
+            // the shell's health check has already marked Ready. Letting it win
+            // left the boot page on "Opening the dashboard…" with no URL to
+            // hand off to, for as long as the window stayed open.
+            if supervisor_ready_after_shell_ready(&guard, &next) {
+                return;
+            }
             *guard = next.clone();
         }
     }
     let _ = app.emit("devhub://boot", BootPayload { state: next });
+}
+
+fn supervisor_ready_after_shell_ready(current: &BootState, next: &BootState) -> bool {
+    matches!(current, BootState::Ready { .. })
+        && matches!(next, BootState::Starting { service } if service == "handoff")
 }
 
 /**
@@ -2328,11 +2343,12 @@ fn run_dashboard_build(app: &tauri::AppHandle, repo_root: &Path) -> Result<(), S
     let mut command = Command::new("node");
     command
         .arg(&script)
+        .arg("--wait-for-install")
         .current_dir(repo_root)
         .env("PATH", &path)
         .env("DEVHUB_SERVER_DIR", &paths.server_dir)
         .env("DEVHUB_SERVICES_DIR", &paths.services_dir)
-        .stdin(Stdio::null())
+        .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
     #[cfg(unix)]
@@ -2351,8 +2367,10 @@ fn run_dashboard_build(app: &tauri::AppHandle, repo_root: &Path) -> Result<(), S
     let mut child = command
         .spawn()
         .map_err(|err| format!("Could not start dashboard rebuild: {err}"))?;
+    DASHBOARD_BUILD_PID.store(child.id(), Ordering::SeqCst);
+    let mut install_requested = false;
 
-    // Stream the build into the log so the boot screen's log panel shows it.
+    // Keep serving the existing dashboard until the child has a verified payload.
     if let Some(state) = app.try_state::<AppState>() {
         fn pump(
             reader: impl std::io::Read + Send + 'static,
@@ -2369,23 +2387,70 @@ fn run_dashboard_build(app: &tauri::AppHandle, repo_root: &Path) -> Result<(), S
                 }
             });
         }
-        if let Some(stdout) = child.stdout.take() {
-            pump(stdout, state.log.clone(), "sidecar:build:stdout");
-        }
         if let Some(stderr) = child.stderr.take() {
             pump(stderr, state.log.clone(), "sidecar:build:stderr");
         }
     }
 
-    let status = child
-        .wait()
-        .map_err(|err| format!("Could not wait for dashboard rebuild: {err}"))?;
-    if status.success() {
+    if let Some(stdout) = child.stdout.take() {
+        use std::io::BufRead;
+        for line in std::io::BufReader::new(stdout)
+            .lines()
+            .map_while(Result::ok)
+        {
+            if let Some(state) = app.try_state::<AppState>() {
+                state.log.write_line("sidecar:build:stdout", &line);
+            }
+            if line != r#"{"devhubRebuild":"ready"}"# || install_requested {
+                continue;
+            }
+            install_requested = true;
+            DASHBOARD_BUILD_INSTALLING.store(true, Ordering::SeqCst);
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.navigate(
+                    "tauri://localhost/index.html"
+                        .parse()
+                        .expect("static boot URL"),
+                );
+            }
+            stop_dev_server(app);
+            if let Some(state) = app.try_state::<AppState>() {
+                state.sidecar.stop();
+            }
+            set_boot(
+                app,
+                BootState::Starting {
+                    service: "installing rebuilt dashboard".into(),
+                },
+            );
+            if let Some(mut stdin) = child.stdin.take() {
+                if let Err(err) = stdin.write_all(b"install\n") {
+                    menu_log(
+                        app,
+                        &format!("[menu] could not confirm rebuild installation: {err}"),
+                    );
+                }
+            }
+        }
+    }
+
+    let outcome = child.wait();
+    DASHBOARD_BUILD_PID.store(0, Ordering::SeqCst);
+    DASHBOARD_BUILD_INSTALLING.store(false, Ordering::SeqCst);
+    let status = outcome.map_err(|err| format!("Could not wait for dashboard rebuild: {err}"))?;
+    if status.success() && install_requested {
         Ok(())
     } else {
-        Err(format!(
+        let message = format!(
             "Dashboard rebuild failed ({status}). View → Show Logs has the compiler output."
-        ))
+        );
+        if install_requested {
+            // Replacement rolls back on error. Restore service instead of leaving
+            // a healthy previous payload stranded on the shutdown screen.
+            menu_log(app, &message);
+            app.restart();
+        }
+        Err(message)
     }
 }
 
@@ -2423,7 +2488,7 @@ fn rebuild_dashboard(app: &tauri::AppHandle) {
     let handle = app.clone();
     app.dialog()
         .message(
-            "DevHub will stop its server, rebuild the dashboard from your checkout into this app, and relaunch.\n\nThis takes a couple of minutes. The startup screen has a log panel if you want to watch it.",
+            "DevHub will build from your checkout while the current app stays available, then briefly restart to install it. Unchanged builds are reused after verification.\n\nView → Show Logs shows build progress.",
         )
         .title("Rebuild DevHub?")
         .kind(MessageDialogKind::Info)
@@ -2436,38 +2501,22 @@ fn rebuild_dashboard(app: &tauri::AppHandle) {
                 menu_log(&handle, "[menu] rebuild-dashboard cancelled");
                 return;
             }
+            if DASHBOARD_REBUILDING.swap(true, Ordering::SeqCst) {
+                handle.dialog().message("A dashboard rebuild is already running. View → Show Logs shows its progress.").title("Rebuild in progress").show(|_| {});
+                return;
+            }
             let app = handle.clone();
             std::thread::spawn(move || {
-                // Back to the boot screen first: the server is about to go away
-                // and a dashboard rendered against a dead server is a worse
-                // progress indicator than no dashboard at all.
-                if let Some(window) = app.get_webview_window("main") {
-                    let _ = window.navigate(
-                        "tauri://localhost/index.html"
-                            .parse()
-                            .expect("static boot URL"),
-                    );
-                }
-                set_boot(
-                    &app,
-                    BootState::Starting {
-                        service: "rebuild".into(),
-                    },
-                );
-
-                stop_dev_server(&app);
-                if let Some(state) = app.try_state::<AppState>() {
-                    state.sidecar.stop();
-                }
-
-                match run_dashboard_build(&app, &repo_root) {
+                let result = run_dashboard_build(&app, &repo_root);
+                DASHBOARD_REBUILDING.store(false, Ordering::SeqCst);
+                match result {
                     Ok(()) => {
                         menu_log(&app, "[menu] rebuild-dashboard built; relaunching");
                         app.restart();
                     }
                     Err(err) => {
                         menu_log(&app, &format!("[menu] rebuild-dashboard failed: {err}"));
-                        fail(&app, &err);
+                        app.dialog().message(format!("{err}\n\nThe current app is still running.")).title("Rebuild failed").kind(MessageDialogKind::Warning).show(|_| {});
                     }
                 }
             });
@@ -3067,6 +3116,15 @@ pub fn run() {
                 show_main_window(app);
             }
             if let tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit = event {
+                let build_pid = DASHBOARD_BUILD_PID.swap(0, Ordering::SeqCst);
+                #[cfg(unix)]
+                if build_pid != 0 && !DASHBOARD_BUILD_INSTALLING.load(Ordering::SeqCst) {
+                    unsafe { libc_killpg(build_pid as i32, 15); }
+                }
+                #[cfg(not(unix))]
+                if build_pid != 0 && !DASHBOARD_BUILD_INSTALLING.load(Ordering::SeqCst) {
+                    let _ = Command::new("taskkill").args(["/PID", &build_pid.to_string(), "/T", "/F"]).status();
+                }
                 if let Some(state) = app.try_state::<AppState>() {
                     state.sidecar.stop();
                 }
@@ -3192,6 +3250,17 @@ mod tests {
     /// documents the distinction worth keeping in mind.
     fn is_dashboard_url(url: &tauri::Url, port: u16) -> bool {
         is_loopback_host(url) && url.port().unwrap_or(80) == port && matches!(url.scheme(), "http")
+    }
+
+    #[test]
+    fn a_late_supervisor_ready_does_not_undo_the_shell_ready() {
+        let ready = BootState::Ready { url: "http://localhost:1337/api/desktop/bootstrap?token=t".into() };
+        let handoff = BootState::Starting { service: "handoff".into() };
+        assert!(supervisor_ready_after_shell_ready(&ready, &handoff));
+        // Before Ready, and for any real restart phase, the update still lands.
+        assert!(!supervisor_ready_after_shell_ready(&BootState::Preparing, &handoff));
+        let rebuild = BootState::Starting { service: "installing rebuilt dashboard".into() };
+        assert!(!supervisor_ready_after_shell_ready(&ready, &rebuild));
     }
 
     #[test]

@@ -2,7 +2,7 @@
   "command": "node",
   "args": [
     "REPO_ROOT/node_modules/tsx/dist/cli.mjs",
-    "REPO_ROOT/apps/ui/lib/mcp/playwriter-compact.ts"
+    "REPO_ROOT/apps/core/src/lib/mcp/playwriter-compact.ts"
   ],
   "startupTimeoutSec": 30,
   "description": "Playwriter MCP \u2014 controls explicitly enabled tabs in the user's existing Chrome session through the Playwriter Chrome extension and local relay. Requires installing the extension and clicking its icon on each tab to connect. execute/reset are wrapped so Cursor ACP does not drop them under its tool-description budget."

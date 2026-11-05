@@ -11,6 +11,7 @@ describe("Work deep links", () => {
     expect(resolveWorkTab(new URLSearchParams("ticket=ABC-123"), "tasks")).toBe("jira");
     expect(resolveWorkTab(new URLSearchParams("ticket=ABC-123&tab=board"), "tasks")).toBe("board");
     expect(resolveWorkTab(new URLSearchParams("tab=tickets"), "tasks")).toBe("jira");
+    expect(resolveWorkTab(new URLSearchParams("tab=reviews"), "tasks")).toBe("reviews");
   });
 
   it("checks that date targets are real calendar days", () => {

@@ -16,7 +16,7 @@ agentStashConflictPrompt
 import { AlertTriangle,Bot,Check,Play,RefreshCw,Trash2,X } from "lucide-react";
 import { useCallback,useEffect,useMemo,useState } from "react";
 import { GitDiffView } from "./GitDiffView";
-import { fetchGitJson,postGitAction,repoApi } from "./shared";
+import { fetchGitJson,gitFailureMessage,postGitAction,repoApi } from "./shared";
 
 interface ConflictItem {
   path: string;
@@ -104,7 +104,7 @@ export function ConflictsPanel({
         repoApi(repoName, "/git/conflicts"),
         body,
       );
-      if (!result.ok) throw new Error(result.kind === "error" ? result.message : result.kind);
+      if (!result.ok) throw new Error(gitFailureMessage(result));
       toast.success(success);
       setDraft(null);
       onMutate();
@@ -153,7 +153,7 @@ export function ConflictsPanel({
     setSaving(true);
     try {
       const result = await postGitAction(repoApi(repoName, "/git/conflicts"), { action });
-      if (!result.ok) throw new Error(result.kind === "error" ? result.message : result.kind);
+      if (!result.ok) throw new Error(gitFailureMessage(result));
       toast.success(`${operation} ${action === "abort" ? "aborted" : "continued"}`);
       onMutate();
       await refresh();

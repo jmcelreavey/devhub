@@ -1,0 +1,37 @@
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import { installComposerKeyboard } from "./paseo-web-keyboard.mjs";
+
+test("compact embedded composer sends once and preserves newlines, IME, autocomplete and unavailable actions", () => {
+  let listener, enabled = true, clicks = 0, prevented = 0;
+  const button = { disabled: false, getAttribute: () => null, getClientRects: () => [{}], click: () => clicks++ };
+  const root = { querySelector: () => button };
+  const input = { matches: () => true, closest: () => root };
+  const document = { addEventListener: (type, handler) => { assert.equal(type, "keydown"); listener = handler; }, removeEventListener: (type, handler) => { assert.equal(handler, listener); listener = null; } };
+  const cleanup = installComposerKeyboard(document, () => enabled);
+  const key = overrides => listener({ key: "Enter", target: input, preventDefault: () => prevented++, stopImmediatePropagation() {}, ...overrides });
+  key({});
+  assert.equal(clicks, 1);
+  assert.equal(prevented, 1);
+  for (const overrides of [{ shiftKey: true }, { isComposing: true }, { keyCode: 229 }, { defaultPrevented: true }, { repeat: true }, { metaKey: true }, { ctrlKey: true }, { altKey: true }, { key: "a" }]) key(overrides);
+  key({ target: { matches: () => false } });
+  key({ target: { matches: () => true, closest: () => null } });
+  button.disabled = true;
+  key({});
+  button.disabled = false;
+  button.getAttribute = () => "true";
+  key({});
+  button.getAttribute = () => null;
+  button.getClientRects = () => [];
+  key({});
+  button.getClientRects = () => [{}];
+  root.querySelector = () => null;
+  key({});
+  root.querySelector = () => button;
+  enabled = false;
+  key({});
+  assert.equal(clicks, 1);
+  assert.equal(prevented, 1);
+  cleanup();
+  assert.equal(listener, null);
+});

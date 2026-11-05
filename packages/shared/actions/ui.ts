@@ -20,7 +20,7 @@ export const uiOpen = defineAction<typeof uiOpenInput, UiOpenContext, { delivere
   http: { reason: "Agent page-link resolution is narrower than the authenticated browser navigation channel; it does not grant browser navigation intent." },
   mcp: {
     name: "ui_open", toolset: "ui",
-    description: "Resolve a DevHub page link for the user. Agent calls never change the selected page, chat or focus. Accepts internal hrefs such as /notes/<path>, /repos/<name>, /work, /notifications, /agents, /skills and /search. Return the resulting link with your answer.",
+    description: "Resolve a DevHub page link for the user. Agent calls never change the selected page, chat or focus. Accepts internal hrefs such as /notes/<path>, /repos/<name>, /work, /agents, /skills and /search. Return the resulting link with your answer.",
   },
   handler: ({ href }, context) => context.open(href),
 });

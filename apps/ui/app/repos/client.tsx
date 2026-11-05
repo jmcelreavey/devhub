@@ -20,7 +20,7 @@ import type { RepoProject } from "../../../core/src/lib/projects";
 import { repoTaskWork } from "@/lib/repos/repo-task-work";
 import { useProfileWork } from "@/lib/storyboard/use-profile-work";
 import type { Task } from "@shared/tasks/types";
-import { AlertCircle,Folder,Plus,RefreshCw } from "lucide-react";
+import { AlertCircle,Folder,Plus,RefreshCw,Trash2 } from "lucide-react";
 import Link from "@/lib/navigation";
 import { useHistory,usePathname,useRouter,useSearchParams } from "@/lib/navigation";
 import { useEffect,useMemo,useRef,useState } from "react";
@@ -202,6 +202,8 @@ function RepositoryList() {
   );
   const [query, setQuery] = useState(repoParam ?? "");
   const [debouncedGithubQuery, setDebouncedGithubQuery] = useState("");
+  const [selectingRepos, setSelectingRepos] = useState(false);
+  const [selectedRepoNames, setSelectedRepoNames] = useState<Set<string>>(() => new Set());
   const { data: projectsData, mutate: mutateProjects } = useLive<{ projects: RepoProject[] }>("/api/projects", {
     refreshInterval: 0,
   });
@@ -216,7 +218,7 @@ function RepositoryList() {
     data: githubData,
     error: githubError,
     mutate: mutateGithub,
-  } = useLive<GithubReposApiPayload>(githubKey, { /* GitHub repositories change independently. */ refreshInterval: 120_000 });
+  } = useLive<GithubReposApiPayload>(githubKey, { refreshInterval: 0, revalidateOnFocus: false });
   const scanDirDisplay = data?.scanDirDisplay ?? "";
   const [localFilter, setLocalFilter] = useState<LocalRepoFilter>(
     filterParam === "changed" || filterParam === "unpushed" || filterParam === "worktree" ? filterParam : null,
@@ -254,6 +256,11 @@ function RepositoryList() {
     // Repos you have open tasks for lead; the stable sort keeps recency order
     // within each half.
     .sort((a, b) => Number(tasksByRepo.has(b.name)) - Number(tasksByRepo.has(a.name)));
+  const selectedRepos = repos.filter((repo) => selectedRepoNames.has(repo.name) && repo.name !== data?.protectedRepoName);
+  const selectableVisibleRepos = filteredLocalRepos.filter((repo) => repo.name !== data?.protectedRepoName);
+  const allVisibleSelected = selectableVisibleRepos.length > 0 && selectableVisibleRepos.every((repo) => selectedRepoNames.has(repo.name));
+  const visibleNames = new Set(filteredLocalRepos.map((repo) => repo.name));
+  const hiddenSelectedCount = selectedRepos.filter((repo) => !visibleNames.has(repo.name)).length;
   const learningRepo = learnParam
     ? repos.find((repo) => repo.name === learnParam) ?? null
     : null;
@@ -289,7 +296,7 @@ function RepositoryList() {
   useEffect(() => {
     const handle = window.setTimeout(() => {
       setDebouncedGithubQuery(query);
-    }, 250);
+    }, 400);
     return () => window.clearTimeout(handle);
   }, [query]);
 
@@ -354,6 +361,38 @@ function RepositoryList() {
     else params.delete("source");
     const qs = params.toString();
     router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+  }
+
+  function toggleRepoSelection(name: string) {
+    if (name === data?.protectedRepoName || actions.removing !== null) return;
+    setSelectedRepoNames((previous) => {
+      const next = new Set(previous);
+      if (next.has(name)) next.delete(name);
+      else next.add(name);
+      return next;
+    });
+  }
+
+  function toggleVisibleRepos() {
+    setSelectedRepoNames((previous) => {
+      const next = new Set(previous);
+      for (const repo of selectableVisibleRepos) {
+        if (allVisibleSelected) next.delete(repo.name);
+        else next.add(repo.name);
+      }
+      return next;
+    });
+  }
+
+  async function deleteSelectedRepos() {
+    const removed = await actions.removeRepos(selectedRepos);
+    if (removed.length === 0) return;
+    setSelectedRepoNames((previous) => {
+      const next = new Set(previous);
+      for (const name of removed) next.delete(name);
+      return next;
+    });
+    if (removed.length === selectedRepos.length) setSelectingRepos(false);
   }
 
   function clearLocalFilters() {
@@ -539,6 +578,18 @@ function RepositoryList() {
                 <button
                   type="button"
                   className="btn btn-ghost"
+                  disabled={!data || actions.removing !== null}
+                  onClick={() => {
+                    setSelectingRepos(!selectingRepos);
+                    if (selectingRepos) setSelectedRepoNames(new Set());
+                  }}
+                >
+                  {selectingRepos ? "Cancel" : "Select"}
+                </button>
+                {!selectingRepos && <>
+                <button
+                  type="button"
+                  className="btn btn-ghost"
                   disabled={actions.cloning !== null}
                   onClick={() => void actions.cloneFromUrl()}
                 >
@@ -552,9 +603,24 @@ function RepositoryList() {
                 >
                   New repo
                 </button>
+                </>}
               </>
             }
           />
+
+          {selectingRepos && (
+            <div className="card flex flex-wrap items-center gap-2 p-3">
+              <button type="button" className="btn btn-ghost" disabled={selectableVisibleRepos.length === 0 || actions.removing !== null} onClick={toggleVisibleRepos}>
+                {allVisibleSelected ? "Clear visible" : "Select visible"}
+              </button>
+              <span className="mr-auto text-xs text-text-muted" role="status" aria-live="polite">
+                {actions.removing ? `Deleting ${actions.removing}…` : `${selectedRepos.length} selected${hiddenSelectedCount ? ` · ${hiddenSelectedCount} hidden by filters` : ""}`}
+              </span>
+              <button type="button" className="btn btn-danger-ghost" disabled={selectedRepos.length === 0 || actions.removing !== null} onClick={() => void deleteSelectedRepos()}>
+                <Trash2 size={14} aria-hidden /> Delete {selectedRepos.length || "selected"}
+              </button>
+            </div>
+          )}
 
           {/* Shaped like the cards it becomes, and in their place — it used to
               sit above the tabs and shove the whole page down on arrival. */}
@@ -582,6 +648,10 @@ function RepositoryList() {
               isDesktop={isDesktop}
               opening={actions.opening}
               removing={actions.removing}
+              selecting={selectingRepos}
+              selected={selectedRepoNames.has(repo.name)}
+              selectionDisabled={repo.name === data?.protectedRepoName}
+              onSelect={toggleRepoSelection}
               onLearn={openLearn}
               onDxAudit={actions.openDxAudit}
               onUpstart={actions.openUpstart}
@@ -623,7 +693,9 @@ function RepositoryList() {
             <SectionHeader
               label="GitHub"
               count={query.trim() && !githubPending ? githubRepos.length : "—"}
-              description="Search accessible repos, then clone or open them."
+              description={query.trim() && !githubPending && !githubError && githubRepos.length >= 100
+                ? "Showing the first 100 results. Refine your search to narrow them."
+                : "Search public and accessible private repos, then clone or open them."}
             />
 
             {query.trim() && !githubPending && githubError && (

@@ -34,7 +34,7 @@ The final core/Vite build must stage core with the UI assets, preserve the `serv
 | Area         | Purpose                                                                                                     |
 | ------------ | ----------------------------------------------------------------------------------------------------------- |
 | Work | Home screen for tasks, Jira and history |
-| Notifications | Updates needing attention, unread count and a global urgent alert bar |
+| Notifications | Updates needing attention, shown by the top-bar bell with a count badge |
 | Notes        | BlockNote editing, file tree, folder-scoped master checklists, optional OpenAI-compatible in-editor AI      |
 | Docs         | Read-first docs site with article view, TOC, backlinks, search, Mermaid, and BlockNote edit mode            |
 | Tasks        | Daily task management, drag reorder for open items, weekly review, and history                              |
@@ -73,15 +73,14 @@ Notes, search and the command palette have their own clips in [Notes system](not
 
 ## Navigation
 
-The sidebar is driven by `apps/ui/lib/nav.ts` — **12** core sidebar destinations in `NAV_ITEMS` (plugin items such as Ops merge in separately, making 13), grouped into **Workspace**, **Library**, **Tools** (the `infra` group id), and **System**. Integration-gated items stay hidden until `GET /api/setup/status` reports the matching flag. Plugin destinations (e.g. Ops) merge in via `groupSidebarNav`.
+The sidebar is driven by `packages/shared/ui-lib/navigation/nav.ts` (`NAV_ITEMS`), grouped into **Workspace**, **Library**, **Tools** (the `infra` group id), and **System**. Integration-gated items stay hidden until `GET /api/setup/status` reports the matching flag. Plugin destinations (e.g. Ops) merge in via `groupSidebarNav`.
 
-**Work** (`/work`) is the home screen. **Notifications** replaces Today in the sidebar, and command-palette searches for Today still find it. QA, Review and Skills keep their existing destinations.
+**Work** (`/work`) is the home screen. QA, Review and Skills keep their existing destinations. Notifications live on the top-bar bell (badge + count); there is no dedicated page — `/notifications` and `/briefing` redirect to `/work`.
 
 Coding chats live on **Agents** (`/agents`). There are no sidebar rows that open a Claude / Cursor / ChatGPT / Antigravity terminal tab.
 
 | Sidebar    | Route       | Notes                                                                                         |
 | ---------- | ----------- | --------------------------------------------------------------------------------------------- |
-| Notifications | `/notifications` | Bell badge shows unread items; urgent items also appear in the global bar |
 | Storyboard | `/storyboard` | Tasks followed through their notes and agent runs                                           |
 | Tasks      | `/work`     | Tasks + Jira + History tabs (see below). The URL predates the name; ⌘P still finds it as "Work" |
 | PRs        | `/prs`      | Gated on `github`. Tabs: Mine / Review requested / Recently reviewed / Skipped / Worktrees (`?tab=cleanup`) |
@@ -139,7 +138,7 @@ Older URLs still work and remain reachable via **⌘P** (`LEGACY_NAV_ITEMS` in `
 
 Career exposes `/appraisal`, `/one-on-one` and `/api/appraisal/*` through reviewed runtime aliases and navigation.
 
-Mobile navigation uses the same Notifications badge as the desktop sidebar.
+Notification counts live on the top-bar bell in both the desktop and mobile chrome.
 
 ### Repo-aware links
 
@@ -345,13 +344,13 @@ The context pack (`GET /api/context-pack`) also calls `recall` internally when r
 
 Ownership radar lives on **Repos** (`/repos?view=owned`, gated on GitHub). Per-repo pages stay at `/own/<owner>/<name>`. Mark repos owned from a Repos card or the owned index; state lives in `.devhub/ownership/repos.json` (not hand-edited). Full workflow: [Repo ownership](../guides/repo-ownership.md).
 
-## Notifications and the alert bar
+## Notifications
 
-Home (`/`) redirects to Work (`/work`). Notifications (`/notifications`) has a bell and unread count in the sidebar. `/today` and `/briefing` redirect there; recognised legacy queries and hashes on `/` and `/today` still map to their existing destinations first.
+Home (`/`) redirects to Work (`/work`). Notifications are the top-bar bell: a count badge (red when an urgent item is unread) that opens a popover with the recent items, their reasons and per-item open/dismiss. `/notifications` and `/briefing` redirect to `/work`; recognised legacy queries and hashes on `/` and `/today` still map to their existing destinations first. There is no notifications page or sidebar row.
 
-Notifications groups PR reviews and changes, failing CI, agent runs needing input or failing, Datadog alerts, plugin items and plugin trust issues by urgency. Read, Dismiss and Restore apply to the current item version: changed content can surface again. The **Only repos I own** setting keeps the existing `needsYouOwnedReposOnly` preference. Unknown ownership shows everything.
+The feed groups PR reviews and changes, failing CI, agent runs needing input or failing, Datadog alerts, plugin items and plugin trust issues. Read, Dismiss and Restore apply to the current item version: changed content can surface again. The **Only repos I own** setting keeps the existing `needsYouOwnedReposOnly` preference. Unknown ownership shows everything. The popover carries a **Show** group of toggles (Pull requests, CI failing, Agent needs input, Plugins, Datadog on-call); source preferences live in `ui-prefs.json` under `notificationSources` and are applied to the feed server-side, so the badge and list stay consistent.
 
-The global alert bar sits above page content on every route and polls every 60 seconds. It shows the first undismissed urgent item, an Open link, Dismiss, and a link to the remaining items. Datadog is queried only when configured and confirmed on call. Meetings remain on Calendar and its nav badge; they are not notifications.
+URGENT items used to get a global alert bar above page content; that bar is gone — the bell communicates the same thing without staking out the top of every route. Datadog is queried only when configured and confirmed on call. Meetings remain on Calendar and its nav badge; they are not notifications.
 
 Each source is best-effort and reports `ok`, `degraded` or `off`, so an unavailable integration is labelled rather than treated as an empty inbox. The feed is derived on read. Read and dismissal versions live per profile in `~/.config/devhub/notifications.json`, beside `ui-prefs.json`; writes prune entries unseen for 30 days and retain at most 500 per profile.
 
@@ -424,6 +423,16 @@ The header **Terminal** split launches a dock tab in this checkout: a plain shel
 On the `/repos` list, chips filter **changed**, **unpushed**, and **worktree**. A worktree is a second checkout whose `.git` is a file pointing at another clone in the scan folder — `GET /api/repos` sets `worktreeOf` to that parent path. Cards show a `worktree of <parent>` chip so they are not mistaken for a stray clone with a detached HEAD (the old `.git/HEAD` read threw on worktrees and scored them as high-risk).
 
 **Changed** (`dirtyCount`) matches the Git workspace: `.DS_Store`, `__pycache__`, `.pyc`, and `.terraform` do not count, and in the DevHub checkout vault content is excluded too (it uses content-sync). **Unpushed** is `0` when the current branch's upstream is gone (`[gone]` / deleted remote after merge) — `HEAD --not --remotes` used to count those commits as a push queue. Agent-run worktrees live under `<repos-dir>/.devhub-worktrees/<repo>/` (a hidden sibling, not listed as repos); clean them from [PRs → Worktrees](../integrations/github.md#finished-worktrees).
+
+### Git hub (`/git`)
+
+A cross-repo entry point: the left rail lists every clone in the scan directory with branch, ahead/behind, changed-file and conflict counts, last activity, and state filters (*Needs attention*, *Conflicts*, *Changed*, *Behind*, *Unpushed*, *All*). The right pane embeds the same `RepoGitWorkspace` used on `/repos/:name`, so there is one git UI, not two. Rows come from `GET /api/git/overview` — one `git status --porcelain=v1 -z --branch` per repo (not the heavier `/api/repos` card scan), cached 60s with a five-minute backoff for repos whose status times out. The sidebar **Git** row badges the number of repos needing attention.
+
+Network operations stream progress: push/pull/fetch answer NDJSON progress frames (git's `--progress` stderr, throttled) followed by a done frame, and the header shows elapsed seconds plus the last line. A client disconnect aborts the process group. SSH commands run with `BatchMode=yes` and a 10s connect timeout so an unknown host key fails fast instead of waiting out the network ceiling.
+
+Mutations serialize per repository through an in-process FIFO plus a cross-process directory lock (`<git-dir>/devhub-mutation.lock`). A killed child settles within two seconds, the lock wait is bounded at two minutes (warning logged), and a lease older than any legitimate operation is recovered — the lock cannot wedge the dashboard silently.
+
+Large working trees stay responsive: diffs render 1,200 lines at a time and changed-file lists render 300 rows with a **Show more** row.
 
 ### Repo Git workspace
 

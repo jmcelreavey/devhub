@@ -41,7 +41,7 @@ The first time you open **Chats**, Paseo's web UI asks for a connection once: **
 | --- | --- |
 | Dispatch rules: budget, depth, request claims, allowed roots | Harness processes, sessions, streaming |
 | Run worktrees (`devhub/agent/…` branches, `agent_diff` baseline) | Chat UI, session import, agent handoff |
-| Durable run records, task links, PR-review archiving | Permission modes per harness |
+| Durable run records, task links, PR review results | Permission modes per harness |
 | Scheduled jobs (catch up after sleep, wake the Mac, approval gate) | Its own schedules for chats you start in Paseo |
 | DevHub MCP (`devhub`) passed to each run | The user's own MCP config, loaded by each harness |
 
@@ -71,6 +71,8 @@ Shows daemon health, which agents are ready (and why not), the default agent for
 ## Chats and setup
 
 Paseo owns chat history, providers and plugins. DevHub has Chats, Usage and Connection tabs; old Activity links open Chats. Usage shows Claude and Cursor plan allowances and Codex spend from local logs, independently of Paseo. The Agents sidebar does not count historical DevHub runs as unread chats. A missing or pre-migration chat leaves Paseo available with a Back to chats action. Historical run records stay on disk for task results and automation.
+
+DevHub leaves finished plan, implementation and review chats in Paseo. It does not archive chats or workspaces automatically, including when a worktree is removed. Idle chats can keep their provider processes running.
 
 Providers and plugins can be added from Paseo Settings inside Chats. Reinstalling or updating keeps those settings. Codex can be discovered from either the CLI PATH or the Codex/ChatGPT macOS app bundle.
 

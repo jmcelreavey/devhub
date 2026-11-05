@@ -26,6 +26,12 @@ apps/ui/.next*/
 apps/ui/.env.local
 apps/ui/output/
 
+# Pre-restructure residue: the old root-level dashboard workspace and the
+# installer staging tree are build output only. Unignored, they get swept into
+# the pre-push lint and poison every push from the checkout.
+/dashboard/
+/desktop/
+
 # Trace artifacts at repo root
 /.next/
 
@@ -38,6 +44,10 @@ apps/ui/output/
 
 # Local automation artifacts
 .agent-screenshots/
+
+# Per-machine auto-review registry. The poller rewrites it constantly; tracking it
+# turned every review start into a content-sync commit.
+notes/.config/auto-pr-reviews.json
 
 # Claude Code worktrees and session artefacts
 .claude/

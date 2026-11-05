@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
-import { withPasteGuard } from "./paseo-web-paste-patch.mjs";
+import { installComposerKeyboard, markComposerSubmitControl } from "./paseo-web-keyboard.mjs";
+import { protectImageEncoding } from "./paseo-web-image-send.mjs";
 import { gzipSync, brotliCompressSync, constants } from "node:zlib";
 import { createHash } from "node:crypto";
 
@@ -28,6 +29,8 @@ export function withDevHubBootstrap(html, bundleVersion) {
     document.body.appendChild(script);
   };
   if (window.parent === window) { start(); return; }
+  let desktopKeyboard = false;
+  let keyboardInstalled = false;
   const timer = setTimeout(() => { clearInterval(retry); start(); }, 5000);
   const request = () => window.parent.postMessage({ type: "devhub:paseo:ready" }, "*");
   const retry = setInterval(request, 250);
@@ -51,7 +54,10 @@ export function withDevHubBootstrap(html, bundleVersion) {
     const external = raw => {
       try {
         const url = new URL(String(raw), window.location.href);
-        return (url.protocol === "http:" || url.protocol === "https:") && url.origin !== window.location.origin ? url.href : null;
+        if (url.protocol !== "http:" && url.protocol !== "https:") return null;
+        if (url.origin !== window.location.origin) return url.href;
+        if (/^\\/notes(?:\\/|$)/.test(url.pathname)) return new URL(url.pathname + url.search + url.hash, parentOrigin).href;
+        return null;
       } catch { return null; }
     };
     let last = { href: "", at: 0 };
@@ -123,6 +129,11 @@ export function withDevHubBootstrap(html, bundleVersion) {
     try { sender = new URL(event.origin); } catch { return; }
     if (sender.protocol !== "http:" || !["localhost", "127.0.0.1", "[::1]"].includes(sender.hostname)) return;
     const data = event.data;
+    if (["devhub:paseo:keyboard", "devhub:paseo:skip", "devhub:paseo:credentials"].includes(data?.type)) desktopKeyboard = data.desktopKeyboard === true;
+    if (desktopKeyboard && !keyboardInstalled) {
+      keyboardInstalled = true;
+      (${installComposerKeyboard.toString()})(document, () => desktopKeyboard);
+    }
     if (data?.type === "devhub:paseo:confirm-result") {
       const resolve = confirms.get(data.id);
       confirms.delete(data.id);
@@ -165,41 +176,46 @@ export function installDevHubBootstrap(root) {
   const file = path.join(root, "node_modules", "@getpaseo", "server", "dist", "server", "web-ui", "index.html");
   const current = fs.readFileSync(file, "utf8");
   const entry = current.match(/\/_expo\/static\/js\/web\/[^"\s?]+\.js/);
-  let pasteVersion;
+  let bundleVersion;
   if (entry) {
     const bundleFile = path.join(path.dirname(file), entry[0]);
     const bundle = fs.readFileSync(bundleFile, "utf8");
-    const patched = withPasteGuard(bundle);
-    if (patched !== null) {
-      if (!fs.existsSync(bundleFile + ".devhub-original")) fs.writeFileSync(bundleFile + ".devhub-original", bundle);
-      if (patched !== bundle) fs.writeFileSync(bundleFile, patched);
+    const restored = restoreUpstreamPaste(bundleFile, bundle);
+    const marked = markComposerSubmitControl(restored);
+    const protectedBundle = protectImageEncoding(marked);
+    if (protectedBundle === null) console.warn("Paseo image encoding changed; could not enable the image send safeguard.");
+    const updated = protectedBundle ?? marked;
+    if (updated !== bundle) {
       // Paseo serves the precompressed sibling before the plain JS file.
       for (const [extension, compress] of [[".gz", gzipSync], [".br", bytes => brotliCompressSync(bytes, { params: { [constants.BROTLI_PARAM_QUALITY]: 5 } })]]) {
         const compressed = bundleFile + extension;
-        if (fs.existsSync(compressed) && fs.statSync(compressed).mtimeMs < fs.statSync(bundleFile).mtimeMs) {
-          if (!fs.existsSync(compressed + ".devhub-original")) fs.copyFileSync(compressed, compressed + ".devhub-original");
+        if (fs.existsSync(compressed)) {
           const temporary = compressed + ".devhub-tmp";
-          fs.writeFileSync(temporary, compress(Buffer.from(patched)));
+          fs.writeFileSync(temporary, compress(Buffer.from(updated)));
           fs.renameSync(temporary, compressed);
         }
       }
-      pasteVersion = "paste-v1-" + createHash("sha256").update(patched).digest("hex").slice(0, 12);
-    } else console.warn("Paseo web paste adapter skipped: changed or ambiguous upstream handlers. Native paste remains available.");
+      const temporary = bundleFile + ".devhub-tmp";
+      fs.writeFileSync(temporary, updated);
+      fs.renameSync(temporary, bundleFile);
+    }
+    bundleVersion = "upstream-" + createHash("sha256").update(updated).digest("hex").slice(0, 12);
   }
-  const updated = withDevHubBootstrap(current, pasteVersion);
+  const updated = withDevHubBootstrap(current, bundleVersion);
   if (updated !== current) fs.writeFileSync(file, updated);
 }
 
-/** Run before reverting this adapter; active conversations and the daemon stay up. */
-export function restoreDevHubPasteGuard(root) {
-  const file = path.join(root, "node_modules", "@getpaseo", "server", "dist", "server", "web-ui", "index.html");
-  const html = fs.readFileSync(file, "utf8");
-  const entry = html.match(/\/_expo\/static\/js\/web\/[^"\s?]+\.js/);
-  if (!entry) throw new Error("Paseo web entry point changed.");
-  const bundle = path.join(path.dirname(file), entry[0]);
-  const original = fs.readFileSync(bundle + ".devhub-original", "utf8");
-  if (withPasteGuard(original) !== fs.readFileSync(bundle, "utf8")) throw new Error("Paseo's bundle changed after installation; reinstall the currently installed Paseo release to restore it.");
-  fs.writeFileSync(bundle, original);
-  for (const extension of [".gz", ".br"]) if (fs.existsSync(bundle + extension + ".devhub-original")) fs.copyFileSync(bundle + extension + ".devhub-original", bundle + extension);
-  fs.writeFileSync(file, withDevHubBootstrap(html, "restored-" + createHash("sha256").update(original).digest("hex").slice(0, 12)));
+/** Migrate existing installs back to Paseo's own handler without touching other bundle changes. */
+function restoreUpstreamPaste(bundleFile, bundle) {
+  const start = "/* devhub-paste-v1:start */", end = "/* devhub-paste-v1:end */";
+  if (!bundle.includes(start) && !bundle.includes(end)) return bundle;
+  const original = fs.readFileSync(bundleFile + ".devhub-original", "utf8");
+  const parts = bundle.split(start);
+  const after = parts[1]?.split(end);
+  const suffix = after?.[1]?.replace(/testID:(\w+)\?\?\(\w+\?undefined:"devhub-message-submit"\)/g, "testID:$1");
+  if (parts.length !== 2 || after?.length !== 2 || original.includes(start) || original.includes(end) ||
+      !original.startsWith(parts[0]) || !original.endsWith(suffix)) {
+    throw new Error("Paseo's bundle changed after installation; reinstall the currently installed Paseo release to restore it.");
+  }
+  return original;
 }

@@ -63,14 +63,21 @@ function startEnrichment(base: GithubPrsApiPayload): Promise<GithubPrsApiPayload
   return enrichment.promise;
 }
 
+let baseLoad: Promise<GithubPrsApiPayload> | undefined;
+
 export async function loadGithubPrsList(details = false): Promise<GithubPrsApiPayload> {
+  // Work and the notification badge mount together; share their initial GitHub searches.
+  baseLoad ??= loadBaseGithubPrsList().finally(() => { baseLoad = undefined; });
+  const base = await baseLoad;
+  return details && base.configured && (base.detailsState === "pending" || base.detailsState === "partial")
+    ? startEnrichment(base) : base;
+}
+
+async function loadBaseGithubPrsList(): Promise<GithubPrsApiPayload> {
   if (!await isGithubCliAuthenticated()) return { configured: false, authored: [], reviews: [], recentlyReviewed: [] };
   const cached = readGithubPrsListCache();
   if (cached) {
-    if (cached.detailsState === "pending" || (details && cached.detailsState === "partial")) {
-      const pending = startEnrichment(cached);
-      if (details) return pending;
-    }
+    if (cached.detailsState === "pending") void startEnrichment(cached);
     const visible = withoutSkippedPrs(cached);
     return { ...visible, reviews: sortReviews(visible.reviews), cached: true, configured: true };
   }
@@ -85,13 +92,13 @@ export async function loadGithubPrsList(details = false): Promise<GithubPrsApiPa
       recentlyReviewed: previous?.recentlyReviewed ?? [], detailsState: "pending", cached: false,
     };
     writeGithubPrsListCache(payload);
-    const pending = startEnrichment(payload);
-    return details ? pending : withoutSkippedPrs(payload);
+    void startEnrichment(payload);
+    return withoutSkippedPrs(payload);
   } catch (error) {
     const mapped = mapGithubCliError(error);
     const stale = mapped.status >= 500 ? readStaleGithubPrsListCache() : null;
     if (!stale) throw error;
     const visible = withoutSkippedPrs(stale);
-    return { ...visible, reviews: sortReviews(visible.reviews), cached: true, stale: true, configured: true, warning: mapped.error };
+    return { ...visible, reviews: sortReviews(visible.reviews), cached: true, stale: true, configured: true, warning: `${mapped.error} Showing the last cached PR list.` };
   }
 }

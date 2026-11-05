@@ -1,8 +1,8 @@
-export type WorkTab = "tasks" | "board" | "jira" | "history" | "review" | "rep";
+export type WorkTab = "tasks" | "board" | "reviews" | "jira" | "history" | "review" | "rep";
 
 function parseWorkTab(raw: string | null, fallback: WorkTab): WorkTab {
   if (raw === "jira" || raw === "tickets") return "jira";
-  if (raw === "tasks" || raw === "board" || raw === "history" || raw === "review" || raw === "rep") return raw;
+  if (raw === "tasks" || raw === "board" || raw === "reviews" || raw === "history" || raw === "review" || raw === "rep") return raw;
   return fallback;
 }
 

@@ -7,7 +7,6 @@ import { worktreeInventory, inspectWorktree, describeWorktree, loadWorktreeConte
 import { runGitRepoAsync } from "../../../../../lib/git/repo-local";
 import { parseWorktreeList } from "../../../../../../../../packages/shared/ui-lib/repos/worktree-parsers";
 import { withMutex } from "../../../../../lib/atomic-write";
-import { sweepPaseoWorkspacesQuietly } from "../../../../../lib/paseo/workspaces";
 import { loadMergedWorktreePrs, type MergedWorktreePrs } from "../../../../../lib/repos/worktree-merge";
 
 
@@ -89,7 +88,6 @@ const removeWorktreeInventory = withErrorHandler(async (req: Request, { params }
         errors.push({ path: entry.path, error: error instanceof Error ? error.message : "Removal failed" });
       }
     }
-    if (removed.length) await sweepPaseoWorkspacesQuietly();
     return Response.json({ removed, errors });
   });
 }, "worktrees.cleanup");

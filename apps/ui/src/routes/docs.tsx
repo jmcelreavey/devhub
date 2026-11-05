@@ -7,7 +7,6 @@ import { DocsSectionPage } from "../../components/docs/DocsSectionPage";
 import { DocsShell } from "../../components/docs/DocsShell";
 import { FetchError } from "../../components/ui/FetchError";
 import { RouteLoading } from "../../components/ui/RouteLoading";
-import { VaultEditorPage } from "../../components/vault/VaultEditorPage";
 import { DIAGRAM_ROOT_AREA_ID, diagramBrowseModelFromTree } from "../../lib/diagrams/diagram-browse";
 import { extractDiagramsTree, type DiagramTreeEntry } from "../../../../packages/shared/ui-lib/diagrams/utils";
 import { defaultFetcher, useLive } from "../../lib/hooks/use-fetch";
@@ -16,6 +15,7 @@ import type { DocSectionMeta } from "../../../../packages/shared/ui-lib/docs/doc
 
 const DiagramsIndex = lazy(() => import("../../app/diagrams/client"));
 const DiagramEditor = lazy(() => import("../../app/diagrams/[...path]/client"));
+const VaultEditorPage = lazy(() => import("../../components/vault/VaultEditorPage").then(module => ({ default: module.VaultEditorPage })));
 
 interface DocsIndexData {
   sections: DocSectionGroup[];
@@ -72,7 +72,7 @@ function DocsDetail() {
     return <Navigate replace to={{ pathname, search: `?${query}`, hash }} />;
   }
   if (!data.detail || query.get("edit") === "1") {
-    return <VaultEditorPage key={slug} vault="docs" path={path} readHref={data.detail?.href} />;
+    return <Suspense fallback={<RouteLoading />}><VaultEditorPage key={slug} vault="docs" path={path} readHref={data.detail?.href} /></Suspense>;
   }
   return <DocArticleView detail={data.detail} />;
 }
