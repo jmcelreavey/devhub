@@ -469,7 +469,7 @@ Press **`?`** while the Repo Git workspace is focused for its **context shortcut
 
 When the checkout is on a feature branch with an open GitHub PR, the workspace header and `/repos` cards show a compact PR link plus rolled-up CI state (`passing` / `failing` / `pending`) from `GET /api/repos/<name>/pr` (requires `gh auth login`; skipped on the repo's default branch).
 
-API routes are scoped under `/api/repos/<name>/git/…` (and branch push/pull under `/api/repos/<name>/branches`). See [API Routes](../reference/api-routes.md#repo-git-routes).
+API routes are scoped under `/api/repos/<name>/git/…` (and branch push/pull under `/api/repos/<name>/branches`). See [API Routes](../reference/api-routes.md#git-hub-and-repo-git-routes).
 
 **DevHub-only:** content paths (`notes/`, `tasks/`, `collections/`, `upstarts/`, `docs/`, `diagrams/`, plus env-resolved content dirs) are classified by `lib/content/sync-dirs.ts` and **hidden from the Changes list** in the DevHub repo. Scoped sync (`sync_notes_tasks_push`) stages `notes/`, `collections/`, `tasks/`, `docs/`, `diagrams/`, and `upstarts/`.
 
